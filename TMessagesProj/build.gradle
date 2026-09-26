@@ -134,7 +134,7 @@ dependencies {
     implementation 'com.alphacephei:vosk-android:0.3.75'
     implementation 'com.caverock:androidsvg-aar:1.4'
 
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.1.5'
 }
 
 android {
@@ -180,6 +180,13 @@ android {
         // without build type suffixes (debug builds install as ${APP_PACKAGE}.beta)
         buildConfigField "String", "APPLICATION_ID", "\"" + APP_PACKAGE + "\""
         buildConfigField "int", "VERSION_CODE", APP_VERSION_CODE
+
+        // -Popenextera.abis=arm64-v8a limits the native build to the listed ABIs (see TMessagesProj_App)
+        if (project.hasProperty('openextera.abis')) {
+            ndk {
+                abiFilters(*project.property('openextera.abis').toString().split(','))
+            }
+        }
 
         vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
 

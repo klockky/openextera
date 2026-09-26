@@ -2392,6 +2392,26 @@ public class MessagePreviewView extends FrameLayout {
             return isState1;
         }
 
+        public ToggleButton setColors(int textColor, int iconColor) {
+            setTextColor(textColor);
+            setIconColor(iconColor);
+            return this;
+        }
+
+        public void setTextColor(int color) {
+            textDrawable.setTextColor(color);
+            invalidate();
+        }
+
+        public void setIconColor(int color) {
+            iconDrawable.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+            invalidate();
+        }
+
+        public void setSelectorColor(int color) {
+            setBackground(Theme.createSelectorDrawable(color, Theme.RIPPLE_MASK_ALL));
+        }
+
         @Override
         protected boolean verifyDrawable(@NonNull Drawable who) {
             return who == textDrawable || super.verifyDrawable(who);

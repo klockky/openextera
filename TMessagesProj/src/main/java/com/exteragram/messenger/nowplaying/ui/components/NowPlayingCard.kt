@@ -93,7 +93,7 @@ abstract class NowPlayingCard(
     abstract fun onSavedMusicClick()
 
     private val coverCornerRadius: Float
-        get() = AndroidUtilities.dpf2(maxOf(ExteraConfig.getSectionRadiusDp() - 12, 8).toFloat())
+        get() = AndroidUtilities.dpf2(maxOf(ExteraConfig.sectionRadiusDp - 12, 8).toFloat())
 
     init {
         isClickable = false
@@ -121,7 +121,7 @@ abstract class NowPlayingCard(
                 gradientRadius = r.width() * 2.0f
             }
         }
-        backgroundDrawable.cornerRadius = AndroidUtilities.dpf2(ExteraConfig.getSectionRadiusDp().toFloat())
+        backgroundDrawable.cornerRadius = AndroidUtilities.dpf2(ExteraConfig.sectionRadiusDp.toFloat())
         cardLayout.background = backgroundDrawable
         cardLayout.clipToOutline = true
         cardLayout.outlineProvider = ViewOutlineProviderImpl.fromDrawable(backgroundDrawable)

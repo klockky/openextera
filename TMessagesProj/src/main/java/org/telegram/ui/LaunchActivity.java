@@ -8,6 +8,7 @@
 
 package org.telegram.ui;
 
+import com.exteragram.messenger.utils.IntentsController;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.formatPluralString;
 import static org.telegram.messenger.LocaleController.formatString;
@@ -86,6 +87,10 @@ import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.icons.IconManager;
+import com.exteragram.messenger.utils.network.RemoteUtils;
+import com.exteragram.messenger.utils.ui.MonetUtils;
 import com.google.android.gms.common.api.Status;
 import com.google.common.primitives.Longs;
 import com.google.firebase.appindexing.Action;
@@ -407,6 +412,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
         instance = this;
         ApplicationLoader.postInitApplication();
+        IconManager.INSTANCE.awaitInitialization();
         AndroidUtilities.checkDisplaySize(this, getResources().getConfiguration());
         currentAccount = UserConfig.selectedAccount;
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
@@ -653,6 +659,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
         checkLayout();
         checkSystemBarColors();
+        ExteraConfig.loadConfig();
         handleIntent(getIntent(), false, savedInstanceState != null, false, null, true, true);
         try {
             String os1 = Build.DISPLAY;
@@ -729,6 +736,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
         AndroidUtilities.enableEdgeToEdge(this);
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MonetUtils.registerReceiver(this);
+        }
+        ExteraConfig.init();
         BackupAgent.requestBackup();
 
         RestrictedLanguagesSelectActivity.checkRestrictedLanguages(false);
@@ -1507,6 +1518,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @SuppressLint("Range")
     private boolean handleIntent(Intent intent, boolean isNew, boolean restore, boolean fromPassword, Browser.Progress progress, boolean rebuildFragments, boolean openedTelegram) {
         if (GiftInfoBottomSheet.handleIntent(intent, progress)) {
+            return true;
+        }
+        if (intent != null && IntentsController.INSTANCE.handleIntent(intent)) {
             return true;
         }
         if (UserSelectorBottomSheet.handleIntent(intent, progress)) {
@@ -5954,6 +5968,39 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         return foundContacts;
     }
 
+    public static List<BaseFragment> getVisibleFragments() {
+        final ArrayList<BaseFragment> fragments = new ArrayList<>();
+        if (BubbleActivity.instance != null && BubbleActivity.instance.actionBarLayout != null) {
+            final BaseFragment fragment = BubbleActivity.instance.actionBarLayout.getSafeLastFragment();
+            if (fragment != null) {
+                fragments.add(fragment);
+            }
+        }
+        if (instance != null) {
+            for (int i = 0; i < instance.sheetFragmentsStack.size(); i++) {
+                final BaseFragment fragment = instance.sheetFragmentsStack.get(i).getSafeLastFragment();
+                if (fragment != null) {
+                    fragments.add(fragment);
+                }
+            }
+            if (!instance.layerFragmentsStack.isEmpty()) {
+                fragments.add(instance.layerFragmentsStack.get(instance.layerFragmentsStack.size() - 1));
+            }
+            if (!instance.rightFragmentsStack.isEmpty()) {
+                fragments.add(instance.rightFragmentsStack.get(instance.rightFragmentsStack.size() - 1));
+            }
+            if (!instance.mainFragmentsStack.isEmpty()) {
+                fragments.add(instance.mainFragmentsStack.get(instance.mainFragmentsStack.size() - 1));
+            }
+        }
+        return fragments;
+    }
+
+    public void checkAppUpdate(boolean force) {
+        // TODO(openextera): disabled, exteraSquad infrastructure (lite checks updates via UpdaterUtils.getAppUpdate here)
+        checkAppUpdate(force, null);
+    }
+
     private boolean firstAppUpdateCheck = true;
     public void checkAppUpdate(boolean force, Browser.Progress progress) {
         if (!ApplicationLoader.isStandaloneBuild() && !ApplicationLoader.isBetaBuild()) {
@@ -6855,6 +6902,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         isActive = false;
         activeInstanceCount--;
         unregisterReceiver(batteryReceiver);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MonetUtils.unregisterReceiver(this);
+        }
 
         if (activeInstanceCount == 0) {
             onDestroyStaticResources();
@@ -7030,7 +7080,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         } else if (SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
             showUpdateActivity(UserConfig.selectedAccount, SharedConfig.pendingAppUpdate, true);
         }
-        checkAppUpdate(false, null);
+        checkAppUpdate(false);
+        RemoteUtils.init();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             ApplicationLoader.canDrawOverlays = Settings.canDrawOverlays(this);

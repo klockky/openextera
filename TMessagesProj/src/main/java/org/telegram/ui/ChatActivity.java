@@ -8,6 +8,9 @@
 
 package org.telegram.ui;
 
+import com.exteragram.messenger.icons.IconManager;
+import com.exteragram.messenger.backup.PreferencesUtils;
+import com.exteragram.messenger.backup.BackupBottomSheet;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 import static org.telegram.messenger.LocaleController.formatPluralStringComma;
@@ -37063,7 +37066,7 @@ public class ChatActivity extends BaseFragment implements
         getConnectionsManager().sendRequest(req, null);
     }
 
-    private void didPressMessageUrl(CharacterStyle url, boolean longPress, MessageObject messageObject, ChatMessageCell cell) {
+    public void didPressMessageUrl(CharacterStyle url, boolean longPress, MessageObject messageObject, ChatMessageCell cell) {
         if (url == null || getParentActivity() == null) {
             return;
         }
@@ -42102,6 +42105,14 @@ public class ChatActivity extends BaseFragment implements
                     presentFragment(fragment);
                 }
             } else if (message.type == MessageObject.TYPE_FILE || message.type == MessageObject.TYPE_TEXT) {
+                if (PreferencesUtils.getInstance().isBackup(message)) {
+                    new BackupBottomSheet(ChatActivity.this, message).showIfPossible();
+                    return;
+                }
+                if (IconManager.INSTANCE.isIconPack(message)) {
+                    IconManager.INSTANCE.handleIconPack(ChatActivity.this, message);
+                    return;
+                }
                 if (message.getDocumentName().toLowerCase().endsWith("attheme")) {
                     File locFile = null;
                     if (message.messageOwner.attachPath != null && message.messageOwner.attachPath.length() != 0) {

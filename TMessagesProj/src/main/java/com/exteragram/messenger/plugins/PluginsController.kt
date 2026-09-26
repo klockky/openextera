@@ -73,10 +73,10 @@ class PluginsController private constructor() : PluginsHooks {
     override fun executeSendMessageHook(account: Int, params: SendMessagesHelper.SendMessageParams?): SendMessagesHelper.SendMessageParams? = params
 
     companion object {
-        private val instance by lazy { PluginsController() }
+        private val sharedInstance by lazy { PluginsController() }
 
         @JvmStatic
-        fun getInstance(): PluginsController = instance
+        fun getInstance(): PluginsController = sharedInstance
 
         @JvmStatic
         fun isPluginEngineSupported(): Boolean = false

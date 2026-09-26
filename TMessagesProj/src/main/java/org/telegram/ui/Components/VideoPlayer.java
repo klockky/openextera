@@ -64,6 +64,8 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer;
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil;
 import androidx.media3.exoplayer.source.LoopingMediaSource;
 import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.MergingMediaSource;
+import androidx.media3.exoplayer.source.SingleSampleMediaSource;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.common.TrackGroup;
 import androidx.media3.exoplayer.source.TrackGroupArray;
@@ -323,7 +325,7 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
                 type = audioType;
                 uri = audioUri;
             }
-            mediaSource = mediaSourceFromUri(uri, 0, type);
+            mediaSource = mediaSourceFromUri(uri, 0, type, a == 0);
             mediaSource = new LoopingMediaSource(mediaSource);
             if (a == 0) {
                 mediaSource1 = mediaSource;
@@ -343,29 +345,62 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
     }
 
     private MediaSource mediaSourceFromUri(Uri uri, long videoByteOffset, String type) {
+        return mediaSourceFromUri(uri, videoByteOffset, type, true);
+    }
+
+    private MediaSource mediaSourceFromUri(Uri uri, long videoByteOffset, String type, boolean withExternalSubtitle) {
         final MediaItem mediaItem = new MediaItem.Builder().setUri(uri).build();
+        final MediaSource mediaSource;
         if (videoByteOffset != 0) {
-            return new ProgressiveMediaSource.Factory(
+            mediaSource = new ProgressiveMediaSource.Factory(
                 () -> new OffsetDataSource(mediaDataSourceFactory.createDataSource(), videoByteOffset)
             ).createMediaSource(mediaItem);
+        } else {
+            switch (type) {
+                case "dash":
+                    if (dashMediaSourceFactory == null) {
+                        dashMediaSourceFactory = new DashMediaSource.Factory(mediaDataSourceFactory);
+                    }
+                    mediaSource = dashMediaSourceFactory.createMediaSource(mediaItem);
+                    break;
+                case "hls":
+                    if (hlsMediaSourceFactory == null) {
+                        hlsMediaSourceFactory = new HlsMediaSource.Factory(mediaDataSourceFactory);
+                    }
+                    mediaSource = hlsMediaSourceFactory.createMediaSource(mediaItem);
+                    break;
+                default:
+                    if (progressiveMediaSourceFactory == null) {
+                        progressiveMediaSourceFactory = new ProgressiveMediaSource.Factory(mediaDataSourceFactory);
+                    }
+                    mediaSource = progressiveMediaSourceFactory.createMediaSource(mediaItem);
+                    break;
+            }
         }
-        switch (type) {
-            case "dash":
-                if (dashMediaSourceFactory == null) {
-                    dashMediaSourceFactory = new DashMediaSource.Factory(mediaDataSourceFactory);
-                }
-                return dashMediaSourceFactory.createMediaSource(mediaItem);
-            case "hls":
-                if (hlsMediaSourceFactory == null) {
-                    hlsMediaSourceFactory = new HlsMediaSource.Factory(mediaDataSourceFactory);
-                }
-                return hlsMediaSourceFactory.createMediaSource(mediaItem);
-            default:
-                if (progressiveMediaSourceFactory == null) {
-                    progressiveMediaSourceFactory = new ProgressiveMediaSource.Factory(mediaDataSourceFactory);
-                }
-                return progressiveMediaSourceFactory.createMediaSource(mediaItem);
+        return withExternalSubtitle ? maybeWrapWithExternalSubtitle(mediaSource) : mediaSource;
+    }
+
+    public record ExternalSubtitle(Uri uri, String mimeType, String label) {
+        public MediaItem.SubtitleConfiguration toSubtitleConfiguration() {
+            return new MediaItem.SubtitleConfiguration.Builder(uri)
+                .setMimeType(mimeType)
+                .setLabel(label)
+                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                .build();
         }
+    }
+
+    private ExternalSubtitle currentExternalSubtitle;
+
+    public void setExternalSubtitle(ExternalSubtitle subtitle) {
+        currentExternalSubtitle = subtitle;
+    }
+
+    private MediaSource maybeWrapWithExternalSubtitle(MediaSource mediaSource) {
+        if (currentExternalSubtitle == null) {
+            return mediaSource;
+        }
+        return new MergingMediaSource(mediaSource, new SingleSampleMediaSource.Factory(mediaDataSourceFactory).createMediaSource(currentExternalSubtitle.toSubtitleConfiguration(), C.TIME_UNSET));
     }
 
     public void preparePlayer(Uri uri, String type) {

@@ -15,12 +15,17 @@ import android.net.Uri;
 import android.os.Build;
 import android.text.TextUtils;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.pillstack.core.PillStackConfig;
+import com.exteragram.messenger.pillstack.core.PillType;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
@@ -335,6 +340,59 @@ public class Weather {
 
     public static State getCached() {
         return cacheValue;
+    }
+
+    static {
+        NotificationCenter.getGlobalInstance().addObserver((id, account, args) -> {
+            if (id == NotificationCenter.pillStackSettingsChanged && PillStackConfig.shouldUpdatePill(args, PillType.WEATHER.getId())) {
+                clearCache();
+            }
+        }, NotificationCenter.pillStackSettingsChanged);
+    }
+
+    public static void clearCache() {
+        cacheKey = null;
+    }
+
+    public static void fetchExtera(Utilities.Callback<State> whenFetched) {
+        if (PillStackConfig.getUseCurrentLocation()) {
+            if (!isLocationPermissionGranted()) {
+                whenFetched.run(null);
+            } else {
+                fetch(false, whenFetched);
+            }
+            return;
+        }
+        double lat = 55.7558, lng = 37.6173;
+        if (PillStackConfig.getCustomWeatherLocation() != null) {
+            try {
+                TLRPC.GeoPoint geoPoint = ExteraConfig.getGSON().fromJson(PillStackConfig.getCustomWeatherLocation(), TLRPC.TL_geoPoint.class);
+                lat = geoPoint.lat;
+                lng = geoPoint._long;
+            } catch (Exception ignore) {}
+        }
+        fetch(lat, lng, whenFetched);
+    }
+
+    public static boolean isLocationPermissionGranted() {
+        final Context context = ApplicationLoader.applicationContext;
+        return context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED || context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public static boolean isLocationEnabled() {
+        try {
+            LocationManager locationManager = (LocationManager) ApplicationLoader.applicationContext.getSystemService(Context.LOCATION_SERVICE);
+            if (locationManager == null) {
+                return false;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                return locationManager.isLocationEnabled();
+            }
+            return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) || locationManager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER);
+        } catch (Exception e) {
+            FileLog.e(e);
+            return false;
+        }
     }
 
 //    public static Runnable fetch(double lat, double lng, Utilities.Callback<State> whenFetched) {

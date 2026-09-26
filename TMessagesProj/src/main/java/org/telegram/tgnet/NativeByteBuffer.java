@@ -648,8 +648,14 @@ public class NativeByteBuffer extends AbstractSerializedData {
     }
 
     public void reuse() {
+        reuse(false);
+    }
+
+    public void reuse(boolean fromFinalizer) {
         if (address != 0) {
-            addressWrappers.get().add(this);
+            if (!fromFinalizer) {
+                addressWrappers.get().add(this);
+            }
             reused = true;
             native_reuse(address);
         }
@@ -663,7 +669,7 @@ public class NativeByteBuffer extends AbstractSerializedData {
     @Override
     protected void finalize() throws Throwable {
         if (!reused) {
-            reuse();
+            reuse(true);
         }
         super.finalize();
     }

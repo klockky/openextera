@@ -36,6 +36,8 @@ import androidx.annotation.RequiresApi;
 import androidx.media3.exoplayer.ExoPlayer;
 
 import org.json.JSONObject;
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BringAppForegroundService;
@@ -47,6 +49,7 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.browser.Browser;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.PhotoViewer;
 
@@ -84,6 +87,7 @@ public class PhotoViewerWebView extends FrameLayout {
     private View progressBarBlackBackground;
     private RadialProgressView progressBar;
     private View pipItem;
+    private ActionBarMenuItem menuItem;
 
     private String youtubeStoryboardsSpecUrl;
     private List<String> youtubeStoryboards = new ArrayList<>();
@@ -121,8 +125,7 @@ public class PhotoViewerWebView extends FrameLayout {
                     setPlaybackSpeed = false;
                     setPlaybackSpeed(playbackSpeed);
                 }
-                pipItem.setEnabled(true);
-                pipItem.setAlpha(1.0f);
+                setPipVisibility(true);
 
                 if (photoViewer != null) {
                     photoViewer.checkFullscreenButton();
@@ -298,8 +301,7 @@ public class PhotoViewerWebView extends FrameLayout {
                 if (!isYouTube || Build.VERSION.SDK_INT < 17) {
                     progressBar.setVisibility(View.INVISIBLE);
                     progressBarBlackBackground.setVisibility(View.INVISIBLE);
-                    pipItem.setEnabled(true);
-                    pipItem.setAlpha(1.0f);
+                    setPipVisibility(true);
                 }
             }
 
@@ -758,8 +760,7 @@ public class PhotoViewerWebView extends FrameLayout {
             FileLog.e(e);
         }
 
-        pipItem.setEnabled(false);
-        pipItem.setAlpha(0.5f);
+        setPipVisibility(false);
 
         progressBar.setVisibility(View.VISIBLE);
         if (currentYoutubeId != null) {
@@ -768,6 +769,7 @@ public class PhotoViewerWebView extends FrameLayout {
         webView.setVisibility(View.VISIBLE);
         webView.setKeepScreenOn(true);
         if (currentYoutubeId != null && "disabled".equals(MessagesController.getInstance(currentAccount).youtubePipType)) {
+            setPipVisibility(false);
             pipItem.setVisibility(View.GONE);
         }
     }
@@ -808,5 +810,23 @@ public class PhotoViewerWebView extends FrameLayout {
         videoDuration = 0;
         currentPosition = 0;
         AndroidUtilities.cancelRunOnUIThread(progressRunnable);
+    }
+
+    public void setMenuItem(ActionBarMenuItem menuItem) {
+        this.menuItem = menuItem;
+    }
+
+    private void setPipVisibility(boolean visible) {
+        pipItem.setEnabled(visible);
+        pipItem.setAlpha(visible ? 1.0f : 0.5f);
+        if (menuItem == null || !ExteraConfig.getCenterTitle()) {
+            return;
+        }
+        // TODO(openextera): lite toggles sub-item 21 (PhotoViewer.gallery_menu_reply), not gallery_menu_pip (6); verify
+        if (visible) {
+            menuItem.showSubItem(21);
+        } else {
+            menuItem.hideSubItem(21);
+        }
     }
 }

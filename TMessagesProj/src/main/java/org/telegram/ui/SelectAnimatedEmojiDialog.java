@@ -488,8 +488,21 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
         this(baseFragment, context, includeEmpty, emojiX, type, shouldDrawBackground, resourcesProvider, topPaddingDp, Theme.getColor(Theme.key_windowBackgroundWhiteBlueIcon, resourcesProvider));
     }
 
+    public boolean badgePicker;
+    private long defaultBadgeId;
+
+    public void setDefaultBadge(Long documentId) {
+        defaultBadgeId = documentId == null ? 0 : documentId;
+    }
+
     public SelectAnimatedEmojiDialog(BaseFragment baseFragment, Context context, boolean includeEmpty, Integer emojiX, int type, boolean shouldDrawBackground, Theme.ResourcesProvider resourcesProvider, int topPaddingDp, int accentColor) {
+        this(baseFragment, context, includeEmpty, emojiX, type, shouldDrawBackground, resourcesProvider, topPaddingDp, accentColor, false);
+    }
+
+    // TODO(openextera): lite's badge picker mode (comment field, hint/selection tweaks) is stage 2
+    public SelectAnimatedEmojiDialog(BaseFragment baseFragment, Context context, boolean includeEmpty, Integer emojiX, int type, boolean shouldDrawBackground, Theme.ResourcesProvider resourcesProvider, int topPaddingDp, int accentColor, boolean badgePicker) {
         super(context);
+        this.badgePicker = badgePicker;
         this.resourcesProvider = resourcesProvider;
         this.type = type;
         this.includeEmpty = includeEmpty;
@@ -976,7 +989,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                         if (document == null) {
                             document = AnimatedEmojiDrawable.findDocument(currentAccount, imageViewEmoji.span.documentId);
                         }
-                        onEmojiSelected(imageViewEmoji, imageViewEmoji.span.documentId, document, imageViewEmoji.starGift, null);
+                        onEmojiSelected(imageViewEmoji, imageViewEmoji.span.documentId, document, imageViewEmoji.starGift, null, null);
                         return true;
                     }
                     selectedReactionView = imageViewEmoji;
@@ -1314,7 +1327,9 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
 
     private Drawable getPremiumStar() {
         if (premiumStar == null) {
-            if (type == TYPE_SET_REPLY_ICON || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_SET_REPLY_ICON_BOTTOM) {
+            if (badgePicker && defaultBadgeId != 0) {
+                premiumStar = AnimatedEmojiDrawable.make(currentAccount, getCacheType(), defaultBadgeId);
+            } else if (type == TYPE_SET_REPLY_ICON || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_SET_REPLY_ICON_BOTTOM) {
                 premiumStar = ApplicationLoader.applicationContext.getResources().getDrawable(R.drawable.msg_filled_blocked).mutate();
             } else {
                 premiumStar = ApplicationLoader.applicationContext.getResources().getDrawable(R.drawable.msg_settings_premium).mutate();
@@ -3559,7 +3574,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
     public void onEmojiClick(View view, AnimatedEmojiSpan span) {
         incrementHintUse();
         if (span == null || (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP) && selectedDocumentIds.contains(span.documentId)) {
-            onEmojiSelected(view, null, null, null, null);
+            onEmojiSelected(view, null, null, null, null, null);
         } else {
             TLRPC.TL_emojiStatus status = new TLRPC.TL_emojiStatus();
             status.document_id = span.getDocumentId();
@@ -3572,17 +3587,17 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                 }
                 if (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_SET_DEFAULT_REACTION) {
                     if (!willApplyEmoji(view, span.documentId, document, imageView.starGift, null)) {
-                        onEmojiSelected(view, span.documentId, document, imageView.starGift, null);
+                        onEmojiSelected(view, span.documentId, document, imageView.starGift, null, null);
                         return;
                     }
                     animateEmojiSelect(imageView, () -> {
-                        onEmojiSelected(view, span.documentId, document, imageView.starGift, null);
+                        onEmojiSelected(view, span.documentId, document, imageView.starGift, null, null);
                     });
                 } else {
-                    onEmojiSelected(view, span.documentId, document, imageView.starGift, null);
+                    onEmojiSelected(view, span.documentId, document, imageView.starGift, null, null);
                 }
             } else {
-                onEmojiSelected(view, span.documentId, document, null, null);
+                onEmojiSelected(view, span.documentId, document, null, null, null);
             }
         }
     }
@@ -3608,6 +3623,10 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
 
     protected void onEmojiSelected(View view, Long documentId, TLRPC.Document document, TL_stars.TL_starGiftUnique gift, Integer until) {
 
+    }
+
+    public void onEmojiSelected(View view, Long documentId, TLRPC.Document document, TL_stars.TL_starGiftUnique gift, Integer until, String comment) {
+        onEmojiSelected(view, documentId, document, gift, until);
     }
 
     public void preload(int type, int account) {

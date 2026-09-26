@@ -28,6 +28,8 @@ public class SearchEngine {
     @NonNull
     public final String name;
     @Nullable
+    public final String homepage;
+    @Nullable
     public final String search_url;
     @Nullable
     public final String autocomplete_url;
@@ -36,14 +38,33 @@ public class SearchEngine {
 
     public SearchEngine(
         @NonNull  String name,
+        @Nullable String homepage,
         @Nullable String search_url,
         @Nullable String autocomplete_url,
         @Nullable String privacy_policy_url
     ) {
         this.name = name;
+        this.homepage = homepage;
         this.search_url = search_url;
         this.autocomplete_url = autocomplete_url;
         this.privacy_policy_url = privacy_policy_url;
+    }
+
+    public SearchEngine(
+        @NonNull  String name,
+        @Nullable String search_url,
+        @Nullable String autocomplete_url,
+        @Nullable String privacy_policy_url
+    ) {
+        this.name = name;
+        this.homepage = null;
+        this.search_url = search_url;
+        this.autocomplete_url = autocomplete_url;
+        this.privacy_policy_url = privacy_policy_url;
+    }
+
+    public String getHomepage() {
+        return homepage;
     }
 
     public String getSearchURL(String query) {

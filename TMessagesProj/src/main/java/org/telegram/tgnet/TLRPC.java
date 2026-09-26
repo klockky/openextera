@@ -61827,6 +61827,7 @@ public class TLRPC {
 
         public long document_id;
         public TLRPC.Document document; //custom
+        public boolean local; //custom
 
         public void readParams(InputSerializedData stream, boolean exception) {
             offset = stream.readInt32(exception);

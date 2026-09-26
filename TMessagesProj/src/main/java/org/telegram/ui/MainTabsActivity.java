@@ -124,7 +124,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     public MainTabsActivity(Bundle args) {
-        super(args);
+        arguments = args;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             iBlur3SourceTabGlass = new BlurredBackgroundSourceRenderNode(null);
             iBlur3SourceTabGlass.setupRenderer(new RenderNodeWithHash.Renderer() {

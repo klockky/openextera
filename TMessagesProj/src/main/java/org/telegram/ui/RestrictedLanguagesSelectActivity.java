@@ -72,6 +72,17 @@ public class RestrictedLanguagesSelectActivity extends BaseFragment implements N
     private static boolean gotRestrictedLanguages;
     private static HashSet<String> restrictedLanguages;
 
+    private final int type;
+
+    public RestrictedLanguagesSelectActivity() {
+        this(0);
+    }
+
+    // TODO(openextera): type 1 (translation target picker) is handled by lite's reworked list — stage 2
+    public RestrictedLanguagesSelectActivity(int type) {
+        this.type = type;
+    }
+
     public static HashSet<String> getRestrictedLanguages() {
         if (!gotRestrictedLanguages) {
             Set<String> set = MessagesController.getGlobalMainSettings().getStringSet("translate_button_restricted_languages", null);

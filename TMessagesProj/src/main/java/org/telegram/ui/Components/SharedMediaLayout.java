@@ -1,5 +1,8 @@
 package org.telegram.ui.Components;
 
+import com.exteragram.messenger.icons.IconManager;
+import com.exteragram.messenger.backup.PreferencesUtils;
+import com.exteragram.messenger.backup.BackupBottomSheet;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
 import static org.telegram.messenger.AndroidUtilities.lerp;
@@ -7840,6 +7843,14 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                     SharedDocumentCell cell = (SharedDocumentCell) view;
                     TLRPC.Document document = message.getDocument();
                     if (cell.isLoaded()) {
+                        if (PreferencesUtils.getInstance().isBackup(message)) {
+                            new BackupBottomSheet(profileActivity, message).showIfPossible();
+                            return;
+                        }
+                        if (IconManager.INSTANCE.isIconPack(message)) {
+                            IconManager.INSTANCE.handleIconPack(profileActivity, message);
+                            return;
+                        }
                         if (message.canPreviewDocument()) {
                             PhotoViewer.getInstance().setParentActivity(profileActivity);
                             index = sharedMediaData[selectedMode].messages.indexOf(message);

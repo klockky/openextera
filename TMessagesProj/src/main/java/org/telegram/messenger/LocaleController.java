@@ -2625,33 +2625,6 @@ public class LocaleController {
         return text;
     }
 
-    public static String formatRelativeDate(long seconds) {
-        try {
-            long minutes = seconds / 60;
-            long hours = minutes / 60;
-            long days = hours / 24;
-            long months = days / 30;
-            long years = days / 365;
-            if (years >= 1) {
-                return years == 1 ? getString(R.string.YearAgo) : formatPluralStringComma("YearsAgo", (int) years);
-            } else if (months >= 1) {
-                return months == 1 ? getString(R.string.MonthAgo) : formatPluralStringComma("MonthsAgo", (int) months);
-            } else if (days >= 1) {
-                return days == 1 ? getString(R.string.DayAgo) : formatPluralStringComma("DaysAgo", (int) days);
-            } else if (hours >= 1) {
-                return hours == 1 ? getString(R.string.HourAgo) : formatPluralStringComma("HoursAgo", (int) hours);
-            } else if (minutes < 1) {
-                return getString(R.string.LessMinuteAgo);
-            } else if (minutes == 1) {
-                return getString(R.string.MinuteAgo);
-            }
-            return formatPluralStringComma("MinutesAgo", (int) minutes);
-        } catch (Exception e) {
-            FileLog.e(e);
-            return "LOC_ERR";
-        }
-    }
-
     public static String formatDateOnline(long date, boolean[] madeShorter, boolean[] relative) {
         if (relative != null) {
             try {

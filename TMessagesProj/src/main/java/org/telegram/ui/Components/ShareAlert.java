@@ -66,6 +66,8 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.backup.PreferencesUtils;
+
 import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
@@ -130,6 +132,7 @@ import org.telegram.ui.PhotoViewer;
 import org.telegram.ui.PremiumPreviewFragment;
 import org.telegram.ui.Stories.DarkThemeResourceProvider;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -384,7 +387,14 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
     }
 
     public ShareAlert(final Context context, ChatActivity fragment, ArrayList<MessageObject> messages, final String text, final String text2, boolean channel, final String copyLink, final String copyLink2, boolean fullScreen, boolean forCall, boolean includeStory, Integer video_timestamp, Theme.ResourcesProvider theme) {
+        this(context, fragment, messages, null, text, text2, channel, copyLink, copyLink2, fullScreen, forCall, includeStory, video_timestamp, theme);
+    }
+
+    private String sendingFile;
+
+    public ShareAlert(final Context context, ChatActivity fragment, ArrayList<MessageObject> messages, String sendingFile, final String text, final String text2, boolean channel, final String copyLink, final String copyLink2, boolean fullScreen, boolean forCall, boolean includeStory, Integer video_timestamp, Theme.ResourcesProvider theme) {
         super(context, true, theme);
+        this.sendingFile = sendingFile;
         AndroidUtilities.enableEdgeToEdge(getWindow());
 
         iBlur3SourceColor = new BlurredBackgroundSourceColor();
@@ -1684,7 +1694,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
             commentTextView.getEditText().setCursorColor(getThemedColor(Theme.key_voipgroup_nameText));
         }
 //        commentTextView.setBackgroundColor(backgroundColor);
-        commentTextView.setHint(LocaleController.getString(R.string.ShareComment));
+        commentTextView.setHint(LocaleController.getString(sendingFile != null ? R.string.WriteFileName : R.string.ShareComment));
         commentTextView.onResume();
         commentTextView.setPadding(0, 0, dp(84), 0);
         frameLayout2.addView(commentTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT));
@@ -2581,6 +2591,19 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
                         params2.payStars = price == null ? 0 : price;
                         params2.monoForumPeer = monoForumPeerId;
                         SendMessagesHelper.getInstance(currentAccount).sendMessage(params2);
+                    }
+                } else if (sendingFile != null) {
+                    for (int a = 0; a < selectedDialogs.size(); a++) {
+                        long key = selectedDialogs.keyAt(a);
+                        TLRPC.TL_forumTopic topic = selectedDialogTopics.get(selectedDialogs.get(key));
+                        MessageObject replyTopMsg = topic != null ? new MessageObject(currentAccount, topic.topicStartMessage, false, false) : null;
+                        if (frameLayout2.getTag() != null && commentTextView.length() > 0 && text[0] != null) {
+                            File file = new File(sendingFile);
+                            sendingFile = file.getParent() + "/" + PreferencesUtils.generateBackupName(text[0].toString());
+                            file.renameTo(new File(sendingFile));
+                        }
+                        ArrayList<String> paths = new ArrayList<>(Collections.singletonList(sendingFile));
+                        SendMessagesHelper.prepareSendingDocuments(AccountInstance.getInstance(currentAccount), paths, paths, null, null, null, null, key, null, replyTopMsg, null, null, null, withSound, 0, 0, null, null, 0, false, 0, 0, null);
                     }
                 }
 

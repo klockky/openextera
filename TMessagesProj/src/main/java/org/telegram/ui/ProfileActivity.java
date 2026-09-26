@@ -14394,7 +14394,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     public static class SearchAdapter extends RecyclerListView.SelectionAdapter {
 
-        public static class SearchResult {
+        public class SearchResult {
 
             public String searchTitle;
             public Runnable openRunnable;
@@ -14537,7 +14537,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             });
         }
 
-        private static SearchResult[] onCreateSearchArray(final BaseFragment f) {
+        public SearchResult[] onCreateSearchArray(final BaseFragment f) {
             final int currentAccount = f.getCurrentAccount();
             final Theme.ResourcesProvider resourcesProvider = f.getResourceProvider();
             return new SearchResult[]{

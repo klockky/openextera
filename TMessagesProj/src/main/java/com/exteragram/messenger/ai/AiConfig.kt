@@ -71,18 +71,18 @@ var selectedRole: String by StringPref(Suggestions.values()[0].role.name)
 
 @JvmOverloads
 fun getReplaceTelegramEditor(account: Int = UserConfig.selectedAccount): Boolean =
-    ExteraConfig.getPreferences().getBoolean("replaceTelegramEditor", !UserConfig.getInstance(account).isPremium)
+    ExteraConfig.preferences.getBoolean("replaceTelegramEditor", !UserConfig.getInstance(account).isPremium)
 
 fun setReplaceTelegramEditor(value: Boolean) {
-    ExteraConfig.getEditor().putBoolean("replaceTelegramEditor", value).apply()
+    ExteraConfig.editor.putBoolean("replaceTelegramEditor", value).apply()
 }
 
 @JvmOverloads
 fun getReplaceTelegramSummaries(account: Int = UserConfig.selectedAccount): Boolean =
-    ExteraConfig.getPreferences().getBoolean("replaceTelegramSummaries", !UserConfig.getInstance(account).isPremium)
+    ExteraConfig.preferences.getBoolean("replaceTelegramSummaries", !UserConfig.getInstance(account).isPremium)
 
 fun setReplaceTelegramSummaries(value: Boolean) {
-    ExteraConfig.getEditor().putBoolean("replaceTelegramSummaries", value).apply()
+    ExteraConfig.editor.putBoolean("replaceTelegramSummaries", value).apply()
 }
 
 fun getSelectedService(): Service {
@@ -92,13 +92,13 @@ fun getSelectedService(): Service {
         services.firstOrNull { it.id == selectedId }?.let { return it }
         selectedServiceId = null
     }
-    if (ExteraConfig.getPreferences().contains("selectedService")) {
+    if (ExteraConfig.preferences.contains("selectedService")) {
         val legacyHash = selectedServiceHash
         val legacyService = services.firstOrNull { it.legacyHash == legacyHash }
         if (legacyService != null) {
             selectedServiceId = legacyService.id
         }
-        ExteraConfig.getEditor().remove("selectedService").apply()
+        ExteraConfig.editor.remove("selectedService").apply()
         if (legacyService != null) {
             return legacyService
         }
@@ -108,19 +108,19 @@ fun getSelectedService(): Service {
 
 fun setSelectedServices(service: Service) {
     selectedServiceId = service.id
-    ExteraConfig.getEditor().remove("selectedService").apply()
+    ExteraConfig.editor.remove("selectedService").apply()
 }
 
 fun clearSelectedService() {
     selectedServiceId = null
-    ExteraConfig.getEditor().remove("selectedService").apply()
+    ExteraConfig.editor.remove("selectedService").apply()
 }
 
 fun getServices(): ArrayList<Service> {
     val json = preferences.getString("services", null) ?: return ArrayList()
     return try {
         val type = object : TypeToken<ArrayList<Service>>() {}.type
-        val services: ArrayList<Service> = ExteraConfig.getGSON().fromJson(json, type) ?: ArrayList()
+        val services: ArrayList<Service> = ExteraConfig.GSON.fromJson(json, type) ?: ArrayList()
         var changed = false
         for (service in services) {
             if (service.ensureId()) {
@@ -138,18 +138,18 @@ fun getServices(): ArrayList<Service> {
 }
 
 fun saveServices(services: ArrayList<Service>) {
-    editor.putString("services", ExteraConfig.getGSON().toJson(services)).apply()
+    editor.putString("services", ExteraConfig.GSON.toJson(services)).apply()
 }
 
 fun saveRoles(roles: ArrayList<Role>) {
-    editor.putString("roles", ExteraConfig.getGSON().toJson(roles)).apply()
+    editor.putString("roles", ExteraConfig.GSON.toJson(roles)).apply()
 }
 
 fun getRoles(): ArrayList<Role> {
     val json = preferences.getString("roles", null) ?: return ArrayList()
     return try {
         val type = object : TypeToken<ArrayList<Role>>() {}.type
-        ExteraConfig.getGSON().fromJson(json, type) ?: ArrayList()
+        ExteraConfig.GSON.fromJson(json, type) ?: ArrayList()
     } catch (e: Exception) {
         FileLog.e(e)
         ArrayList()
@@ -164,7 +164,7 @@ fun getConversationHistory(): ArrayList<Message> {
     val json = preferences.getString("history", null) ?: return ArrayList()
     return try {
         val type = object : TypeToken<ArrayList<Message>>() {}.type
-        ExteraConfig.getGSON().fromJson(json, type) ?: ArrayList()
+        ExteraConfig.GSON.fromJson(json, type) ?: ArrayList()
     } catch (e: Exception) {
         FileLog.e(e)
         ArrayList()
@@ -172,7 +172,7 @@ fun getConversationHistory(): ArrayList<Message> {
 }
 
 fun saveConversationHistory(history: ArrayList<Message>) {
-    editor.putString("history", ExteraConfig.getGSON().toJson(history)).apply()
+    editor.putString("history", ExteraConfig.GSON.toJson(history)).apply()
 }
 
 fun clearConversationHistory() {

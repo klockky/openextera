@@ -39,6 +39,8 @@ import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
+import com.exteragram.messenger.utils.chats.GlassMenuHelper;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
 import org.telegram.messenger.ImageReceiver;
@@ -322,6 +324,22 @@ public class CustomEmojiReactionsWindow {
             .setColorProvider(backgroundColorProvider)
             .setRadius(dp(12))
             .setPadding(dp(8));
+    }
+
+    BlurredBackgroundDrawable glassBackground;
+    BlurredBackgroundDrawable glassBackgroundSearchBox;
+
+    public void setGlassBackground(BlurredBackgroundDrawable background, BlurredBackgroundDrawable searchBoxBackground) {
+        this.glassBackground = background;
+        this.glassBackgroundSearchBox = searchBoxBackground;
+        if (selectAnimatedEmojiDialog.searchBox != null) {
+            selectAnimatedEmojiDialog.searchBox.setUseCustomBackground();
+        }
+        selectAnimatedEmojiDialog.setBackgroundDelegate((canvas, left, top, right, bottom, x, y) -> {
+            AndroidUtilities.rectTmp.set(left, top, right, bottom);
+            GlassMenuHelper.draw(glassBackgroundSearchBox, canvas, AndroidUtilities.rectTmp, 0, 255, x, y);
+        });
+        containerView.invalidate();
     }
 
     public void setLongPressEnabled(boolean isEnabled) {
@@ -805,7 +823,7 @@ public class CustomEmojiReactionsWindow {
         @Override
         public void invalidate() {
             super.invalidate();
-            if (type == TYPE_STORY || (reactionsContainerLayout != null && reactionsContainerLayout.getDelegate() != null && reactionsContainerLayout.getDelegate().drawBackground())) {
+            if (type == TYPE_STORY || glassBackground != null || (reactionsContainerLayout != null && reactionsContainerLayout.getDelegate() != null && reactionsContainerLayout.getDelegate().drawBackground())) {
                 selectAnimatedEmojiDialog.invalidateSearchBox();
             }
         }
@@ -881,6 +899,10 @@ public class CustomEmojiReactionsWindow {
                     blurredBackgroundDrawable.setAlpha(backgroundPaint.getAlpha());
                     blurredBackgroundDrawable.setRadius(radius);
                     blurredBackgroundDrawable.draw(canvas);
+                } else if (glassBackground != null) {
+                    // TODO(openextera): decompile failed, verify
+                    shadow.draw(canvas);
+                    GlassMenuHelper.draw(glassBackground, canvas, drawingRect, radius, 255);
                 } else {
                     shadow.draw(canvas);
                     canvas.drawRoundRect(drawingRect, radius, radius, backgroundPaint);

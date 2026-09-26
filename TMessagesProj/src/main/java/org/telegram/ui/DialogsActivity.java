@@ -96,6 +96,10 @@ import org.telegram.ui.recyclerview.LinearSmoothScrollerCustom;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.config.BottomNavigationBar;
+import com.exteragram.messenger.utils.ui.MainTabsUiHelper;
+
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
@@ -7014,7 +7018,41 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
     }
 
-    @Override
+    boolean mainTabsHiddenByScroll;
+
+    public boolean canOpenDrawer() {
+        if (!ExteraConfig.getNavigationDrawer() || onlySelect || communityId != 0 || folderId != 0 || initialDialogsType != DIALOGS_TYPE_DEFAULT || searching) {
+            return false;
+        }
+        if (actionBar != null && actionBar.isActionModeShowed() || animatorSearchVisible.getValue() || searchAnimator != null) {
+            return false;
+        }
+        if (rightSlidingDialogContainer != null && (rightSlidingDialogContainer.hasFragment() || rightFragmentTransitionInProgress)) {
+            return false;
+        }
+        if (tabsAnimationInProgress || startedTracking || maybeStartTracking) {
+            return false;
+        }
+        return filterTabsView == null || !filterTabsView.isEditing() && !filterTabsView.isAnimatingIndicator();
+    }
+
+    public boolean canOpenDrawerBySwipe(MotionEvent event) {
+        if (event != null && hasMainTabs && BottomNavigationBar.visible() && !mainTabsHiddenByScroll && fragmentView != null) {
+            final Rect rect = AndroidUtilities.rectTmp2;
+            if (fragmentView.getGlobalVisibleRect(rect)) {
+                final int y = (int) event.getRawY() - rect.top;
+                final int tabsBottom = fragmentView.getMeasuredHeight() - navigationBarHeight;
+                if (y >= tabsBottom - dp(MainTabsUiHelper.getTabsViewHeightDp()) && y <= tabsBottom) {
+                    return false;
+                }
+            }
+        }
+        if (!canOpenDrawer()) {
+            return false;
+        }
+        return filterTabsView == null || filterTabsView.getVisibility() != View.VISIBLE || SharedConfig.getChatSwipeAction(currentAccount) != SwipeGestureSettingsView.SWIPE_GESTURE_FOLDERS || filterTabsView.getCurrentTabId() == filterTabsView.getFirstTabId();
+    }
+
     public void onResume() {
         super.onResume();
         if (dialogStoriesCell != null) {

@@ -48,6 +48,8 @@ import androidx.core.util.Consumer;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.utils.chats.GlassMenuHelper;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.DocumentObject;
@@ -509,6 +511,12 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
         if (backgroundFactory != null) {
             reactionsWindow.setBackgroundFactory(backgroundFactory, backgroundColorProvider);
         }
+        if (glassBackgroundFactory != null) {
+            reactionsWindow.setGlassBackground(
+                glassBackgroundFactory.create(reactionsWindow.containerView, true).setColorProvider(glassBackgroundColorProvider),
+                glassBackgroundFactory.create(reactionsWindow.containerView, true).setColorProvider(glassBackgroundColorProvider)
+            );
+        }
         reactionsWindow.setLongPressEnabled(delegate == null || delegate.allowLongPress());
         invalidateLoopViews();
         reactionsWindow.onDismissListener(() -> {
@@ -640,7 +648,20 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
             .setPadding(dp(8));
     }
 
+    private BlurredBackgroundDrawable glassBackground;
+    private BlurredBackgroundDrawable glassBackgroundBubbleBig;
+    private BlurredBackgroundDrawable glassBackgroundBubbleSmall;
+    private BlurredBackgroundDrawableViewFactory glassBackgroundFactory;
+    private BlurredBackgroundProvider glassBackgroundColorProvider;
 
+    public void setGlassBackground(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundProvider colorProvider) {
+        this.glassBackgroundFactory = factory;
+        this.glassBackgroundColorProvider = colorProvider;
+        this.glassBackground = factory.create(this, true).setColorProvider(colorProvider);
+        this.glassBackgroundBubbleBig = factory.create(this, true).setColorProvider(colorProvider);
+        this.glassBackgroundBubbleSmall = factory.create(this, true).setColorProvider(colorProvider);
+        invalidate();
+    }
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
@@ -739,6 +760,9 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
                     blurredBackgroundDrawable.setBounds(AndroidUtilities.rectTmp2);
                     blurredBackgroundDrawable.setAlpha(bgPaint.getAlpha());
                     blurredBackgroundDrawable.draw(canvas);
+                } else if (glassBackground != null) {
+                    // TODO(openextera): decompile failed, verify
+                    GlassMenuHelper.draw(glassBackground, canvas, rect, radius, bgPaint.getAlpha());
                 } else {
                     canvas.drawRoundRect(rect, radius, radius, bgPaint);
                 }
@@ -934,6 +958,9 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
                 blurredBackgroundDrawable1.setBounds(AndroidUtilities.rectTmp2);
                 blurredBackgroundDrawable1.setAlpha(bgPaint.getAlpha());
                 blurredBackgroundDrawable1.draw(canvas);
+            } else if (glassBackgroundBubbleBig != null) {
+                rectF.set(cx - br, cy - br, cx + br, cy + br);
+                GlassMenuHelper.draw(glassBackgroundBubbleBig, canvas, rectF, br, alpha);
             } else {
                 canvas.drawCircle(cx, cy, br, bgPaint);
             }
@@ -958,6 +985,9 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
                 blurredBackgroundDrawable2.setBounds(AndroidUtilities.rectTmp2);
                 blurredBackgroundDrawable2.setAlpha(bgPaint.getAlpha());
                 blurredBackgroundDrawable2.draw(canvas);
+            } else if (glassBackgroundBubbleSmall != null) {
+                rectF.set(cx - sr, cy - sr, cx + sr, cy + sr);
+                GlassMenuHelper.draw(glassBackgroundBubbleSmall, canvas, rectF, sr, alpha);
             } else {
                 canvas.drawCircle(cx, cy, sr, bgPaint);
             }

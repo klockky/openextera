@@ -2252,6 +2252,11 @@ public class FilterCreateActivity extends BaseFragment {
             this.color = color;
         }
 
+        private int textColor;
+        public void setTextColor(int textColor) {
+            this.textColor = textColor;
+        }
+
         private CharSequence text = "NEW";
         public void setText(CharSequence text) {
             this.text = text;
@@ -2290,6 +2295,8 @@ public class FilterCreateActivity extends BaseFragment {
             bgPaint.setColor(color);
             if (outline) {
                 textPaint.setColor(color);
+            } else if (textColor != 0) {
+                textPaint.setColor(textColor);
             } else {
                 textPaint.setColor(AndroidUtilities.computePerceivedBrightness(color) > .721f ? Color.BLACK : Color.WHITE);
             }

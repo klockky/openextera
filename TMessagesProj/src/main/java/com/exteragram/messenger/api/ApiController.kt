@@ -62,7 +62,7 @@ object ApiController {
 
     @JvmStatic
     @JvmOverloads
-    fun sync(prefs: SharedPreferences = ExteraConfig.getPreferences(), force: Boolean = false) {
+    fun sync(prefs: SharedPreferences = ExteraConfig.preferences, force: Boolean = false) {
         if (!ApiClient.requestsEnabled) {
             return
         }
@@ -82,7 +82,7 @@ object ApiController {
         }
     }
 
-    suspend fun performSync(prefs: SharedPreferences = ExteraConfig.getPreferences(), force: Boolean = false): Boolean = syncMutex.withLock {
+    suspend fun performSync(prefs: SharedPreferences = ExteraConfig.preferences, force: Boolean = false): Boolean = syncMutex.withLock {
         if (!ApiClient.requestsEnabled) {
             return@withLock true
         }
@@ -210,7 +210,7 @@ object ApiController {
 
     @JvmStatic
     @JvmOverloads
-    fun resetSyncState(prefs: SharedPreferences = ExteraConfig.getPreferences()) {
+    fun resetSyncState(prefs: SharedPreferences = ExteraConfig.preferences) {
         prefs.edit()
             .remove(SYNC_TIMESTAMP_KEY)
             .remove(PROFILES_ETAG_KEY)

@@ -7,6 +7,9 @@ import static org.telegram.messenger.LocaleController.formatString;
 import static org.telegram.messenger.LocaleController.getString;
 import static org.telegram.ui.Stars.StarGiftSheet.replaceUnderstood;
 
+import com.exteragram.messenger.debug.DebugActivity;
+import com.exteragram.messenger.preferences.MainPreferencesActivity;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -685,6 +688,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(UItem.asShadow(null));
         }
 
+        items.add(SettingCell.Factory.of(-1, 0xFFE82F30, 0xFFE82F30, Theme.isCurrentThemeMonet() ? R.drawable.ic_foreground_solid : R.drawable.ic_foreground, getString(R.string.Preferences)));
+        items.add(UItem.asShadow(null));
+
         items.add(SettingCell.Factory.of(1, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.settings_account, getString(R.string.SettingsAccount), getString(R.string.SettingsAccountInfo)));
         items.add(SettingCell.Factory.of(2, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_chat, getString(R.string.SettingsChat), getString(R.string.SettingsChatInfo)));
         items.add(SettingCell.Factory.of(3, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_privacy, getString(R.string.SettingsPrivacySecurity), getString(R.string.SettingsPrivacySecurityInfo)));
@@ -812,6 +818,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             return;
         }
         switch (item.id) {
+            case -1:
+                presentSettingFragment(new MainPreferencesActivity());
+                break;
             case 1:
                 presentSettingFragment(new UserInfoActivity());
                 break;
@@ -894,6 +903,11 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         if (item.object instanceof TLRPC.TL_attachMenuBot) {
             TLRPC.TL_attachMenuBot attachMenuBot = (TLRPC.TL_attachMenuBot) item.object;
             BotWebViewSheet.deleteBot(currentAccount, attachMenuBot.bot_id, () -> listView.adapter.update(true));
+            return true;
+        }
+
+        if (item.id == -1) {
+            presentFragment(new DebugActivity());
             return true;
         }
 
