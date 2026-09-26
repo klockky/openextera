@@ -19,6 +19,8 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 
+import com.exteragram.messenger.AvatarCornerType;
+import com.exteragram.messenger.ExteraConfig;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.NotificationCenter;
@@ -268,7 +270,7 @@ public class CommunityCreateActivity extends BaseFragment implements Notificatio
             this.resourcesProvider = resourcesProvider;
 
             avatarView = new BackupImageView(context);
-            avatarView.setRoundRadius(dp(20));
+            avatarView.setRoundRadius(ExteraConfig.getAvatarCorners(AVATAR_SIZE, false, AvatarCornerType.COMMUNITY));
             addView(avatarView, LayoutHelper.createFrame(AVATAR_SIZE, AVATAR_SIZE, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, 36, 0, 0));
 
             titleView = new TextView(context);

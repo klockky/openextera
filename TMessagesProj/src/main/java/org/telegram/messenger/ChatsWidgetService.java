@@ -23,6 +23,8 @@ import android.widget.RemoteViewsService;
 
 import androidx.collection.LongSparseArray;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AvatarDrawable;
@@ -164,6 +166,7 @@ class ChatsRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory {
                     avatarDrawable = new AvatarDrawable();
                     avatarDrawable.setInfo(accountInstance.getCurrentAccount(), chat);
                 }
+                avatarDrawable.setRoundRadius(ExteraConfig.getAvatarCorners(size, true, chat != null && chat.forum));
                 avatarDrawable.setBounds(0, 0, size, size);
                 avatarDrawable.draw(canvas);
             } else {
@@ -175,9 +178,10 @@ class ChatsRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory {
                 float scale = size / (float) bitmap.getWidth();
                 canvas.save();
                 canvas.scale(scale, scale);
+                float avatarCorners = ExteraConfig.getAvatarCorners(bitmap.getWidth(), true, chat != null && chat.forum);
                 roundPaint.setShader(shader);
                 bitmapRect.set(0, 0, bitmap.getWidth(), bitmap.getHeight());
-                canvas.drawRoundRect(bitmapRect, bitmap.getWidth(), bitmap.getHeight(), roundPaint);
+                canvas.drawRoundRect(bitmapRect, avatarCorners, avatarCorners, roundPaint);
                 canvas.restore();
             }
             canvas.setBitmap(null);

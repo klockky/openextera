@@ -28,6 +28,9 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.AvatarCornerType;
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.DialogObject;
@@ -762,7 +765,7 @@ public class CommunitySheet extends BottomSheet implements NotificationCenter.No
 
             avatarDrawable = new AvatarDrawable(currentCommunity);
             avatarImage = new BackupImageView(getContext());
-            avatarImage.setRoundRadius(dp(9));
+            avatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(27.33f, false, AvatarCornerType.COMMUNITY));
             avatarImage.setForUserOrChat(currentCommunity, avatarDrawable);
             actionBar.addView(avatarImage, LayoutHelper.createFrame(27.33f, 27.33f, Gravity.BOTTOM | Gravity.LEFT, 14.33f, 0, 0, 14.33f));
 

@@ -26,6 +26,9 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
+import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.LocaleController;
 import org.telegram.ui.ActionBar.Theme;
@@ -77,6 +80,7 @@ public class TextDetailCell extends FrameLayout {
             }
         });
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        textView.setTypeface(AndroidUtilities.regular());
         textView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
         if (textMultiline) {
             setMinimumHeight(dp(60));
@@ -103,7 +107,7 @@ public class TextDetailCell extends FrameLayout {
         valueTextView.setOnLinkLongPressListener(span -> {
             if (span != null) {
                 try {
-                    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                    performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.LONG_PRESS), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                 } catch (Exception ignore) {};
                 span.onClick(valueTextView);
             }
@@ -115,6 +119,7 @@ public class TextDetailCell extends FrameLayout {
             valueTextView.setSingleLine(true);
         }
         valueTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        valueTextView.setTypeface(AndroidUtilities.regular());
         valueTextView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
         valueTextView.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         valueTextView.setEllipsize(TextUtils.TruncateAt.END);
@@ -190,6 +195,14 @@ public class TextDetailCell extends FrameLayout {
             MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
             multiline ? heightMeasureSpec : MeasureSpec.makeMeasureSpec(dp(60) + (needDivider ? 1 : 0), MeasureSpec.EXACTLY)
         );
+    }
+
+    public TextView getTextView() {
+        return textView;
+    }
+
+    public String getText() {
+        return textView.getText().toString();
     }
 
     public void setTextAndValue(CharSequence text, CharSequence value, boolean divider) {

@@ -102,7 +102,7 @@ public class GeneralPreferencesActivity extends BasePreferencesActivity {
         items.add(UItem.asCheck(GeneralItem.IN_APP_VIBRATION.getId(), LocaleController.getString(R.string.InAppVibration)).setChecked(ExteraConfig.getInAppVibration()).setSearchable(this).setLinkAlias("inAppVibration", this));
         items.add(UItem.asCheck(GeneralItem.DISABLE_NOTIFICATION_DELAY.getId(), LocaleController.getString(R.string.DisableNotificationDelay)).setChecked(ExteraConfig.getDisableNotificationDelay()).setSearchable(this).setLinkAlias("disableNotificationDelay", this));
         items.add(UItem.asCheck(GeneralItem.FILTER_ZALGO.getId(), LocaleController.getString(R.string.FilterZalgo)).setChecked(ExteraConfig.getFilterZalgo()).setSearchable(this).setLinkAlias("filterZalgo", this));
-        items.add(UItem.asShadow(LocaleController.formatString(R.string.FilterZalgoInfo, ZalgoFilter.filter("Z̷͍͌ā̸̜l̸̞̂g̷͍̝o̶̩̓"))));
+        items.add(UItem.asShadow(LocaleController.formatString(R.string.FilterZalgoInfo, ZalgoFilter.filter("Z\u0337\u034c\u034da\u0338\u0304\u031cl\u0338\u0302\u031eg\u0337\u034d\u031do\u0336\u0313\u0329"))));
 
         if (ApplicationLoader.applicationLoaderInstance.allowToUseYandexMaps()) {
             items.add(UItem.asHeader(LocaleController.getString(R.string.Maps)));

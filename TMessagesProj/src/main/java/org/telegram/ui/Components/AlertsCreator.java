@@ -79,6 +79,9 @@ import androidx.annotation.RawRes;
 import androidx.annotation.RequiresApi;
 import androidx.core.util.Consumer;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -2013,7 +2016,7 @@ public class AlertsCreator {
         avatarDrawable.setTextSize(dp(12));
 
         BackupImageView imageView = new BackupImageView(context);
-        imageView.setRoundRadius(dp(20));
+        imageView.setRoundRadius(ExteraConfig.getAvatarCorners(40));
         frameLayout.addView(imageView, LayoutHelper.createFrame(40, 40, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 22, 5, 22, 0));
 
         TextView textView = new TextView(context);
@@ -2645,7 +2648,7 @@ public class AlertsCreator {
         avatarDrawable.setTextSize(dp(18));
 
         BackupImageView imageView = new BackupImageView(context);
-        imageView.setRoundRadius(dp(15));
+        imageView.setRoundRadius(ExteraConfig.getAvatarCorners(30));
         frameLayout.addView(imageView, LayoutHelper.createFrame(30, 30, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 22, 5, 22, 0));
 
         final AnimatedTextView textView = new AnimatedTextView(context);
@@ -3232,7 +3235,7 @@ public class AlertsCreator {
         avatarDrawable.setInfo(fragment.getCurrentAccount(), user);
 
         BackupImageView imageView = new BackupImageView(context);
-        imageView.setRoundRadius(dp(20));
+        imageView.setRoundRadius(ExteraConfig.getAvatarCorners(40));
         imageView.setForUserOrChat(user, avatarDrawable);
         frameLayout.addView(imageView, LayoutHelper.createFrame(40, 40, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 22, 5, 22, 0));
 
@@ -3291,10 +3294,7 @@ public class AlertsCreator {
             public CharSequence filter(CharSequence source, int start, int end, Spanned dest, int dstart, int dend) {
                 CharSequence result = super.filter(source, start, end, dest, dstart, dend);
                 if (result != null && source != null && result.length() != source.length()) {
-                    Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-                    if (v != null) {
-                        v.vibrate(200);
-                    }
+                    VibratorUtils.vibrate();
                     AndroidUtilities.shakeView(checkTextView);
                 }
                 return result;
@@ -7249,7 +7249,7 @@ public class AlertsCreator {
         frameLayout.addView(pin, LayoutHelper.createFrame(60, 82, Gravity.CENTER, 0, 0, 0, 0));
 
         BackupImageView imageView = new BackupImageView(activity);
-        imageView.setRoundRadius(dp(26));
+        imageView.setRoundRadius(ExteraConfig.getAvatarCorners(52));
         imageView.setForUserOrChat(selfUser, new AvatarDrawable(selfUser));
         frameLayout.addView(imageView, LayoutHelper.createFrame(52, 52, Gravity.CENTER, 0, 0, 0, 11));
 

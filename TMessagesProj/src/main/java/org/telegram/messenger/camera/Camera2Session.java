@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
@@ -29,6 +30,8 @@ import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
+
+import com.exteragram.messenger.ExteraConfig;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -491,8 +494,20 @@ public class Camera2Session {
             captureRequestBuilder.set(CaptureRequest.FLASH_MODE, flashing ? (recordingVideo ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_SINGLE) : CaptureRequest.FLASH_MODE_OFF);
 
             if (recordingVideo) {
-                captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range<Integer>(30, 60));
-                captureRequestBuilder.set(CaptureRequest.CONTROL_CAPTURE_INTENT, CaptureRequest.CONTROL_CAPTURE_INTENT_VIDEO_RECORD);
+                captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+                recordingFrameRate = 30;
+                if (ExteraConfig.getExtendedFramesPerSecond()) {
+                    Range<Integer> fpsRange = selectExtendedFpsRange();
+                    if (fpsRange != null) {
+                        captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsRange);
+                        captureRequestBuilder.set(CaptureRequest.CONTROL_CAPTURE_INTENT, CaptureRequest.CONTROL_CAPTURE_INTENT_VIDEO_RECORD);
+                        recordingFrameRate = 60;
+                    }
+                }
+                if (ExteraConfig.getCameraStabilization()) {
+                    chooseStabilizationMode(captureRequestBuilder);
+                }
+                chooseFocusMode(captureRequestBuilder);
             }
 
             if (sensorSize != null && Math.abs(currentZoom - 1f) >= 0.01f) {
@@ -512,6 +527,7 @@ public class Camera2Session {
             captureRequestBuilder.addTarget(surface);
             captureSession.setRepeatingRequest(captureRequestBuilder.build(), null, handler);
         } catch (Exception e) {
+            recordingFrameRate = 30;
             FileLog.e("Camera2Sessions setRepeatingRequest error in updateCaptureRequest", e);
         }
     }
@@ -525,6 +541,59 @@ public class Camera2Session {
 
     public int getRecordingFrameRate() {
         return recordingFrameRate;
+    }
+
+    private Range<Integer> selectExtendedFpsRange() {
+        Range<Integer>[] ranges = getAvailableFpsRanges();
+        Range<Integer> best = null;
+        if (ranges != null) {
+            for (Range<Integer> range : ranges) {
+                if (range == null || range.getLower() > 60 || range.getUpper() != 60) {
+                    continue;
+                }
+                if (range.getLower() == 60 && range.getUpper() == 60) {
+                    return range;
+                }
+                if (best == null || range.getLower() > best.getLower() || (range.getLower().equals(best.getLower()) && range.getUpper() < best.getUpper())) {
+                    best = range;
+                }
+            }
+        }
+        return best;
+    }
+
+    private void chooseStabilizationMode(CaptureRequest.Builder builder) {
+        int[] opticalModes = cameraCharacteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION);
+        if (opticalModes != null) {
+            for (int mode : opticalModes) {
+                if (mode == CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON) {
+                    builder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON);
+                    builder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
+                    FileLog.d("Using optical stabilization.");
+                    return;
+                }
+            }
+        }
+        for (int mode : cameraCharacteristics.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)) {
+            if (mode == CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON) {
+                builder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON);
+                builder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF);
+                FileLog.d("Using video stabilization.");
+                return;
+            }
+        }
+        FileLog.d("Stabilization not available.");
+    }
+
+    private void chooseFocusMode(CaptureRequest.Builder builder) {
+        for (int mode : cameraCharacteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)) {
+            if (mode == CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO) {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+                FileLog.d("Using continuous video auto-focus.");
+                return;
+            }
+        }
+        FileLog.d("Auto-focus is not available.");
     }
 
     public boolean takePicture(final File file, Utilities.Callback<Integer> whenDone) {
@@ -606,6 +675,34 @@ public class Camera2Session {
         @Override
         public int compare(Size lhs, Size rhs) {
             return Long.signum((long) lhs.getWidth() * lhs.getHeight() - (long) rhs.getWidth() * rhs.getHeight());
+        }
+    }
+
+    public boolean isTorchAvailable(boolean front) {
+        String id = findCameraId(front);
+        if (id == null) {
+            return false;
+        }
+        try {
+            return Boolean.TRUE.equals(cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE));
+        } catch (CameraAccessException e) {
+            FileLog.e(e);
+            return false;
+        }
+    }
+
+    private String findCameraId(boolean front) {
+        try {
+            for (String id : cameraManager.getCameraIdList()) {
+                Integer facing = cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING);
+                if (facing != null && (front && facing == CameraCharacteristics.LENS_FACING_FRONT || !front && facing == CameraCharacteristics.LENS_FACING_BACK)) {
+                    return id;
+                }
+            }
+            return null;
+        } catch (CameraAccessException e) {
+            FileLog.e(e);
+            return null;
         }
     }
 

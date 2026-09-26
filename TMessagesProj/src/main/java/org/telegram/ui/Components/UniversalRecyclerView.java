@@ -11,6 +11,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.util.Pair;
 import android.view.View;
@@ -23,7 +24,10 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.R;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
@@ -263,6 +267,8 @@ public class UniversalRecyclerView extends RecyclerListView {
     }
 
     private boolean reorderHandleOnly;
+    private View reorderingBackgroundView;
+    private Drawable reorderingOriginalBackground;
     public void setReorderHandleOnly(boolean handleOnly) {
         reorderHandleOnly = handleOnly;
     }
@@ -397,9 +403,16 @@ public class UniversalRecyclerView extends RecyclerListView {
             } else {
                 cancelClickRunnables(false);
                 if (viewHolder != null) {
+                    setDraggingChild(viewHolder.itemView);
+                    viewHolder.itemView.setAlpha(1f);
                     viewHolder.itemView.setPressed(true);
+                    viewHolder.itemView.bringToFront();
                     if (viewHolder.itemView.getBackground() instanceof RichEditor.DraggingDrawable) {
                         ((RichEditor.DraggingDrawable) viewHolder.itemView.getBackground()).setDragging(true);
+                    } else if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                        reorderingBackgroundView = viewHolder.itemView;
+                        reorderingOriginalBackground = viewHolder.itemView.getBackground();
+                        viewHolder.itemView.setBackground(Theme.createRoundRectDrawable(dp(ExteraConfig.getSectionRadiusDp()), Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider)));
                     }
                     if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
                         reorderingViewHolder = viewHolder;
@@ -424,9 +437,15 @@ public class UniversalRecyclerView extends RecyclerListView {
         @Override
         public void clearView(@NonNull RecyclerView recyclerView, @NonNull ViewHolder viewHolder) {
             super.clearView(recyclerView, viewHolder);
+            setDraggingChild(null);
             viewHolder.itemView.setPressed(false);
+            viewHolder.itemView.setAlpha(1f);
             if (viewHolder.itemView.getBackground() instanceof RichEditor.DraggingDrawable) {
                 ((RichEditor.DraggingDrawable) viewHolder.itemView.getBackground()).setDragging(false);
+            } else if (viewHolder.itemView == reorderingBackgroundView) {
+                viewHolder.itemView.setBackground(reorderingOriginalBackground);
+                reorderingBackgroundView = null;
+                reorderingOriginalBackground = null;
             }
             if (isReorderRemoving()) {
                 onReorderRemove(viewHolder);
@@ -440,19 +459,28 @@ public class UniversalRecyclerView extends RecyclerListView {
     }
 
     public void setSections() {
-        setSections(dp(12), dp(16), false);
+        setSections(dp(12), dp(ExteraConfig.getSectionRadiusDp()), false);
     }
     public void setSections(boolean topPadding) {
-        setSections(dp(12), dp(16), topPadding);
+        setSections(dp(12), dp(ExteraConfig.getSectionRadiusDp()), topPadding);
     }
     public void setSections(int padding, float roundRadius, boolean topPadding) {
         super.setSections(
             view -> {
                 if (view.getParent() != this) return false;
                 final ViewHolder viewHolder = getChildViewHolder(view);
-                return !UniversalAdapter.isShadow(viewHolder.getItemViewType());
+                final Object tag = viewHolder.itemView.getTag(R.id.parent_tag);
+                if (tag instanceof Boolean && (Boolean) tag) return false;
+                final int position = viewHolder.getAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    final UItem item = adapter.getItem(position);
+                    if (item != null && item.transparent) return false;
+                }
+                final int viewType = viewHolder.getItemViewType();
+                if (ExteraConfig.getSectionsSeparatedHeaders() && UniversalAdapter.isHeader(viewType)) return false;
+                return !UniversalAdapter.isShadow(viewType);
             },
-            UniversalAdapter::isShadow,
+            viewType -> UniversalAdapter.isShadow(viewType) || ExteraConfig.getSectionsSeparatedHeaders() && UniversalAdapter.isHeader(viewType),
             padding, roundRadius,
             super::drawBackgroundRect,
             topPadding

@@ -58,7 +58,6 @@ import android.hardware.SensorManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
-import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.Log;
@@ -76,6 +75,8 @@ import androidx.core.math.MathUtils;
 
 import com.exteragram.messenger.DividerStyle;
 import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.ui.MonetUtils;
+import com.exteragram.messenger.utils.ui.TextPaint;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -193,7 +194,7 @@ public class Theme {
 
     public static class PatternsLoader implements NotificationCenter.NotificationCenterDelegate {
 
-        private static class LoadingPattern {
+        public static class LoadingPattern {
             public TLRPC.TL_wallPaper pattern;
             public ArrayList<ThemeAccent> accents = new ArrayList<>();
         }
@@ -233,7 +234,7 @@ public class Theme {
                 }
                 for (int a = 0, N = info.themeAccents.size(); a < N; a++) {
                     ThemeAccent accent = info.themeAccents.get(a);
-                    if (accent.id == DEFALT_THEME_ACCENT_ID || TextUtils.isEmpty(accent.patternSlug)) {
+                    if (accent.id == DEFALT_THEME_ACCENT_ID || !MonetAccentHelper.hasRemotePatternWallpaper(accent)) {
                         continue;
                     }
                     if (accentsToLoad == null) {
@@ -263,7 +264,7 @@ public class Theme {
                     if (slugs == null) {
                         slugs = new ArrayList<>();
                     }
-                    if (slugs.contains(accent.patternSlug)) {
+                    if (!MonetAccentHelper.hasRemotePatternWallpaper(accent) || slugs.contains(accent.patternSlug)) {
                         continue;
                     }
                     slugs.add(accent.patternSlug);
@@ -1309,7 +1310,7 @@ public class Theme {
                 jsonObject.put("wMotion", isMotion);
                 jsonObject.put("pIntensity", intensity);
                 editor.putString(key, jsonObject.toString());
-                editor.commit();
+                editor.apply();
             } catch (Throwable e) {
                 FileLog.e(e);
             }
@@ -1318,7 +1319,7 @@ public class Theme {
         private void delete() {
             String key = getKey();
             SharedPreferences themeConfig = ApplicationLoader.applicationContext.getSharedPreferences("themeconfig", Activity.MODE_PRIVATE);
-            themeConfig.edit().remove(key).commit();
+            themeConfig.edit().remove(key).apply();
             new File(ApplicationLoader.getFilesDirFixed(), fileName).delete();
             new File(ApplicationLoader.getFilesDirFixed(), originalFileName).delete();
         }
@@ -2165,6 +2166,7 @@ public class Theme {
     }
 
     private static final Object sync = new Object();
+    private static boolean resolvingDividerColor;
     public static Runnable wallpaperLoadTask;
 
     public static final int ACTION_BAR_PHOTO_VIEWER_COLOR = 0x7f000000;
@@ -4023,6 +4025,38 @@ public class Theme {
         themes.add(themeInfo);
         themesDict.put("Night", themeInfo);
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            themeInfo = new ThemeInfo();
+            themeInfo.name = "Monet Light";
+            themeInfo.assetName = "monet_light.attheme";
+            themeInfo.previewBackgroundColor = MonetUtils.getColor("n1_10");
+            themeInfo.previewInColor = MonetUtils.getColor("n1_50");
+            themeInfo.previewOutColor = MonetUtils.getColor("a1_600");
+            themeInfo.sortIndex = 6;
+            themes.add(themeInfo);
+            themesDict.put(themeInfo.name, themeInfo);
+
+            themeInfo = new ThemeInfo();
+            themeInfo.name = "Monet Dark";
+            themeInfo.assetName = "monet_dark.attheme";
+            themeInfo.previewBackgroundColor = MonetUtils.getColor("n1_900");
+            themeInfo.previewInColor = MonetUtils.getColor("n1_800");
+            themeInfo.previewOutColor = MonetUtils.getColor("a1_200");
+            themeInfo.sortIndex = 7;
+            themes.add(themeInfo);
+            themesDict.put(themeInfo.name, themeInfo);
+
+            themeInfo = new ThemeInfo();
+            themeInfo.name = "Monet Black";
+            themeInfo.assetName = "monet_black.attheme";
+            themeInfo.previewBackgroundColor = MonetUtils.getColor("mBlack");
+            themeInfo.previewInColor = MonetUtils.getColor("n1_800");
+            themeInfo.previewOutColor = MonetUtils.getColor("a1_200");
+            themeInfo.sortIndex = 8;
+            themes.add(themeInfo);
+            themesDict.put(themeInfo.name, themeInfo);
+        }
+
         String themesString = themeConfig.getString("themes2", null);
 
         int remoteVersion = themeConfig.getInt("remote_version", 0);
@@ -4062,7 +4096,7 @@ public class Theme {
                     }
                 }
                 saveOtherThemes(true, true);
-                themeConfig.edit().remove("themes").commit();
+                themeConfig.edit().remove("themes").apply();
             }
         }
 
@@ -4085,7 +4119,7 @@ public class Theme {
                 if (applyingTheme != null && !themeConfig.contains("lastDayTheme")) {
                     SharedPreferences.Editor editor = themeConfig.edit();
                     editor.putString("lastDayTheme", applyingTheme.getKey());
-                    editor.commit();
+                    editor.apply();
                 }
             }
 
@@ -4106,7 +4140,7 @@ public class Theme {
             if (currentNightTheme != null && !themeConfig.contains("lastDarkTheme")) {
                 SharedPreferences.Editor editor = themeConfig.edit();
                 editor.putString("lastDarkTheme", currentNightTheme.getKey());
-                editor.commit();
+                editor.apply();
             }
 
             SharedPreferences.Editor oldEditor = null;
@@ -4255,14 +4289,16 @@ public class Theme {
                     if (accent != null) {
                         info.overrideWallpaper = accent.overrideWallpaper;
                     }
+                } else if (info.isMonet()) {
+                    info.loadWallpapers(themeConfig);
                 }
             }
             if (oldEditor != null) {
-                oldEditor.commit();
-                oldEditorNew.commit();
+                oldEditor.apply();
+                oldEditorNew.apply();
             }
 
-            selectedAutoNightType = preferences.getInt("selectedAutoNightType", Build.VERSION.SDK_INT >= 29 ? AUTO_NIGHT_TYPE_SYSTEM : AUTO_NIGHT_TYPE_NONE);
+            selectedAutoNightType = preferences.getInt("selectedAutoNightType", AUTO_NIGHT_TYPE_NONE);
             autoNightScheduleByLocation = preferences.getBoolean("autoNightScheduleByLocation", false);
             autoNightBrighnessThreshold = preferences.getFloat("autoNightBrighnessThreshold", 0.25f);
             autoNightDayStartTime = preferences.getInt("autoNightDayStartTime", 22 * 60);
@@ -4320,7 +4356,7 @@ public class Theme {
                     currentNightTheme.setOverrideWallpaper(overrideWallpaper);
                 }
             }
-            preferences.edit().remove("overrideThemeWallpaper").remove("selectedBackground2").commit();
+            preferences.edit().remove("overrideThemeWallpaper").remove("selectedBackground2").apply();
         }
 
         int switchToTheme = needSwitchToTheme();
@@ -4388,7 +4424,7 @@ public class Theme {
         } else {
             editor.remove("nighttheme");
         }
-        editor.commit();
+        editor.apply();
     }
 
     @SuppressLint("PrivateApi")
@@ -6327,7 +6363,7 @@ public class Theme {
                 }
             }
             editor.putInt("accent_current_" + theme.assetName, theme.currentAccentId);
-            editor.commit();
+            editor.apply();
         } else {
             if (theme.prevAccentId != -1) {
                 if (remove) {
@@ -6376,7 +6412,7 @@ public class Theme {
         }
 
         editor.putInt("lastLoadingCurrentThemeTime", lastLoadingCurrentThemeTime);
-        editor.commit();
+        editor.apply();
 
         if (full) {
             for (int b = 0; b < 5; b++) {
@@ -6485,10 +6521,15 @@ public class Theme {
         if (dividerStyle == DividerStyle.HIDDEN) {
             return 0x00ffffff;
         }
-        if (resourcesProvider != null) {
-            return resourcesProvider.getColor(key_divider);
+        resolvingDividerColor = true;
+        try {
+            if (resourcesProvider != null) {
+                return resourcesProvider.getColor(key_divider);
+            }
+            return getRawColor(key_divider, null, dividerStyle != DividerStyle.LINE);
+        } finally {
+            resolvingDividerColor = false;
         }
-        return getColor(key_divider, null, dividerStyle != DividerStyle.LINE);
     }
 
     public static ThemeInfo getActiveTheme() {
@@ -9032,7 +9073,20 @@ public class Theme {
         return getColor(key, null, true);
     }
 
+    public static int getNonAnimatedColor(int key, ResourcesProvider provider) {
+        if (key == key_divider && !resolvingDividerColor && ExteraConfig.getDividerStyle() != DividerStyle.LINE) {
+            return 0x00ffffff;
+        }
+        if (provider != null) {
+            return provider.getColor(key);
+        }
+        return getColor(key, null, true);
+    }
+
     public static int getColor(int key, ResourcesProvider provider) {
+        if (key == key_divider && !resolvingDividerColor && ExteraConfig.getDividerStyle() != DividerStyle.LINE) {
+            return 0x00ffffff;
+        }
         if (provider != null) {
             return provider.getColor(key);
         }
@@ -9052,6 +9106,13 @@ public class Theme {
     }
 
     public static int getColor(int key, boolean[] isDefault, boolean ignoreAnimation) {
+        if (key == key_divider && !resolvingDividerColor && ExteraConfig.getDividerStyle() != DividerStyle.LINE) {
+            return 0x00ffffff;
+        }
+        return getRawColor(key, isDefault, ignoreAnimation);
+    }
+
+    private static int getRawColor(int key, boolean[] isDefault, boolean ignoreAnimation) {
         if (!ignoreAnimation && animatingColors != null) {
             int index = animatingColors.indexOfKey(key);
             if (index >= 0) {

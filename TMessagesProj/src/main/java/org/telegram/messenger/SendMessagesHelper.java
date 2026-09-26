@@ -51,6 +51,9 @@ import androidx.annotation.UiThread;
 import androidx.collection.LongSparseArray;
 import androidx.core.view.inputmethod.InputContentInfoCompat;
 
+import com.exteragram.messenger.utils.MediaUtils;
+import com.exteragram.messenger.utils.text.LocaleUtils;
+
 import org.json.JSONObject;
 import org.telegram.messenger.audioinfo.AudioInfo;
 import org.telegram.messenger.support.SparseLongArray;
@@ -192,7 +195,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             replyTo.quote_text = replyQuote.getText();
             if (!TextUtils.isEmpty(replyTo.quote_text)) {
                 replyTo.flags |= 4;
-                replyTo.quote_entities = replyQuote.getEntities();
+                replyTo.quote_entities = replyQuote.getFilteredEntities();
                 if (replyTo.quote_entities != null && !replyTo.quote_entities.isEmpty()) {
                     replyTo.quote_entities = new ArrayList<>(replyTo.quote_entities);
                     replyTo.flags |= 8;
@@ -2880,6 +2883,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         if (params == null) {
             params = new HashMap<>();
         }
+        LocaleUtils.replaceCustomEmojis(currentAccount, messageObject.getDialogId(), messageObject.editingMessageEntities);
 
         TLRPC.Message newMsg = messageObject.messageOwner;
         messageObject.cancelEditing = false;
@@ -3410,6 +3414,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         if (fragment == null || fragment.getParentActivity() == null) {
             return 0;
         }
+        LocaleUtils.replaceCustomEmojis(currentAccount, messageObject.getDialogId(), entities);
 
         final TLRPC.TL_messages_editMessage req;
         if (messageObject.isEphemeral()) {
@@ -3727,6 +3732,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
     }
 
     public int sendVote(final MessageObject messageObject, final ArrayList<TLRPC.PollAnswer> answers, final Runnable finishRunnable) {
+        return sendVote(messageObject, answers, finishRunnable, true);
+    }
+
+    public int sendVote(final MessageObject messageObject, final ArrayList<TLRPC.PollAnswer> answers, final Runnable finishRunnable, final boolean processUpdates) {
         if (messageObject == null) {
             return 0;
         }
@@ -3753,7 +3762,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         return getConnectionsManager().sendRequest(req, (response, error) -> {
             if (error == null) {
                 voteSendTime.put(messageObject.getPollId(), 0L);
-                getMessagesController().processUpdates((TLRPC.Updates) response, false);
+                if (processUpdates) {
+                    getMessagesController().processUpdates((TLRPC.Updates) response, false);
+                }
                 voteSendTime.put(messageObject.getPollId(), SystemClock.elapsedRealtime());
             }
             AndroidUtilities.runOnUIThread(() -> {
@@ -9359,6 +9370,25 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 originalPath += "audio" + f.length();
             } else {
                 originalPath += "" + f.length();
+            }
+        }
+
+        String extMimeType = myMime.getMimeTypeFromExtension(ext);
+        if (forceDocument && extMimeType != null && extMimeType.startsWith("image/")) {
+            String cleanedPath = null;
+            try {
+                cleanedPath = MediaController.createFileInCache("cleaned_" + name, ext).getAbsolutePath();
+                if (MediaUtils.removeGeolocation(path, cleanedPath)) {
+                    path = cleanedPath;
+                }
+            } catch (Exception e) {
+                if (cleanedPath != null) {
+                    try {
+                        new File(cleanedPath).delete();
+                    } catch (Exception e2) {
+                        FileLog.e(e2);
+                    }
+                }
             }
         }
 

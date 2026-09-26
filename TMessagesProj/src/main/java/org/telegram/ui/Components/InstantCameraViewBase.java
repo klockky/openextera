@@ -7,6 +7,9 @@ import android.view.TextureView;
 import android.view.View;
 import android.widget.FrameLayout;
 
+import com.exteragram.messenger.CameraType;
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.utils.settings.SharedSettings;
 import org.telegram.ui.ActionBar.Theme;
@@ -48,7 +51,7 @@ public abstract class InstantCameraViewBase extends FrameLayout {
             Theme.ResourcesProvider resourcesProvider,
             boolean isNewDesign
     ) {
-        return SharedSettings.roundVideoCamera2Enabled.get()
+        return SharedSettings.roundVideoCamera2Enabled.get() && ExteraConfig.getCameraType() == CameraType.CAMERA_2
                 ? new InstantCameraView2(context, delegate, resourcesProvider, isNewDesign)
                 : new InstantCameraView(context, delegate, resourcesProvider, isNewDesign);
     }

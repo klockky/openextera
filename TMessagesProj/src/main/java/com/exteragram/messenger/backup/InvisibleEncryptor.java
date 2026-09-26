@@ -6,9 +6,12 @@ import java.nio.charset.StandardCharsets;
 
 public abstract class InvisibleEncryptor {
 
-    private static final String PREFIX = "  ";
-    private static final String SEPARATOR = " ";
-    private static final String ALPHABET = " ​‌‏ ⁪⁫⁬⁭⁮⁯";
+    private static final String PREFIX = "\u2001\u2002";
+    private static final String SEPARATOR = "\u2000";
+    // must match exteraGram exactly; the 5th char is U+202F NARROW NO-BREAK SPACE, not a regular space
+    private static final String ALPHABET = "\u200a\u200b\u200c\u200f\u202f\u206a\u206b\u206c\u206d\u206e\u206f";
+    // early OpenExtera test builds wrote U+0020 instead of U+202F; accept it when decoding
+    private static final char LEGACY_SPACE = ' ';
     private static final int BASE = ALPHABET.length();
 
     private static String toStr(int value) {
@@ -24,7 +27,8 @@ public abstract class InvisibleEncryptor {
         int result = 0;
         for (int i = 0; i < value.length(); i++) {
             int end = value.length() - i;
-            result += ALPHABET.indexOf(value.substring(end - 1, end)) * Math.pow(BASE, i);
+            char c = value.charAt(end - 1);
+            result += ALPHABET.indexOf(c == LEGACY_SPACE ? '\u202f' : c) * Math.pow(BASE, i);
         }
         return result;
     }

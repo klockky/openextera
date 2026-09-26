@@ -1,6 +1,7 @@
 package com.exteragram.messenger.backup;
 
 import android.app.Activity;
+import android.util.Log;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.text.TextUtils;
@@ -19,6 +20,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -53,6 +55,8 @@ import java.util.Map;
 import java.util.Set;
 
 public class PreferencesUtils {
+
+    private static final String TAG = "OpenExteraBackup";
 
     private static PreferencesUtils instance;
 
@@ -588,6 +592,9 @@ public class PreferencesUtils {
                     return true;
                 }
                 FileLog.e("Unexpected value: " + key + " " + value);
+                if (BuildVars.DEBUG_VERSION) {
+                    Log.d(TAG, "checkKeys: unexpected value " + config + "." + key + " = " + value);
+                }
             }
         }
         return false;
@@ -595,15 +602,25 @@ public class PreferencesUtils {
 
     public boolean isBackup(MessageObject messageObject) {
         String path = ChatUtils.getInstance().getPathToMessage(messageObject);
+        if (BuildVars.DEBUG_VERSION && messageObject != null) {
+            Log.d(TAG, "isBackup(message): name=" + messageObject.getDocumentName() + " path=" + path);
+        }
         return messageObject != null && messageObject.getDocumentName() != null && !TextUtils.isEmpty(path) && isBackup(new File(path));
     }
 
     public boolean isBackup(File file) {
         if (file == null || !file.getName().toLowerCase().endsWith(".extera")) {
+            if (BuildVars.DEBUG_VERSION) {
+                Log.d(TAG, "isBackup: not a backup file name: " + file);
+            }
             return false;
         }
         JsonObject backup = getJsonObject(file);
-        return backup != null && checkKeys(backup);
+        boolean valid = backup != null && checkKeys(backup);
+        if (BuildVars.DEBUG_VERSION) {
+            Log.d(TAG, "isBackup: " + file + " size=" + file.length() + " parsed=" + (backup != null) + (backup != null ? " configs=" + backup.keySet() : "") + " valid=" + valid);
+        }
+        return valid;
     }
 
     public int getDiff(File file) {

@@ -47,6 +47,9 @@ import androidx.core.content.pm.ShortcutManagerCompat;
 import androidx.core.graphics.drawable.IconCompat;
 
 import com.android.billingclient.api.ProductDetails;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.chats.ChatUtils;
+import com.exteragram.messenger.utils.text.LocaleUtils;
 
 import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.SQLite.SQLiteDatabase;
@@ -913,7 +916,7 @@ public class MediaDataController extends BaseController {
         if (type == TYPE_PREMIUM_STICKERS) {
             return new ArrayList<>(recentStickers[type]);
         }
-        ArrayList<TLRPC.Document> result = new ArrayList<>(arrayList.subList(0, Math.min(arrayList.size(), 20)));
+        ArrayList<TLRPC.Document> result = new ArrayList<>(arrayList.subList(0, Math.min(arrayList.size(), ExteraConfig.getUnlimitedRecentStickers() ? Integer.MAX_VALUE : 20)));
         if (firstEmpty && !result.isEmpty() && !StickersAlert.DISABLE_STICKER_EDITOR) {
             result.add(0, new TLRPC.TL_documentEmpty());
         }
@@ -1584,13 +1587,17 @@ public class MediaDataController extends BaseController {
         SQLiteCursor cursor = null;
         NativeByteBuffer data = null;
         try {
-            cursor = getMessagesStorage().getDatabase().queryFinalized("SELECT data, hash FROM stickersets2 WHERE id = ? LIMIT 1", id);
+            cursor = getMessagesStorage().getDatabase().queryFinalized("SELECT data, hash, date FROM stickersets2 WHERE id = ? LIMIT 1", id);
             if (cursor.next() && !cursor.isNull(0)) {
                 data = cursor.byteBufferValue(0);
                 if (data != null) {
                     set = TLRPC.TL_messages_stickerSet.TLdeserialize(data, data.readInt32(false), false);
                     int cachedHash = cursor.intValue(1);
+                    long cachedDate = cursor.longValue(2);
                     if (hash != null && hash != 0 && hash != cachedHash) {
+                        return null;
+                    }
+                    if ((hash == null || hash == 0) && set != null && System.currentTimeMillis() - cachedDate > 15 * 60 * 1000L) {
                         return null;
                     }
                 }
@@ -1614,13 +1621,17 @@ public class MediaDataController extends BaseController {
         SQLiteCursor cursor = null;
         NativeByteBuffer data = null;
         try {
-            cursor = getMessagesStorage().getDatabase().queryFinalized("SELECT data, hash FROM stickersets2 WHERE short_name = ? LIMIT 1", short_name);
+            cursor = getMessagesStorage().getDatabase().queryFinalized("SELECT data, hash, date FROM stickersets2 WHERE short_name = ? LIMIT 1", short_name);
             if (cursor.next() && !cursor.isNull(0)) {
                 data = cursor.byteBufferValue(0);
                 if (data != null) {
                     set = TLRPC.TL_messages_stickerSet.TLdeserialize(data, data.readInt32(false), false);
                     int cachedHash = cursor.intValue(1);
+                    long cachedDate = cursor.longValue(2);
                     if (hash != null && hash != 0 && hash != cachedHash) {
+                        return null;
+                    }
+                    if ((hash == null || hash == 0) && set != null && System.currentTimeMillis() - cachedDate > 15 * 60 * 1000L) {
                         return null;
                     }
                 }

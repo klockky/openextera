@@ -30,6 +30,10 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+import com.exteragram.messenger.utils.ui.FolderIcons;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLog;
@@ -156,6 +160,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             textView = new TextView(context);
             textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+            textView.setTypeface(AndroidUtilities.regular());
             textView.setLines(1);
             textView.setMaxLines(1);
             textView.setSingleLine(true);
@@ -166,6 +171,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             valueTextView = new TextView(context);
             valueTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2));
             valueTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            valueTextView.setTypeface(AndroidUtilities.regular());
             valueTextView.setLines(1);
             valueTextView.setMaxLines(1);
             valueTextView.setSingleLine(true);
@@ -247,6 +253,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             messageTextView = new TextView(context);
             messageTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText4));
             messageTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            messageTextView.setTypeface(AndroidUtilities.regular());
             messageTextView.setGravity(Gravity.CENTER);
             messageTextView.setText(text);
             addView(messageTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 40, 121, 40, 24));
@@ -305,6 +312,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             valueTextView = new TextView(context);
             valueTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2));
             valueTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            valueTextView.setTypeface(AndroidUtilities.regular());
             valueTextView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
             valueTextView.setLines(1);
             valueTextView.setMaxLines(1);
@@ -570,6 +578,9 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
         if (!suggestedFilters.isEmpty() && dialogFilters.size() < 10) {
             int start = items.size();
             items.add(ItemInner.asHeader(LocaleController.getString(R.string.FilterRecommended)));
+            if (ExteraConfig.getSectionsSeparatedHeaders()) {
+                start = items.size();
+            }
             for (int i = 0; i < suggestedFilters.size(); ++i) {
                 items.add(ItemInner.asSuggested(suggestedFilters.get(i)));
             }
@@ -588,7 +599,8 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             }
             filtersSectionEnd = items.size();
 
-            if (listView != null) listView.forcedSections.add(AndroidUtilities.pack(filtersSectionStart, filtersSectionEnd - 1 + (dialogFilters.size() < getMessagesController().dialogFiltersLimitPremium ? 1 : 0)));
+            int sectionStart = ExteraConfig.getSectionsSeparatedHeaders() ? filtersStartPosition : filtersSectionStart;
+            if (listView != null) listView.forcedSections.add(AndroidUtilities.pack(sectionStart, filtersSectionEnd - 1 + (dialogFilters.size() < getMessagesController().dialogFiltersLimitPremium ? 1 : 0)));
         } else {
             filtersSectionStart = filtersSectionEnd = -1;
         }
@@ -1030,6 +1042,8 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
                         if (suggested.filter.exclude_muted) {
                             filter.flags |= MessagesController.DIALOG_FILTER_FLAG_EXCLUDE_MUTED;
                         }
+                        filter.emoticon = TextUtils.isEmpty(suggested.filter.emoticon) ? FolderIcons.getEmoticonFromFlags(filter.flags).second : suggested.filter.emoticon;
+                        // TODO(openextera): lite passes filter.emoticon to saveFilterToServer (needs emoticon overload in FilterCreateActivity)
                         FilterCreateActivity.saveFilterToServer(filter, filter.flags, filter.name, filter.entities, filter.title_noanimate, filter.color, filter.alwaysShow, filter.neverShow, filter.pinnedDialogs, true, true, true, true, true, FiltersSetupActivity.this, () -> {
                             getMessagesController().suggestedFilters.remove(suggested);
                             getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
@@ -1219,7 +1233,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
 
     protected void onDefaultTabMoved() {
         try {
-            fragmentView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+            fragmentView.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_PRESS), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
         } catch (Exception ignore) {}
         BulletinFactory.of(this).createSimpleBulletin(R.raw.filter_reorder, AndroidUtilities.replaceTags(LocaleController.formatString("LimitReachedReorderFolder", R.string.LimitReachedReorderFolder, LocaleController.getString(R.string.FilterAllChats))), LocaleController.getString(R.string.PremiumMore), Bulletin.DURATION_PROLONG, () -> {
             showDialog(new PremiumFeatureBottomSheet(FiltersSetupActivity.this, PremiumPreviewFragment.PREMIUM_FEATURE_ADVANCED_CHAT_MANAGEMENT, true));

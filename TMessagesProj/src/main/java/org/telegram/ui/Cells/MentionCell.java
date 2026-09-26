@@ -21,6 +21,8 @@ import android.view.Gravity;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.MediaDataController;
@@ -55,7 +57,7 @@ public class MentionCell extends LinearLayout {
         avatarDrawable.setTextSize(dp(18));
 
         imageView = new BackupImageView(context);
-        imageView.setRoundRadius(dp(14));
+        imageView.setRoundRadius(ExteraConfig.getAvatarCorners(28));
         addView(imageView, LayoutHelper.createLinear(28, 28, 8, 4, 0, 0));
 
         nameTextView = new TextView(context) {

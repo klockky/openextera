@@ -169,7 +169,6 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
     private CharSequence currentTitle;
     private boolean hasOverlayText;
     private int overlayTextId;
-    private SpannableStringBuilder uploadingString;
     private ValueAnimator textAnimator;
     private Runnable animationRunnable;
     public boolean allowGlobalUpdates = true;
@@ -600,45 +599,17 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
                 items.add(new Item(dialogId));
             }
         }
-        int size = items.size();
-        if (!storiesController.hasSelfStories()) {
-            size--;
-        }
-        int totalCount;
-        boolean hidden = type == TYPE_ARCHIVE;
-        totalCount = Math.max(1, Math.max(storiesController.getTotalStoriesCount(hidden), size));
-
-        currentTitle = null;
-        if (storiesController.hasOnlySelfStories()) {
-            if (storiesController.hasUploadingStories(UserConfig.getInstance(currentAccount).getClientUserId())) {
-                String str = LocaleController.getString(R.string.UploadingStory);
-                int index = str.indexOf("…");
-                if (index > 0) {
-                    if (uploadingString == null) {
-                        SpannableStringBuilder spannableStringBuilder = SpannableStringBuilder.valueOf(str);
-                        UploadingDotsSpannable dotsSpannable = new UploadingDotsSpannable();
-                        spannableStringBuilder.setSpan(dotsSpannable, spannableStringBuilder.length() - 1, spannableStringBuilder.length(), 0);
-                        dotsSpannable.setParent(titleView, true);
-                        uploadingString = spannableStringBuilder;
-                    }
-                    currentTitle = uploadingString;
-                } else {
-                    currentTitle = str;
-                }
-            } else {
-                currentTitle = menuItemsOffset < dp(50) ? null :
-                    LocaleController.getString(R.string.MyStory);
-            }
+        if (type == TYPE_DIALOGS) {
+            currentTitle = getDialogsMainTitle();
         } else {
-            currentTitle = menuItemsOffset < dp(50) ? null :
-                LocaleController.formatPluralString("Stories", totalCount);
+            currentTitle = LocaleController.getString(R.string.ArchivedChats);
         }
 
         if (!hasOverlayText) {
             titleView.setText(currentTitle, animated && !LocaleController.isRTL);
         }
 
-        animatorHasTitleText.setValue(!TextUtils.isEmpty(currentTitle) || hasOverlayText, animated);
+        animatorHasTitleText.setValue(true, animated);
 
         miniItems.clear();
         for (int i = 0; i < items.size(); i++) {

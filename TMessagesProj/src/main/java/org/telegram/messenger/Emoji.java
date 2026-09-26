@@ -30,6 +30,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import com.exteragram.messenger.utils.ui.FontUtils;
+import com.exteragram.messenger.utils.text.ZalgoFilter;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AnimatedEmojiSpan;
@@ -182,7 +184,7 @@ public class Emoji {
             if (ch >= 0xD83C && ch <= 0xD83E) {
                 if (ch == 0xD83C && a < length - 1) {
                     ch = emoji.charAt(a + 1);
-                    if (ch == 0xDE2F || ch == 0xDC04 || ch == 0xDE1A || ch == 0xDD7F) {
+                    if (ch == 0xDE2F || ch == 0xDC04 || ch == 0xDE1A || ch == 0xDD7F || ch == 0xDFF3 || ch == 0xDF2B || ch == 0xDC41 || ch == 0xDD75 || ch == 0xDFCC || ch == 0xDFCB) {
                         emoji = emoji.substring(0, a + 2) + "\uFE0F" + emoji.substring(a + 2);
                         length++;
                         a += 2;
@@ -194,7 +196,7 @@ public class Emoji {
                 }
             } else if (ch == 0x20E3) {
                 return emoji;
-            } else if (ch >= 0x203C && ch <= 0x3299) {
+            } else if (ch >= 0x23 && ch <= 0x3299) {
                 if (EmojiData.emojiToFE0FMap.containsKey(ch)) {
                     emoji = emoji.substring(0, a + 1) + "\uFE0F" + emoji.substring(a + 1);
                     length++;
@@ -294,6 +296,7 @@ public class Emoji {
         private DrawableInfo info;
         private static Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
         private static Rect rect = new Rect();
+        private static final TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private boolean invert;
 
         public SimpleEmojiDrawable(DrawableInfo i, boolean invert) {
@@ -317,7 +320,7 @@ public class Emoji {
 
         @Override
         public void draw(Canvas canvas) {
-            if (!isLoaded()) {
+            if (!SharedConfig.useSystemEmoji && !isLoaded()) {
                 loadEmoji(info.page, info.page2);
                 placeholderPaint.setColor(placeholderColor);
                 Rect bounds = getBounds();
@@ -330,6 +333,14 @@ public class Emoji {
                 b = getDrawRect();
             } else {
                 b = getBounds();
+            }
+
+            if (SharedConfig.useSystemEmoji) {
+                String emoji = fixEmoji(EmojiData.data[info.page][info.emojiIndex]);
+                textPaint.setTextSize(b.height() * 0.8f);
+                textPaint.setTypeface(FontUtils.getSystemEmojiTypeface());
+                canvas.drawText(emoji, 0, emoji.length(), b.left, b.bottom - b.height() * 0.225f, textPaint);
+                return;
             }
 
             if (!canvas.quickReject(b.left, b.top, b.right, b.bottom, Canvas.EdgeType.AA)) {
@@ -372,7 +383,7 @@ public class Emoji {
         }
     }
 
-    private static class DrawableInfo {
+    public static class DrawableInfo {
         public byte page;
         public short page2;
         public int emojiIndex;
@@ -587,7 +598,7 @@ public class Emoji {
     }
 
     public static CharSequence replaceEmoji(CharSequence cs, Paint.FontMetricsInt fontMetrics, boolean createNew, int[] emojiOnly, int alignment, float scale, int minusLimit) {
-        if (SharedConfig.useSystemEmoji || cs == null || cs.length() == 0) {
+        if (cs == null || cs.length() == 0) {
             return cs;
         }
         Spannable s;
@@ -598,7 +609,7 @@ public class Emoji {
         }
         ArrayList<EmojiSpanRange> emojis = parseEmojis(s, emojiOnly);
         if (emojis.isEmpty()) {
-            return cs;
+            return ZalgoFilter.filterSpannable(cs);
         }
 
         AnimatedEmojiSpan[] animatedEmojiSpans = s.getSpans(0, s.length(), AnimatedEmojiSpan.class);
@@ -649,7 +660,7 @@ public class Emoji {
                 break;
             }
         }
-        return s;
+        return ZalgoFilter.filterSpannable(s);
     }
 
     public static CharSequence replaceWithRestrictedEmoji(CharSequence cs, TextView textView, Runnable update) {
@@ -948,12 +959,12 @@ public class Emoji {
             stringBuilder.append("=");
             stringBuilder.append(entry.getValue());
         }
-        preferences.edit().putString("emojis2", stringBuilder.toString()).commit();
+        preferences.edit().putString("emojis2", stringBuilder.toString()).apply();
     }
 
     public static void clearRecentEmoji() {
         SharedPreferences preferences = MessagesController.getGlobalEmojiSettings();
-        preferences.edit().putBoolean("filled_default", true).commit();
+        preferences.edit().putBoolean("filled_default", true).apply();
         emojiUseHistory.clear();
         recentEmoji.clear();
         saveRecentEmoji();
@@ -990,7 +1001,7 @@ public class Emoji {
                         }
                     }
                 }
-                preferences.edit().remove("emojis").commit();
+                preferences.edit().remove("emojis").apply();
                 saveRecentEmoji();
             } else {
                 str = preferences.getString("emojis2", "");
@@ -1007,7 +1018,7 @@ public class Emoji {
                     for (int i = 0; i < DEFAULT_RECENT.length; i++) {
                         emojiUseHistory.put(DEFAULT_RECENT[i], DEFAULT_RECENT.length - i);
                     }
-                    preferences.edit().putBoolean("filled_default", true).commit();
+                    preferences.edit().putBoolean("filled_default", true).apply();
                     saveRecentEmoji();
                 }
             }
@@ -1042,6 +1053,6 @@ public class Emoji {
             stringBuilder.append("=");
             stringBuilder.append(entry.getValue());
         }
-        preferences.edit().putString("color", stringBuilder.toString()).commit();
+        preferences.edit().putString("color", stringBuilder.toString()).apply();
     }
 }

@@ -32,6 +32,8 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.exteragram.messenger.utils.network.RemoteUtils;
+
 import org.aspectj.lang.annotation.AdviceName;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -266,6 +268,14 @@ public static VideoAds make(
     private void show() {
         if (ads.isEmpty()) return;
         final TLRPC.TL_sponsoredMessage ad = ads.get(0);
+        if (RemoteUtils.getBooleanConfigValue("hide_ads", false)) {
+            logSponsoredShown(ad);
+            ads.remove(0);
+            first = false;
+            lastTime = System.currentTimeMillis();
+            schedule();
+            return;
+        }
         final long showTime = System.currentTimeMillis() - currentBulletinPassedTime;
         bulletinShowTime = showTime;
 

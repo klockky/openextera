@@ -13,7 +13,6 @@ import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.Drawable;
 import android.icu.number.Scale;
-import android.os.Vibrator;
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.InputType;
@@ -36,6 +35,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.exteragram.messenger.utils.system.VibratorUtils;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BillingController;
 import org.telegram.messenger.ChatObject;
@@ -702,10 +702,7 @@ public class LinkEditActivity extends BaseFragment {
         int timeIndex = timeChooseView.getSelectedIndex();
         if (timeIndex < dispalyedDates.size() && dispalyedDates.get(timeIndex) < 0) {
             AndroidUtilities.shakeView(timeEditText);
-            Vibrator vibrator = (Vibrator) timeEditText.getContext().getSystemService(Context.VIBRATOR_SERVICE);
-            if (vibrator != null) {
-                vibrator.vibrate(200);
-            }
+            VibratorUtils.vibrate();
             return;
         }
 

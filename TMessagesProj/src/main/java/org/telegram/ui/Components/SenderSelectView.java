@@ -15,6 +15,8 @@ import androidx.dynamicanimation.animation.FloatPropertyCompat;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.LocaleController;
@@ -45,7 +47,7 @@ public class SenderSelectView extends View {
 
     public SenderSelectView(Context context) {
         super(context);
-        avatarImage.setRoundRadius(AndroidUtilities.dp(28));
+        avatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(36));
         menuPaint.setStrokeWidth(AndroidUtilities.dp(2));
         menuPaint.setStrokeCap(Paint.Cap.ROUND);
         menuPaint.setStyle(Paint.Style.STROKE);
@@ -56,7 +58,7 @@ public class SenderSelectView extends View {
     private void updateColors() {
         backgroundPaint.setColor(Theme.getColor(Theme.key_chat_messagePanelVoiceBackground));
         menuPaint.setColor(Theme.getColor(Theme.key_chat_messagePanelVoicePressed));
-        selectorDrawable = Theme.createSimpleSelectorRoundRectDrawable(AndroidUtilities.dp(18), Color.TRANSPARENT, Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhite), 0.2f));
+        selectorDrawable = Theme.createSimpleSelectorRoundRectDrawable(ExteraConfig.getAvatarCorners(36), Color.TRANSPARENT, Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhite), 0.2f));
         selectorDrawable.setCallback(this);
     }
 
@@ -99,7 +101,7 @@ public class SenderSelectView extends View {
 
         int alpha = (int) (menuProgress * 0xFF);
         backgroundPaint.setAlpha(alpha);
-        canvas.drawCircle(getWidth() / 2f, getHeight() / 2f, Math.min(getWidth(), getHeight()) / 2f, backgroundPaint);
+        canvas.drawRoundRect(0, 0, getWidth(), getHeight(), ExteraConfig.getAvatarCorners(getWidth(), true), ExteraConfig.getAvatarCorners(getWidth(), true), backgroundPaint);
 
         canvas.save();
         menuPaint.setAlpha(alpha);

@@ -22,6 +22,7 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
+import com.exteragram.messenger.icons.IconManager;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.Theme;
@@ -61,7 +62,7 @@ public class FilesMigrationService extends Service {
         Notification notification = new Notification.Builder(this, NotificationsController.OTHER_NOTIFICATIONS_CHANNEL)
                 .setContentTitle(LocaleController.getString(R.string.MigratingFiles))
                 .setAutoCancel(false)
-                .setSmallIcon(R.drawable.notification)
+                .setSmallIcon(IconManager.getNotificationSystemIcon())
                 .build();
 
         isRunning = true;
@@ -97,8 +98,8 @@ public class FilesMigrationService extends Service {
         }
 
         File newPath = ApplicationLoader.applicationContext.getExternalFilesDir(null);
-        File telegramPath = new File(newPath, "Telegram");
-        File oldPath = new File(path, "Telegram");
+        File telegramPath = new File(newPath, "exteraGram");
+        File oldPath = new File(path, "exteraGram");
 
         totalFilesCount = getFilesCount(oldPath);
 
@@ -175,7 +176,7 @@ public class FilesMigrationService extends Service {
                 Notification notification = new Notification.Builder(FilesMigrationService.this, NotificationsController.OTHER_NOTIFICATIONS_CHANNEL)
                         .setContentTitle(LocaleController.getString(R.string.MigratingFiles))
                         .setContentText(String.format("%s/%s", currentCount, totalFilesCount))
-                        .setSmallIcon(R.drawable.notification)
+                        .setSmallIcon(IconManager.getNotificationSystemIcon())
                         .setAutoCancel(false)
                         .setProgress(totalFilesCount, currentCount, false)
                         .build();
@@ -204,7 +205,7 @@ public class FilesMigrationService extends Service {
                     }
                 }
             }
-            File oldDirectory = new File(path, "Telegram");
+            File oldDirectory = new File(path, "exteraGram");
             hasOldFolder = oldDirectory.exists();
         }
         if (hasOldFolder) {

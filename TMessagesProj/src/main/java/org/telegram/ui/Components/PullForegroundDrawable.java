@@ -23,6 +23,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.R;
@@ -278,12 +280,14 @@ public class PullForegroundDrawable {
             float outBackgroundRadius = outRadius + (outRadius * bounceP) + (cell.getWidth() - outRadius) * (1f - outProgress);
 
             if (!(accentRevalProgress == 1f || accentRevalProgressOut == 1)) {
-                canvas.drawCircle(cX, cY, outBackgroundRadius, backgroundPaint);
+                float corners = ExteraConfig.getAvatarCorners(outBackgroundRadius * 2f, true);
+                canvas.drawRoundRect(cX - outBackgroundRadius, cY - outBackgroundRadius, cX + outBackgroundRadius, cY + outBackgroundRadius, corners, corners, backgroundPaint);
             }
 
             circleClipPath.reset();
             rectF.set(cX - outBackgroundRadius, cY - outBackgroundRadius, cX + outBackgroundRadius, cY + outBackgroundRadius);
-            circleClipPath.addOval(rectF, Path.Direction.CW);
+            float clipCorners = ExteraConfig.getAvatarCorners(outBackgroundRadius * 2f, true);
+            circleClipPath.addRoundRect(rectF, clipCorners, clipCorners, Path.Direction.CW);
             canvas.clipPath(circleClipPath);
         }
 
@@ -291,26 +295,26 @@ public class PullForegroundDrawable {
             if (accentRevalProgressOut > accentRevalProgress) {
                 canvas.save();
                 canvas.translate((cX - smallCircleX) * (outProgress), (cY - smallCircleY) * (outProgress));
-                canvas.drawCircle(smallCircleX, smallCircleY, cell.getWidth() * accentRevalProgressOut, backgroundPaint);
+                drawRevealRect(canvas, smallCircleX, smallCircleY, accentRevalProgressOut, backgroundPaint);
                 canvas.restore();
             }
             if (accentRevalProgress > 0f) {
                 canvas.save();
                 canvas.translate((cX - smallCircleX) * (outProgress), (cY - smallCircleY) * (outProgress));
-                canvas.drawCircle(smallCircleX, smallCircleY, cell.getWidth() * accentRevalProgress, paintBackgroundAccent);
+                drawRevealRect(canvas, smallCircleX, smallCircleY, accentRevalProgress, paintBackgroundAccent);
                 canvas.restore();
             }
         } else {
             if (accentRevalProgress > accentRevalProgressOut) {
                 canvas.save();
                 canvas.translate((cX - smallCircleX) * (outProgress), (cY - smallCircleY) * (outProgress));
-                canvas.drawCircle(smallCircleX, smallCircleY, cell.getWidth() * accentRevalProgress, paintBackgroundAccent);
+                drawRevealRect(canvas, smallCircleX, smallCircleY, accentRevalProgress, paintBackgroundAccent);
                 canvas.restore();
             }
             if (accentRevalProgressOut > 0f) {
                 canvas.save();
                 canvas.translate((cX - smallCircleX) * (outProgress), (cY - smallCircleY) * (outProgress));
-                canvas.drawCircle(smallCircleX, smallCircleY, cell.getWidth() * accentRevalProgressOut, backgroundPaint);
+                drawRevealRect(canvas, smallCircleX, smallCircleY, accentRevalProgressOut, backgroundPaint);
                 canvas.restore();
             }
         }
@@ -441,6 +445,12 @@ public class PullForegroundDrawable {
 //        }
     }
 
+
+    private void drawRevealRect(Canvas canvas, float cx, float cy, float progress, Paint paint) {
+        float r = cell.getWidth() * progress;
+        float corners = ExteraConfig.getAvatarCorners(cell.getWidth() * 2, true) * progress;
+        canvas.drawRoundRect(cx - r, cy - r, cx + r, cy + r, corners, corners, paint);
+    }
 
     private void updateTextProgress(float pullProgress) {
         boolean endText = pullProgress > SNAP_HEIGHT;

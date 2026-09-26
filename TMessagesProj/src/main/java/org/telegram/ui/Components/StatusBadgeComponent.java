@@ -3,6 +3,9 @@ package org.telegram.ui.Components;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 
+import com.exteragram.messenger.api.dto.BadgeDTO;
+import com.exteragram.messenger.badges.BadgesController;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DialogObject;
 import org.telegram.tgnet.TLObject;
@@ -33,6 +36,7 @@ public class StatusBadgeComponent {
     }
 
     public Drawable updateDrawable(TLRPC.User user, TLRPC.Chat chat, int colorFilter, boolean animated) {
+        BadgeDTO badge = BadgesController.INSTANCE.getBadge(user == null ? chat : user);
         if (chat != null && chat.verified) {
             statusDrawable.set(verifiedDrawable = (verifiedDrawable == null ? new CombinedDrawable(Theme.dialogs_verifiedDrawable, Theme.dialogs_verifiedCheckDrawable) : verifiedDrawable), animated);
             statusDrawable.setColor(null);
@@ -44,6 +48,9 @@ public class StatusBadgeComponent {
             statusDrawable.setColor(null);
         } else if (user != null && DialogObject.getEmojiStatusDocumentId(user.emoji_status) != 0) {
             statusDrawable.set(DialogObject.getEmojiStatusDocumentId(user.emoji_status), animated);
+            statusDrawable.setColor(colorFilter);
+        } else if (badge != null) {
+            statusDrawable.set(badge.getDocumentId(), animated);
             statusDrawable.setColor(colorFilter);
         } else if (user != null && user.premium) {
             statusDrawable.set(PremiumGradient.getInstance().premiumStarDrawableMini, animated);

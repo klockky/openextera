@@ -28,6 +28,10 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.api.dto.BadgeDTO;
+import com.exteragram.messenger.badges.BadgesController;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.LocaleController;
@@ -180,6 +184,26 @@ public class SuggestEmojiView extends FrameLayout implements NotificationCenter.
                     }
                 }
 
+                public void setAsBadge(TLRPC.Document document) {
+                    if (document == null) {
+                        return;
+                    }
+                    final BadgeDTO previousBadge = BadgesController.INSTANCE.getBadge();
+                    final BaseFragment fragment = enterView == null ? null : enterView.getParentFragment();
+                    final Runnable undoAction = () -> BadgesController.INSTANCE.updateBadge(previousBadge, result -> AndroidUtilities.runOnUIThread(() -> {
+                        if (!"ok".equals(result)) {
+                            BulletinFactory.of(fragment).createErrorBulletin(LocaleController.getString(R.string.UnknownError)).show();
+                        }
+                    }));
+                    BadgesController.INSTANCE.updateBadge(new BadgeDTO(document.id, previousBadge != null ? previousBadge.getText() : null), result -> AndroidUtilities.runOnUIThread(() -> {
+                        if (!"ok".equals(result)) {
+                            BulletinFactory.of(fragment).createErrorBulletin(LocaleController.getString(R.string.UnknownError)).show();
+                        } else {
+                            BulletinFactory.of(fragment).createEmojiBulletin(document, LocaleController.getString(R.string.SetAsBadgeStatusInfo), LocaleController.getString(R.string.UndoNoCaps), undoAction).show();
+                        }
+                    }));
+                }
+
                 @Override
                 public boolean canSchedule() {
                     return false;
@@ -196,6 +220,31 @@ public class SuggestEmojiView extends FrameLayout implements NotificationCenter.
                         return chatActivity.isInScheduleMode();
                     } else {
                         return false;
+                    }
+                }
+
+                public boolean needShowEmojiSet(TLRPC.Document document) {
+                    return document != null && MessageObject.getInputStickerSet(document) != null;
+                }
+
+                public void showEmojiSet(TLRPC.Document document) {
+                    TLRPC.InputStickerSet inputStickerSet = MessageObject.getInputStickerSet(document);
+                    if (inputStickerSet == null) {
+                        return;
+                    }
+                    ArrayList<TLRPC.InputStickerSet> inputSets = new ArrayList<>(1);
+                    inputSets.add(inputStickerSet);
+                    BaseFragment fragment = enterView == null ? null : enterView.getParentFragment();
+                    EmojiPacksAlert alert = new EmojiPacksAlert(fragment, getContext(), resourcesProvider, inputSets);
+                    alert.setPreviewEmoji(document);
+                    if (fragment instanceof ChatActivity) {
+                        ChatActivity chatActivity = (ChatActivity) fragment;
+                        alert.setCalcMandatoryInsets(chatActivity.isKeyboardVisible());
+                        chatActivity.showDialog(alert);
+                    } else if (fragment != null) {
+                        fragment.showDialog(alert);
+                    } else {
+                        alert.show();
                     }
                 }
 
@@ -725,7 +774,7 @@ public class SuggestEmojiView extends FrameLayout implements NotificationCenter.
             }
         }
         try {
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+            performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_TAP), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
         } catch (Exception ignore) {}
         Emoji.addRecentEmoji(emojiSource);
         show = false;

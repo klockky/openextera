@@ -13,6 +13,9 @@ import android.graphics.drawable.Drawable;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.GlassOutlineStyle;
+
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
@@ -21,6 +24,7 @@ public class StrokeDrawable extends Drawable {
 
     private BlurredBackgroundColorProvider colorProvider;
     protected int strokeColorTop, strokeColorBottom;
+    protected int strokeColorFull;
 
     private float alpha = 1.0f;
     private final RectF rect = new RectF();
@@ -29,6 +33,7 @@ public class StrokeDrawable extends Drawable {
     private final Paint paintFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint paintStrokeTop = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint paintStrokeBottom = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint paintStrokeFull = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public void setBackgroundColor(int color) {
         paintFill.setColor(color);
@@ -44,6 +49,7 @@ public class StrokeDrawable extends Drawable {
 
         paintStrokeTop.setStyle(Paint.Style.STROKE);
         paintStrokeBottom.setStyle(Paint.Style.STROKE);
+        paintStrokeFull.setStyle(Paint.Style.STROKE);
 
         updateColors();
     }
@@ -51,13 +57,22 @@ public class StrokeDrawable extends Drawable {
     public void updateColors() {
         if (colorProvider == null) return;
 
-        strokeColorTop = Theme.multAlpha(colorProvider.getStrokeColorTop(), alpha);
-        strokeColorBottom = Theme.multAlpha(colorProvider.getStrokeColorBottom(), alpha);
+        final GlassOutlineStyle outlineStyle = ExteraConfig.getGlassOutlineStyle();
+        if (outlineStyle == GlassOutlineStyle.GLARE) {
+            strokeColorTop = Theme.multAlpha(colorProvider.getStrokeColorTop(), alpha);
+            strokeColorBottom = Theme.multAlpha(colorProvider.getStrokeColorBottom(), alpha);
+        } else {
+            strokeColorTop = 0;
+            strokeColorBottom = 0;
+        }
+        strokeColorFull = outlineStyle == GlassOutlineStyle.SOLID ? Theme.multAlpha(colorProvider.getStrokeColorFull(), alpha) : 0;
 
         paintStrokeTop.setColor(strokeColorTop);
         paintStrokeTop.setStrokeWidth(dpf2(1));
         paintStrokeBottom.setColor(strokeColorBottom);
         paintStrokeBottom.setStrokeWidth(dpf2(2 / 3f));
+        paintStrokeFull.setColor(strokeColorFull);
+        paintStrokeFull.setStrokeWidth(dpf2(1));
     }
 
     public boolean nonRound;
@@ -78,11 +93,22 @@ public class StrokeDrawable extends Drawable {
         if (Color.alpha(paintFill.getColor()) > 0) {
             canvas.drawCircle(cx, cy, radius, paintFill);
         }
-        if (strokeColorTop != 0) {
-            BlurredBackgroundDrawable.drawStroke(canvas, rect, radius, dpf2(1), true, paintStrokeTop);
-        }
-        if (strokeColorBottom != 0) {
-            BlurredBackgroundDrawable.drawStroke(canvas, rect, radius, dpf2(2 / 3f), false, paintStrokeBottom);
+        if (strokeColorFull != 0) {
+            final float halfStroke = paintStrokeFull.getStrokeWidth() / 2.0f;
+            if (nonRound) {
+                rect.inset(halfStroke, halfStroke);
+                final float r = Math.max(0, radius - halfStroke);
+                canvas.drawRoundRect(rect, r, r, paintStrokeFull);
+            } else {
+                canvas.drawCircle(cx, cy, Math.max(0, radius - halfStroke), paintStrokeFull);
+            }
+        } else {
+            if (strokeColorTop != 0) {
+                BlurredBackgroundDrawable.drawStroke(canvas, rect, radius, dpf2(1), true, paintStrokeTop);
+            }
+            if (strokeColorBottom != 0) {
+                BlurredBackgroundDrawable.drawStroke(canvas, rect, radius, dpf2(2 / 3f), false, paintStrokeBottom);
+            }
         }
     }
 

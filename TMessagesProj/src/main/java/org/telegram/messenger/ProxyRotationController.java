@@ -3,6 +3,8 @@ package org.telegram.messenger;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 
+import com.exteragram.messenger.proxy.ProxyController;
+
 import org.telegram.tgnet.ConnectionsManager;
 
 import java.util.ArrayList;
@@ -75,10 +77,10 @@ public class ProxyRotationController implements NotificationCenter.NotificationC
             info.settings.toSharedPreferences(editor);
             editor.apply();
 
-            SharedConfig.currentProxy = info;
+            ProxyController.getInstance().setCurrentProxy(info);
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxyChangedByRotation);
-            ConnectionsManager.setProxySettings(true, SharedConfig.currentProxy.settings);
+            ConnectionsManager.setProxySettings(true, info.settings);
             break;
         }
     }
@@ -102,7 +104,7 @@ public class ProxyRotationController implements NotificationCenter.NotificationC
         } else if (id == NotificationCenter.proxySettingsChanged) {
             AndroidUtilities.cancelRunOnUIThread(checkProxyAndSwitchRunnable);
         } else if (id == NotificationCenter.didUpdateConnectionState && account == UserConfig.selectedAccount) {
-            if (!SharedConfig.isProxyEnabled() && !SharedConfig.proxyRotationEnabled || SharedConfig.proxyList.size() <= 1) {
+            if (!SharedConfig.isProxyEnabled() || !SharedConfig.proxyRotationEnabled || SharedConfig.proxyList.size() <= 1) {
                 return;
             }
 

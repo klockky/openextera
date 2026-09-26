@@ -39,6 +39,8 @@ import android.widget.Toast;
 
 import androidx.core.widget.NestedScrollView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ContactsController;
@@ -115,7 +117,7 @@ public class PhonebookShareAlert extends BottomSheet {
             avatarDrawable.setInfo(currentAccount, currentUser);
 
             BackupImageView avatarImageView = new BackupImageView(context);
-            avatarImageView.setRoundRadius(AndroidUtilities.dp(40));
+            avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(80));
             avatarImageView.setForUserOrChat(currentUser, avatarDrawable);
             addView(avatarImageView, LayoutHelper.createLinear(80, 80, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, 32, 0, 0));
 
@@ -178,6 +180,7 @@ public class PhonebookShareAlert extends BottomSheet {
                 checkBox.setColors(Theme.key_switchTrack, Theme.key_switchTrackChecked, Theme.key_windowBackgroundWhite, Theme.key_windowBackgroundWhite);
                 addView(checkBox, LayoutHelper.createFrame(37, 40, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.CENTER_VERTICAL, 22, 0, 22, 0));
             }
+            setClipChildren(false);
         }
 
         @Override
@@ -509,7 +512,7 @@ public class PhonebookShareAlert extends BottomSheet {
                         } else if (item.type == 3) {
                             String url = item.getValue(false);
                             if (!url.startsWith("http")) {
-                                url = "http://" + url;
+                                url = AndroidUtilities.defaultUrlScheme(url) + url;
                             }
                             Browser.openUrl(this.parentFragment.getParentActivity(), url);
                         } else {

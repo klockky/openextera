@@ -24,6 +24,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BotGuardHelper;
 import org.telegram.messenger.ChatObject;
@@ -108,7 +110,7 @@ public class JoinGroupAlert extends BottomSheet {
         int participants_count = 0;
 
         BackupImageView avatarImageView = new BackupImageView(context);
-        avatarImageView.setRoundRadius(dp(45));
+        avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(90));
         linearLayout.addView(avatarImageView, LayoutHelper.createLinear(90, 90, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, 27, 0, 0));
 
         if (chatInvite != null) {

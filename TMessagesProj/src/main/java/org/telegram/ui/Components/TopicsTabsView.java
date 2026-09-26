@@ -42,6 +42,8 @@ import androidx.core.graphics.ColorUtils;
 import org.telegram.ui.recyclerview.ChatListItemAnimator;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.DialogObject;
@@ -1191,7 +1193,7 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
         private void setLayout(boolean mono) {
             if (this.mono == mono) return;
             this.mono = mono;
-            imageView.setRoundRadius(dp(mono ? 36 : 3));
+            imageView.setRoundRadius(ExteraConfig.getAvatarCorners(28));
             imageLayoutView.setPadding(0, dp(mono ? 7 : 4), 0, 0);
             imageViewParams.width = mono ? dp(28) : dp(30);
             imageViewParams.height = mono ? dp(28) : dp(30);

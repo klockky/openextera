@@ -38,6 +38,9 @@ import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.exteragram.messenger.icons.IconManager;
+import com.exteragram.messenger.icons.ui.picker.IconObserver;
+
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -353,7 +356,7 @@ public abstract class BaseFragment {
             if (parent != null) {
                 try {
                     onRemoveFromParent();
-                    parent.removeViewInLayout(fragmentView);
+                    removeViewFromParent(parent, fragmentView);
                 } catch (Exception e) {
                     FileLog.e(e);
                 }
@@ -364,7 +367,7 @@ public abstract class BaseFragment {
             ViewGroup parent = (ViewGroup) actionBar.getParent();
             if (parent != null) {
                 try {
-                    parent.removeViewInLayout(actionBar);
+                    removeViewFromParent(parent, actionBar);
                 } catch (Exception e) {
                     FileLog.e(e);
                 }
@@ -373,6 +376,17 @@ public abstract class BaseFragment {
         }
         clearSheets();
         parentLayout = null;
+    }
+
+    public static void removeViewFromParent(ViewGroup parent, View view) {
+        if (parent == null || view == null || view.getParent() != parent) {
+            return;
+        }
+        if (parent.isInLayout()) {
+            parent.removeViewInLayout(view);
+        } else {
+            parent.removeView(view);
+        }
     }
 
     public void onRemoveFromParent() {
@@ -395,7 +409,7 @@ public abstract class BaseFragment {
                 if (parent != null) {
                     try {
                         onRemoveFromParent();
-                        parent.removeViewInLayout(fragmentView);
+                        removeViewFromParent(parent, fragmentView);
                     } catch (Exception e) {
                         FileLog.e(e);
                     }
@@ -411,7 +425,7 @@ public abstract class BaseFragment {
                     ViewGroup parent = (ViewGroup) actionBar.getParent();
                     if (parent != null) {
                         try {
-                            parent.removeViewInLayout(actionBar);
+                            removeViewFromParent(parent, actionBar);
                         } catch (Exception e) {
                             FileLog.e(e);
                         }
@@ -513,6 +527,7 @@ public abstract class BaseFragment {
         if (actionBar != null) {
             actionBar.setEnabled(false);
         }
+        IconObserver.INSTANCE.removeSource(this);
 
         if (hasForceLightStatusBar() && !AndroidUtilities.isTablet() && getParentLayout().getLastFragment() == this && getParentActivity() != null && !finishing) {
             AndroidUtilities.setLightStatusBar(getParentActivity(), Theme.getColor(Theme.key_actionBarDefault) == Color.WHITE);
@@ -619,7 +634,7 @@ public abstract class BaseFragment {
     }
 
     public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
-
+        IconManager.INSTANCE.onActivityResult(requestCode, resultCode, data);
     }
 
     public void onRequestPermissionsResultFragment(int requestCode, String[] permissions, int[] grantResults) {

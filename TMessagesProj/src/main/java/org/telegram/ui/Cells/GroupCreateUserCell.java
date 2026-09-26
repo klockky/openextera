@@ -26,9 +26,12 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.exteragram.messenger.ExteraConfig;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
@@ -60,6 +63,7 @@ public class GroupCreateUserCell extends FrameLayout {
     private BackupImageView avatarImageView;
     private SimpleTextView nameTextView;
     private SimpleTextView statusTextView;
+    private ImageView openChatView;
     private CheckBox2 checkBox;
     private AvatarDrawable avatarDrawable;
     private Object currentObject;
@@ -143,7 +147,7 @@ public class GroupCreateUserCell extends FrameLayout {
         avatarDrawable = new AvatarDrawable();
 
         avatarImageView = new BackupImageView(context);
-        avatarImageView.setRoundRadius(AndroidUtilities.dp(24));
+        avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(46));
         addView(avatarImageView, LayoutHelper.createFrame(46, 46, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 0 : (13 + padding), 6, LocaleController.isRTL ? (13 + padding) : 0, 0));
 
         nameTextView = new SimpleTextView(context) {
@@ -164,6 +168,14 @@ public class GroupCreateUserCell extends FrameLayout {
         statusTextView.setTextSize(14);
         statusTextView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP);
         addView(statusTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 20, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, (LocaleController.isRTL ? 28 : 72) + padding, 32, (LocaleController.isRTL ? 72 : 28) + padding, 0));
+
+        openChatView = new ImageView(context);
+        openChatView.setImageResource(R.drawable.msg_arrow_forward);
+        openChatView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_player_actionBarSelector)));
+        openChatView.setScaleType(ImageView.ScaleType.CENTER);
+        openChatView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.MULTIPLY));
+        openChatView.setVisibility(GONE);
+        addView(openChatView, LayoutHelper.createFrame(40, 40, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.CENTER_VERTICAL, LocaleController.isRTL ? 10 : 0, 0, LocaleController.isRTL ? 0 : 10, 0));
 
         if (checkBoxType == 1) {
             checkBox = new CheckBox2(context, 21, resourcesProvider);
@@ -192,6 +204,8 @@ public class GroupCreateUserCell extends FrameLayout {
         drawDivider = false;
         currentPremium = false;
         currentMiniapps = false;
+        openChatView.setVisibility(GONE);
+        updateTextMargins();
         update(0);
     }
 
@@ -204,6 +218,8 @@ public class GroupCreateUserCell extends FrameLayout {
         statusTextView.setTextColor(Theme.getColor(forceDarkTheme ? Theme.key_voipgroup_lastSeenText : Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
         statusTextView.setEmojiColor(statusTextView.getTextColor());
         statusTextView.setText(LocaleController.getString(R.string.PrivacyPremiumText));
+        openChatView.setVisibility(GONE);
+        updateTextMargins();
     }
 
     public void setMiniapps() {
@@ -215,6 +231,26 @@ public class GroupCreateUserCell extends FrameLayout {
         statusTextView.setTextColor(Theme.getColor(forceDarkTheme ? Theme.key_voipgroup_lastSeenText : Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
         statusTextView.setEmojiColor(statusTextView.getTextColor());
         statusTextView.setText(LocaleController.getString(R.string.PrivacyMiniappsText));
+        openChatView.setVisibility(GONE);
+        updateTextMargins();
+    }
+
+    public void setOpenChatView(Runnable onClick) {
+        openChatView.setVisibility(VISIBLE);
+        openChatView.setOnClickListener(v -> onClick.run());
+        updateTextMargins();
+    }
+
+    private void updateTextMargins() {
+        boolean openChatVisible = openChatView.getVisibility() == VISIBLE;
+        int leftMargin = (LocaleController.isRTL ? (openChatVisible ? 64 : 28) : 72) + padding;
+        int rightMargin = (LocaleController.isRTL ? 72 : (openChatVisible ? 64 : 28)) + padding;
+        LayoutParams nameParams = (LayoutParams) nameTextView.getLayoutParams();
+        nameParams.leftMargin = AndroidUtilities.dp(leftMargin);
+        nameParams.rightMargin = AndroidUtilities.dp(rightMargin);
+        LayoutParams statusParams = (LayoutParams) statusTextView.getLayoutParams();
+        statusParams.leftMargin = AndroidUtilities.dp(leftMargin);
+        statusParams.rightMargin = AndroidUtilities.dp(rightMargin);
     }
 
     public static Drawable makePremiumUsersDrawable(Context context, boolean small) {
@@ -398,11 +434,11 @@ public class GroupCreateUserCell extends FrameLayout {
             }
             avatarImageView.getLayoutParams().width = avatarImageView.getLayoutParams().height = AndroidUtilities.dp(46);
             if (checkBox != null) {
-                ((LayoutParams) checkBox.getLayoutParams()).topMargin = AndroidUtilities.dp(29) + padding;
+                ((LayoutParams) checkBox.getLayoutParams()).topMargin = AndroidUtilities.dp(31) + padding;
                 if (LocaleController.isRTL) {
-                    ((LayoutParams) checkBox.getLayoutParams()).rightMargin = AndroidUtilities.dp(40) + padding;
+                    ((LayoutParams) checkBox.getLayoutParams()).rightMargin = AndroidUtilities.dp(38) + padding;
                 } else {
-                    ((LayoutParams) checkBox.getLayoutParams()).leftMargin = AndroidUtilities.dp(40) + padding;
+                    ((LayoutParams) checkBox.getLayoutParams()).leftMargin = AndroidUtilities.dp(38) + padding;
                 }
             }
 
@@ -540,7 +576,7 @@ public class GroupCreateUserCell extends FrameLayout {
             }
         }
 
-        avatarImageView.setRoundRadius(currentChat != null && currentChat.forum ? AndroidUtilities.dp(14) : AndroidUtilities.dp(24));
+        avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(46, false, currentChat != null && currentChat.forum));
         if (currentStatus != null) {
             statusTextView.setText(currentStatus, true);
             statusTextView.setTag(Theme.key_windowBackgroundWhiteGrayText);
@@ -565,7 +601,10 @@ public class GroupCreateUserCell extends FrameLayout {
             paint.setColor(Theme.getColor(Theme.key_checkboxSquareBackground, resourcesProvider));
             float cx = avatarImageView.getLeft() + avatarImageView.getMeasuredWidth() / 2;
             float cy = avatarImageView.getTop() + avatarImageView.getMeasuredHeight() / 2;
-            canvas.drawCircle(cx, cy, AndroidUtilities.dp(18) + AndroidUtilities.dp(4) * checkProgress, paint);
+            float radius = AndroidUtilities.dp(18) + AndroidUtilities.dp(4) * checkProgress;
+            float scaleX = avatarImageView.getScaleX();
+            float cornerRadius = Math.max(0, avatarImageView.getImageReceiver().getRoundRadius()[0] * scaleX + radius - avatarImageView.getMeasuredWidth() / 2f * scaleX);
+            canvas.drawRoundRect(cx - radius, cy - radius, cx + radius, cy + radius, cornerRadius, cornerRadius, paint);
         }
         if (drawDivider) {
             int start = AndroidUtilities.dp(LocaleController.isRTL ? 0 : 72 + padding);

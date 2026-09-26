@@ -12,7 +12,6 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.os.Build;
-import android.os.Vibrator;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -23,10 +22,12 @@ import android.widget.TextView;
 
 import androidx.core.graphics.ColorUtils;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.DialogObject;
-import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
@@ -92,7 +93,7 @@ public class GroupCallPipAlertView extends LinearLayout implements VoIPService.S
         groupInfoContainer.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8));
 
         avatarImageView = new BackupImageView(context);
-        avatarImageView.setRoundRadius(AndroidUtilities.dp(22));
+        avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(44));
         groupInfoContainer.addView(avatarImageView, LayoutHelper.createFrame(44, 44));
         groupInfoContainer.setBackground(Theme.createSimpleSelectorRoundRectDrawable(AndroidUtilities.dp(6), 0, ColorUtils.setAlphaComponent(Color.WHITE, (int) (255 * 0.3f))));
         groupInfoContainer.setOnClickListener(view -> {
@@ -141,14 +142,7 @@ public class GroupCallPipAlertView extends LinearLayout implements VoIPService.S
             if (VoIPService.getSharedInstance() != null) {
                 if (VoIPService.getSharedInstance().mutedByAdmin()) {
                     muteButton.shakeView();
-                    try {
-                        Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-                        if (vibrator != null) {
-                            vibrator.vibrate(200);
-                        }
-                    } catch (Exception e) {
-                        FileLog.e(e);
-                    }
+                    VibratorUtils.vibrate();
                 } else {
                     VoIPService.getSharedInstance().setMicMute(!VoIPService.getSharedInstance().isMicMute(), false, true);
                 }

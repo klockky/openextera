@@ -42,6 +42,7 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ImageLocation;
@@ -500,7 +501,7 @@ public class MemberRequestsDelegate implements MemberRequestCell.OnClickListener
                     onImportersChanged(query, false, true);
                     if (isApproved) {
                         Bulletin.MultiLineLayout layout = new Bulletin.MultiLineLayout(fragment.getParentActivity(), fragment.getResourceProvider());
-                        layout.imageView.setRoundRadius(AndroidUtilities.dp(15));
+                        layout.imageView.setRoundRadius(ExteraConfig.getAvatarCorners(32));
                         layout.imageView.setForUserOrChat(user, new AvatarDrawable(user));
                         String userName = UserObject.getFirstName(user);
                         String message = isChannel

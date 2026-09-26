@@ -16,6 +16,8 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
@@ -56,6 +58,7 @@ public class DialogsHintCell extends FrameLayout {
         avatarsImageView.setCount(0);
 
         imageView = new BackupImageView(context);
+        imageView.setRoundRadius(ExteraConfig.getAvatarCorners(36));
         imageView.setVisibility(View.GONE);
 
         contentView = new LinearLayout(context);

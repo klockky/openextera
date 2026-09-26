@@ -1062,9 +1062,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 shouldDrawBlur = blurView != null;
             }
 
-            float inset = hasStories ? (int) AndroidUtilities.dpf2(3.5f) : 0;
-            inset *= (1f - progressToExpand);
-            inset *= progressToInsets * (1f - foregroundAlpha);
+            float inset = getStoriesInset();
 
             ImageReceiver imageReceiver = animatedEmojiDrawable != null ? animatedEmojiDrawable.getImageReceiver() : this.imageReceiver;
 
@@ -1168,6 +1166,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             invalidate();
         }
 
+        public float getStoriesInset() {
+            float inset = hasStories ? (int) AndroidUtilities.dpf2(3.5f) : 0;
+            inset *= (1f - progressToExpand);
+            inset *= progressToInsets * (1f - foregroundAlpha);
+            return inset;
+        }
+
         public void setProgressToExpand(float animatedFracture) {
             if (progressToExpand == animatedFracture) {
                 return;
@@ -1234,6 +1239,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
 
         private boolean hasColorById;
+        private int actionsTextColor = Color.WHITE;
         private final AnimatedFloat hasColorAnimated = new AnimatedFloat(this, 350, CubicBezierInterpolator.EASE_OUT_QUINT);
         public int color1, color2;
         private final AnimatedColor color1Animated = new AnimatedColor(this, 350, CubicBezierInterpolator.EASE_OUT_QUINT);
@@ -1258,6 +1264,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     emojiColor = PeerColorActivity.adaptProfileEmojiColor(color1);
                     btnColor = Theme.multAlpha(PeerColorActivity.adaptProfileEmojiColor(color1), .15f);
                 }
+                actionsTextColor = Color.WHITE;
             } else {
                 actionBarBackgroundColor = currentColor;
                 hasColorById = false;
@@ -1267,9 +1274,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 } else if (AndroidUtilities.computePerceivedBrightness(getThemedColor(Theme.key_actionBarDefault)) < .2f) {
                     emojiColor = Theme.multAlpha(Theme.adaptHSV(getThemedColor(Theme.key_actionBarDefault), +0.02f, +0.25f), .5f);
                     btnColor = Theme.multAlpha(Theme.adaptHSV(getThemedColor(Theme.key_actionBarDefault), +0.02f, +0.25f), .35f);
+                    actionsTextColor = Color.WHITE;
                 } else {
                     emojiColor = PeerColorActivity.adaptProfileEmojiColor(getThemedColor(Theme.key_actionBarDefault));
                     btnColor = Theme.multAlpha(PeerColorActivity.adaptProfileEmojiColor(getThemedColor(Theme.key_actionBarDefault)), .15f);
+                    actionsTextColor = Color.WHITE;
                 }
             }
             if (!animated) {
@@ -1331,7 +1340,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             final int color1 = color1Animated.set(this.color1);
             final int color2 = color2Animated.set(this.color2);
             if (actionsView != null) {
-                actionsView.setActionsColor(btnColor, hasColorById);
+                actionsView.setActionsColor(btnColor, actionsTextColor, hasColorById);
             }
 
             int gradientX = getWidth() / 2;
@@ -1344,6 +1353,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 backgroundGradient = new RadialGradient(backgroundGradientX = gradientX, backgroundGradientY + backgroundGradientRadius / 2f, backgroundGradientRadius, new int[]{backgroundGradientColor2 = color2, backgroundGradientColor1 = color1}, new float[]{0, 1}, Shader.TileMode.CLAMP);
                 backgroundGradient.setLocalMatrix(backgroundGradientMatrix);
                 backgroundPaint.setShader(backgroundGradient);
+                backgroundPaint.setDither(true);
             }
         }
 
@@ -1394,6 +1404,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 paint.setColor(color);
                 blurBounds.set(0, y1, getMeasuredWidth(), (int) v);
                 contentView.drawBlurRect(canvas, getY(), blurBounds, paint, true);
+            }
+            if (y1 > 0) {
+                final float extraDiff = calculateHeaderExtraDiff() * (playProfileAnimation == 0 ? 1f : avatarAnimationProgress);
+                if (extraDiff > 0) {
+                    paint.setColor(Theme.multAlpha(getThemedColor(Theme.key_windowBackgroundGray), extraDiff));
+                    canvas.drawRect(0, Math.max(0, y1 - dp(1)), getMeasuredWidth(), y1, paint);
+                }
             }
         }
 

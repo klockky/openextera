@@ -679,36 +679,6 @@ public class ChatPullingDownDrawable implements NotificationCenter.NotificationC
             }
         }
 
-        if (searchNext) {
-            if (filterId != 0) {
-                for (int i = 0; i < messagesController.dialogFilters.size(); i++) {
-                    int newFilterId = messagesController.dialogFilters.get(i).id;
-                    if (filterId != newFilterId) {
-                        TLRPC.Dialog dialog = getNextUnreadDialog(currentDialogId, folderId, newFilterId, false, params);
-                        if (dialog != null) {
-                            if (params != null) {
-                                params[0] = 1;
-                            }
-                            return dialog;
-                        }
-                    }
-                }
-            }
-
-            for (int i = 0; i < messagesController.dialogsByFolder.size(); i++) {
-                int newFolderId = messagesController.dialogsByFolder.keyAt(i);
-                if (folderId != newFolderId) {
-                    TLRPC.Dialog dialog = getNextUnreadDialog(currentDialogId, newFolderId, 0, false, params);
-                    if (dialog != null) {
-                        if (params != null) {
-                            params[0] = 1;
-                        }
-                        return dialog;
-                    }
-                }
-            }
-        }
-
         return null;
     }
 

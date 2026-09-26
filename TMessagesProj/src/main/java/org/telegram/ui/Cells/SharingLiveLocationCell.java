@@ -29,6 +29,7 @@ import android.view.Gravity;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import com.exteragram.messenger.ExteraConfig;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ContactsController;
@@ -91,7 +92,7 @@ public class SharingLiveLocationCell extends FrameLayout {
         this.padding = padding;
 
         avatarImageView = new BackupImageView(context);
-        avatarImageView.setRoundRadius(dp(21));
+        avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(42));
 
         avatarDrawable = new AvatarDrawable();
 

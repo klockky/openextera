@@ -5,12 +5,13 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.PowerManager;
 
 import androidx.annotation.NonNull;
+
+import com.exteragram.messenger.utils.system.SystemUtils;
 
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
@@ -302,29 +303,6 @@ public class EarListener implements SensorEventListener {
     }
 
     protected boolean forbidRaiseToListen() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                AudioDeviceInfo[] devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-                for (AudioDeviceInfo device : devices) {
-                    final int type = device.getType();
-                    if ((
-                        type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                        type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                        type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
-                        type == AudioDeviceInfo.TYPE_BLE_SPEAKER ||
-                        type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                        type == AudioDeviceInfo.TYPE_WIRED_HEADSET
-                    ) && device.isSink()) {
-                        return true;
-                    }
-                }
-                return false;
-            } else {
-                return audioManager.isWiredHeadsetOn() || audioManager.isBluetoothA2dpOn() || audioManager.isBluetoothScoOn();
-            }
-        } catch (Exception e) {
-            FileLog.e(e);
-        }
-        return false;
+        return SystemUtils.hasExternalAudioOutput(audioManager);
     }
 }

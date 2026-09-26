@@ -15,6 +15,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -50,6 +51,9 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.window.BackEvent;
+import android.window.OnBackAnimationCallback;
+import android.window.OnBackInvokedDispatcher;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -59,6 +63,9 @@ import androidx.core.view.NestedScrollingParent;
 import androidx.core.view.NestedScrollingParentHelper;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.system.VibratorUtils;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
@@ -110,6 +117,11 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     private int layoutCount;
 
     private boolean dismissed;
+
+    private OnBackInvokedDispatcher onBackInvokedDispatcher;
+    private OnBackAnimationCallback backAnimationCallback;
+    private boolean isBackCallbackRegistered;
+    private boolean predictiveBackAnimationInProgress;
     private int tag;
 
     protected boolean useHardwareLayer = true;
@@ -583,8 +595,21 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             return (!intercept && maybeStartTracking) || startedTracking || !(canDismissWithSwipe() || canSwipeToBack(ev));
         }
 
+        public void resetTouch() {
+            startedTracking = false;
+            maybeStartTracking = false;
+            startedTrackingPointerId = -1;
+            if (velocityTracker != null) {
+                velocityTracker.recycle();
+                velocityTracker = null;
+            }
+        }
+
         @Override
         public boolean onTouchEvent(MotionEvent ev) {
+            if (predictiveBackAnimationInProgress) {
+                return true;
+            }
             return processTouchEvent(ev, false);
         }
 
@@ -611,7 +636,11 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             if (oldKeyboardHeight != keyboardHeight) {
                 keyboardChanged = true;
             }
+            boolean wasKeyboardVisible = keyboardVisible;
             keyboardVisible = keyboardHeight > dp(20);
+            if (wasKeyboardVisible != keyboardVisible && Build.VERSION.SDK_INT >= 34) {
+                updateBackCallbackState();
+            }
             if (lastInsets != null) {
                 bottomInset = lastInsets.getSystemWindowInsetBottom();
                 leftInset = lastInsets.getSystemWindowInsetLeft();
@@ -796,6 +825,9 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
         @Override
         public boolean onInterceptTouchEvent(MotionEvent event) {
+            if (predictiveBackAnimationInProgress) {
+                return true;
+            }
             if (canDismissWithSwipe() || canSwipeToBack(event)) {
                 return processTouchEvent(event, true);
             }
@@ -1252,6 +1284,9 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             @Override
             protected void onAttachedToWindow() {
                 super.onAttachedToWindow();
+                if (Build.VERSION.SDK_INT >= 34) {
+                    registerBackCallback();
+                }
                 Bulletin.addDelegate(this, new Bulletin.Delegate() {
                     @Override
                     public int getTopOffset(int tag) {
@@ -1263,6 +1298,9 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             @Override
             protected void onDetachedFromWindow() {
                 super.onDetachedFromWindow();
+                if (Build.VERSION.SDK_INT >= 34) {
+                    unregisterBackCallback();
+                }
                 Bulletin.removeDelegate(this);
             }
         };
@@ -2289,6 +2327,11 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
         public BottomSheet show() {
             bottomSheet.show();
+            if (!ExteraConfig.getInAppVibration()) {
+                VibratorUtils.disableHapticFeedback(bottomSheet.containerView);
+                VibratorUtils.disableHapticFeedback(bottomSheet.customView);
+                VibratorUtils.disableHapticFeedback(bottomSheet.container);
+            }
             return bottomSheet;
         }
 
@@ -2524,5 +2567,119 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     @NonNull
     protected WindowInsetsCompat onApplyWindowInsetsToRoot(@NonNull View v, @NonNull WindowInsetsCompat insets) {
         return insets;
+    }
+
+    @RequiresApi(api = 34)
+    private void updateBackCallbackState() {
+        if (onBackInvokedDispatcher == null || backAnimationCallback == null) {
+            return;
+        }
+        if (keyboardVisible && isBackCallbackRegistered) {
+            onBackInvokedDispatcher.unregisterOnBackInvokedCallback(backAnimationCallback);
+            isBackCallbackRegistered = false;
+        } else if (!keyboardVisible && !isBackCallbackRegistered) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_OVERLAY, backAnimationCallback);
+            isBackCallbackRegistered = true;
+        }
+    }
+
+    @RequiresApi(api = 34)
+    private void registerBackCallback() {
+        if (backAnimationCallback != null || ExteraConfig.getPredictiveBackIntensity() == 0f) {
+            return;
+        }
+        if (container != null && container.isAttachedToWindow()) {
+            onBackInvokedDispatcher = container.findOnBackInvokedDispatcher();
+        }
+        if (onBackInvokedDispatcher == null && getWindow() != null) {
+            onBackInvokedDispatcher = getWindow().getOnBackInvokedDispatcher();
+        }
+        if (onBackInvokedDispatcher == null && getContext() instanceof Activity) {
+            onBackInvokedDispatcher = ((Activity) getContext()).getOnBackInvokedDispatcher();
+        }
+        if (onBackInvokedDispatcher == null) {
+            if (container != null) {
+                container.post(this::registerBackCallback);
+            }
+            return;
+        }
+        backAnimationCallback = new OnBackAnimationCallback() {
+            @Override
+            public void onBackStarted(@NonNull BackEvent backEvent) {
+                predictiveBackAnimationInProgress = true;
+                if (container != null) {
+                    container.resetTouch();
+                }
+            }
+
+            @Override
+            public void onBackProgressed(@NonNull BackEvent backEvent) {
+                if (dismissed || container == null) {
+                    return;
+                }
+                float progress = backEvent.getProgress();
+                containerView.setTranslationY(containerView.getMeasuredHeight() * 0.15f * progress);
+                onContainerViewTranslation();
+                if (backDrawable != null) {
+                    backDrawable.setAlpha((int) (dimBehindAlpha * (1f - progress)));
+                }
+            }
+
+            @Override
+            public void onBackInvoked() {
+                if (delegate != null && !delegate.canDismiss()) {
+                    onBackCancelled();
+                    return;
+                }
+                predictiveBackAnimationInProgress = false;
+                if (container != null) {
+                    container.resetTouch();
+                }
+                dismiss();
+            }
+
+            @Override
+            public void onBackCancelled() {
+                predictiveBackAnimationInProgress = false;
+                if (container == null) {
+                    return;
+                }
+                container.resetTouch();
+                container.cancelCurrentAnimation();
+                ObjectAnimator translationAnimator = ObjectAnimator.ofFloat(containerView, View.TRANSLATION_Y, 0);
+                translationAnimator.addUpdateListener(animation -> onContainerViewTranslation());
+                container.currentAnimation = new AnimatorSet();
+                container.currentAnimation.playTogether(translationAnimator);
+                if (backDrawable != null) {
+                    container.currentAnimation.playTogether(ObjectAnimator.ofInt(backDrawable, AnimationProperties.COLOR_DRAWABLE_ALPHA, dimBehind ? dimBehindAlpha : 0));
+                }
+                container.currentAnimation.setDuration(250);
+                container.currentAnimation.setInterpolator(CubicBezierInterpolator.DEFAULT);
+                container.currentAnimation.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        if (container.currentAnimation != null && container.currentAnimation.equals(animation)) {
+                            container.currentAnimation = null;
+                        }
+                    }
+                });
+                container.currentAnimation.start();
+            }
+        };
+        if (keyboardVisible) {
+            return;
+        }
+        onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_OVERLAY, backAnimationCallback);
+        isBackCallbackRegistered = true;
+    }
+
+    @RequiresApi(api = 34)
+    private void unregisterBackCallback() {
+        if (isBackCallbackRegistered && onBackInvokedDispatcher != null && backAnimationCallback != null) {
+            onBackInvokedDispatcher.unregisterOnBackInvokedCallback(backAnimationCallback);
+        }
+        isBackCallbackRegistered = false;
+        backAnimationCallback = null;
+        onBackInvokedDispatcher = null;
     }
 }

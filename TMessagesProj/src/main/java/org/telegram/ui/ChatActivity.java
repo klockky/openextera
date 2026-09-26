@@ -8,9 +8,6 @@
 
 package org.telegram.ui;
 
-import com.exteragram.messenger.icons.IconManager;
-import com.exteragram.messenger.backup.PreferencesUtils;
-import com.exteragram.messenger.backup.BackupBottomSheet;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 import static org.telegram.messenger.LocaleController.formatPluralStringComma;
@@ -133,10 +130,37 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.ai.AiController;
+import com.exteragram.messenger.ai.network.Client;
+import com.exteragram.messenger.ai.ui.AiResponseAlert;
+import com.exteragram.messenger.ai.ui.GenerateFromMessageBottomSheet;
+import com.exteragram.messenger.backup.BackupBottomSheet;
+import com.exteragram.messenger.backup.PreferencesUtils;
+import com.exteragram.messenger.badges.BadgesController;
+import com.exteragram.messenger.components.ActionRow;
+import com.exteragram.messenger.components.MessageDetailsPopupWrapper;
+import com.exteragram.messenger.feed.FeedChannelActions;
 import com.exteragram.messenger.feed.FeedChatIntegration;
 import com.exteragram.messenger.feed.FeedController;
 import com.exteragram.messenger.feed.FeedMessageUtils;
+import com.exteragram.messenger.icons.IconManager;
+import com.exteragram.messenger.proxy.IpAddressInfoController;
+import com.exteragram.messenger.speech.VoiceRecognitionController;
+import com.exteragram.messenger.translator.TranslatorUtils;
+import com.exteragram.messenger.utils.MarkdownUtils;
+import com.exteragram.messenger.utils.chats.ChatUtils;
+import com.exteragram.messenger.utils.chats.DoubleTapUtils;
+import com.exteragram.messenger.utils.chats.ForwardContext;
+import com.exteragram.messenger.utils.chats.GlassMenuHelper;
+import com.exteragram.messenger.utils.chats.SwipeAction;
+import com.exteragram.messenger.utils.chats.SwipeActionsHelper;
 import com.exteragram.messenger.utils.chats.WidePosts;
+import com.exteragram.messenger.utils.system.SystemUtils;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+import com.exteragram.messenger.utils.text.LocaleUtils;
+import com.exteragram.messenger.utils.ui.ChatHeaderUiHelper;
+import com.exteragram.messenger.utils.ui.MainTabsUiHelper;
 import com.google.zxing.common.detector.MathUtils;
 
 import org.telegram.PhoneFormat.PhoneFormat;
@@ -377,7 +401,8 @@ public class ChatActivity extends BaseFragment implements
         ChatActivityInterface,
         FloatingDebugProvider,
         InstantCameraView.Delegate,
-        FactorAnimator.Target
+        FactorAnimator.Target,
+        ForwardContext
 {
     private final static boolean PULL_DOWN_BACK_FRAGMENT = false;
     private final static boolean DISABLE_PROGRESS_VIEW = true;

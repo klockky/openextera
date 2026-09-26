@@ -8,10 +8,8 @@
 
 package org.telegram.ui.Components;
 
-import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.net.Uri;
@@ -19,6 +17,8 @@ import android.os.Build;
 import android.provider.MediaStore;
 
 import androidx.core.content.FileProvider;
+
+import com.exteragram.messenger.utils.system.SystemUtils;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -31,7 +31,6 @@ import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.BottomSheet;
-import org.telegram.ui.BasePermissionsActivity;
 import org.telegram.ui.PhotoAlbumPickerActivity;
 
 import java.io.File;
@@ -110,19 +109,9 @@ public class WallpaperUpdater {
 
     public void openGallery() {
         if (parentFragment != null) {
-            final Activity activity = parentFragment.getParentActivity();
-            if (activity != null) {
-                if (Build.VERSION.SDK_INT >= 33) {
-                    if (activity.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
-                        activity.requestPermissions(new String[]{Manifest.permission.READ_MEDIA_IMAGES}, BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE);
-                        return;
-                    }
-                } else if (Build.VERSION.SDK_INT >= 23) {
-                    if (activity.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                        activity.requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE);
-                        return;
-                    }
-                }
+            if (parentFragment.getParentActivity() != null && !SystemUtils.isImagesPermissionGranted()) {
+                SystemUtils.requestImagesPermission(parentFragment.getParentActivity());
+                return;
             }
             PhotoAlbumPickerActivity fragment = new PhotoAlbumPickerActivity(PhotoAlbumPickerActivity.SELECT_TYPE_WALLPAPER, false, false, null);
             fragment.setAllowSearchImages(false);

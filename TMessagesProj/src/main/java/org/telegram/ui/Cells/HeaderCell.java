@@ -11,6 +11,7 @@ package org.telegram.ui.Cells;
 import android.animation.Animator;
 import android.animation.ObjectAnimator;
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -21,6 +22,8 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import androidx.core.view.ViewCompat;
+
+import com.exteragram.messenger.ExteraConfig;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -46,19 +49,19 @@ public class HeaderCell extends FrameLayout {
     private final boolean animated;
 
     public HeaderCell(Context context) {
-        this(context, Theme.key_windowBackgroundWhiteBlueHeader, 18, 7, false, null);
+        this(context, Theme.key_windowBackgroundWhiteBlueHeader, 18, 6, false, null);
     }
 
     public HeaderCell(Context context, Theme.ResourcesProvider resourcesProvider) {
-        this(context, Theme.key_windowBackgroundWhiteBlueHeader, 18, 7, false, resourcesProvider);
+        this(context, Theme.key_windowBackgroundWhiteBlueHeader, 18, 6, false, resourcesProvider);
     }
 
     public HeaderCell(Context context, int padding) {
-        this(context, Theme.key_windowBackgroundWhiteBlueHeader, padding, 7, false, null);
+        this(context, Theme.key_windowBackgroundWhiteBlueHeader, padding, 6, false, null);
     }
 
     public HeaderCell(Context context, int padding, Theme.ResourcesProvider resourcesProvider) {
-        this(context, Theme.key_windowBackgroundWhiteBlueHeader, padding, 7, false, resourcesProvider);
+        this(context, Theme.key_windowBackgroundWhiteBlueHeader, padding, 6, false, resourcesProvider);
     }
 
     public HeaderCell(Context context, int textColorKey, int padding, int topMargin, boolean text2) {
@@ -76,6 +79,10 @@ public class HeaderCell extends FrameLayout {
     public HeaderCell(Context context, int textColorKey, int padding, int topMargin, int bottomMargin, boolean text2, boolean animated, Theme.ResourcesProvider resourcesProvider) {
         super(context);
         this.resourcesProvider = resourcesProvider;
+        if (ExteraConfig.getSectionsSeparatedHeaders()) {
+            padding = 24;
+            bottomMargin = 3;
+        }
         this.padding = padding;
         this.bottomMargin = bottomMargin;
         this.animated = animated;
@@ -120,6 +127,9 @@ public class HeaderCell extends FrameLayout {
     }
 
     public void setHeight(int value) {
+        if (ExteraConfig.getSectionsSeparatedHeaders()) {
+            return;
+        }
         int newMinHeight = AndroidUtilities.dp(height = value) - ((LayoutParams) textView.getLayoutParams()).topMargin;
         if (textView.getMinHeight() != newMinHeight) {
             textView.setMinHeight(newMinHeight);
@@ -128,11 +138,17 @@ public class HeaderCell extends FrameLayout {
     }
 
     public void setTopMargin(int topMargin) {
+        if (ExteraConfig.getSectionsSeparatedHeaders()) {
+            return;
+        }
         ((LayoutParams) textView.getLayoutParams()).topMargin = AndroidUtilities.dp(topMargin);
         setHeight(height);
     }
 
     public void setBottomMargin(int bottomMargin) {
+        if (ExteraConfig.getSectionsSeparatedHeaders()) {
+            return;
+        }
         ((LayoutParams) textView.getLayoutParams()).bottomMargin = AndroidUtilities.dp(bottomMargin);
         if (textView2 != null) {
             ((LayoutParams) textView2.getLayoutParams()).bottomMargin = AndroidUtilities.dp(bottomMargin);
@@ -223,5 +239,13 @@ public class HeaderCell extends FrameLayout {
 
     private int getThemedColor(int key) {
         return Theme.getColor(key, resourcesProvider);
+    }
+
+    @Override
+    public void setBackground(Drawable background) {
+        if (ExteraConfig.getSectionsSeparatedHeaders()) {
+            return;
+        }
+        super.setBackground(background);
     }
 }

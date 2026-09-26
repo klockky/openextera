@@ -29,6 +29,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -51,6 +52,7 @@ import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.style.ClickableSpan;
 import android.util.Base64;
+import android.util.DisplayMetrics;
 import android.util.SparseIntArray;
 import android.view.ActionMode;
 import android.view.Gravity;
@@ -88,6 +90,12 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 
 import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.drawer.DrawerContainer;
+import com.exteragram.messenger.icons.ExteraResources;
+import com.exteragram.messenger.icons.ui.picker.IconPickerController;
+import com.exteragram.messenger.pillstack.core.PillStackConfig;
+import com.exteragram.messenger.pillstack.core.PillType;
+import com.exteragram.messenger.utils.chats.WidePosts;
 import com.exteragram.messenger.icons.IconManager;
 import com.exteragram.messenger.utils.network.RemoteUtils;
 import com.exteragram.messenger.utils.ui.MonetUtils;
@@ -142,6 +150,7 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.browser.Browser;
+import org.telegram.messenger.utils.Choreographer60FpsContent;
 import org.telegram.messenger.pip.PipActivityController;
 import org.telegram.messenger.pip.activity.IPipActivity;
 import org.telegram.messenger.pip.activity.IPipActivityHandler;
@@ -255,6 +264,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -280,6 +290,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     private String voicePath;
     private CharSequence sendingText;
     private ArrayList<SendMessagesHelper.SendingMediaInfo> photoPathsArray;
+    private ExteraResources res = null;
+    private final CopyOnWriteArrayList<WeakReference<ExteraResources>> resHistory = new CopyOnWriteArrayList<>();
     private ArrayList<String> documentsPathsArray;
     private ArrayList<Uri> documentsUrisArray;
     private Uri exportingChatUri;
@@ -324,6 +336,38 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     private Dialog proxyErrorDialog;
     private SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow selectAnimatedEmojiDialog;
     private View rippleAbove;
+    @Override
+    public Resources getResources() {
+        Resources resources = super.getResources();
+        if (res == null || res.getAssets() != resources.getAssets()) {
+            res = new ExteraResources(resources);
+            resHistory.add(new WeakReference<>(res));
+        }
+        return res;
+    }
+
+    private boolean addSharedPhotoUri(Uri uri, boolean isVideo) {
+        if (uri == null) {
+            return false;
+        }
+        if (photoPathsArray == null) {
+            photoPathsArray = new ArrayList<>();
+        } else {
+            String uriString = uri.normalizeScheme().toString();
+            for (int i = 0; i < photoPathsArray.size(); i++) {
+                Uri existing = photoPathsArray.get(i).uri;
+                if (existing != null && uriString.equals(existing.normalizeScheme().toString())) {
+                    return false;
+                }
+            }
+        }
+        SendMessagesHelper.SendingMediaInfo info = new SendMessagesHelper.SendingMediaInfo();
+        info.uri = uri;
+        info.isVideo = isVideo;
+        photoPathsArray.add(info);
+        return true;
+    }
+
     public Dialog getVisibleDialog() {
         for (int i = visibleDialogs.size() - 1; i >= 0; --i) {
             Dialog dialog = visibleDialogs.get(i);
@@ -548,6 +592,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         setupActionBarLayout();
         drawerLayoutContainer.setParentActionBarLayout(actionBarLayout);
         actionBarLayout.setDrawerLayoutContainer(drawerLayoutContainer);
+        syncDrawerContainerEnabled();
         actionBarLayout.setFragmentStack(mainFragmentsStack);
         actionBarLayout.setFragmentStackChangedListener(() -> {
             checkSystemBarColors(true, false);
@@ -743,7 +788,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         BackupAgent.requestBackup();
 
         RestrictedLanguagesSelectActivity.checkRestrictedLanguages(false);
-        if (Build.VERSION.SDK_INT >= 34) {
+        if (Build.VERSION.SDK_INT >= 34 && ExteraConfig.getPredictiveBackIntensity() > 0) {
             if (onBackAnimationCallback == null) {
                 onBackAnimationCallback =  new OnBackAnimationCallback() {
                     private AnimationNotificationsLocker locker = new AnimationNotificationsLocker();
@@ -751,6 +796,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
                     private boolean started = false;
                     private boolean invoked = false;
+                    private boolean drawerPredictiveBackStarted = false;
 
                     @Override
                     public void onBackInvoked() {
@@ -766,6 +812,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         }
                         if (!onBackPressed(true))
                             return;
+                        if (drawerPredictiveBackStarted && drawerLayoutContainer != null && drawerLayoutContainer.getDrawerContainer() != null) {
+                            drawerLayoutContainer.getDrawerContainer().commitPredictiveBack();
+                            return;
+                        }
                         if (actionBarLayout != null) {
                             actionBarLayout.onBackInvoked();
                         } else {
@@ -778,11 +828,16 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         started = true;
                         invoked = false;
                         predictiveBackStarted = false;
+                        drawerPredictiveBackStarted = false;
                     }
 
                     private void onBackStartedInternal(BackEvent backEvent) {
                         if (AndroidUtilities.isTablet()) return;
                         if (!onBackPressed(false)) return;
+                        if (drawerLayoutContainer != null && drawerLayoutContainer.getDrawerContainer() != null && drawerLayoutContainer.getDrawerContainer().startPredictiveBack()) {
+                            drawerPredictiveBackStarted = true;
+                            return;
+                        }
                         if (actionBarLayout != null) {
                             boolean started = actionBarLayout.onBackStarted(backEvent.getTouchX(), backEvent.getTouchY());
                             if (started && !locked) {
@@ -809,8 +864,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         final float fixedProgress = Math.max(0, progress - LAZY_START) / (1 - LAZY_START);
 
                         if (AndroidUtilities.isTablet()) return;
+                        if (drawerPredictiveBackStarted && drawerLayoutContainer != null && drawerLayoutContainer.getDrawerContainer() != null) {
+                            drawerLayoutContainer.getDrawerContainer().updatePredictiveBackProgress(fixedProgress);
+                            return;
+                        }
                         if (actionBarLayout != null) {
-                            actionBarLayout.onBackProgress(fixedProgress);
+                            actionBarLayout.onBackProgress(fixedProgress, backEvent.getTouchY());
                         }
                     }
 
@@ -824,7 +883,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         }
 
                         if (AndroidUtilities.isTablet()) return;
-                        if (actionBarLayout != null) {
+                        if (drawerPredictiveBackStarted && drawerLayoutContainer != null && drawerLayoutContainer.getDrawerContainer() != null) {
+                            drawerLayoutContainer.getDrawerContainer().cancelPredictiveBack();
+                            drawerPredictiveBackStarted = false;
+                        } else if (actionBarLayout != null) {
                             actionBarLayout.onBackCancelled();
                         }
                     }
@@ -1237,6 +1299,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             layersActionBarLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
             rightActionBarLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
         }
+        if (drawerLayoutContainer != null && drawerLayoutContainer.getDrawerContainer() != null) {
+            drawerLayoutContainer.getDrawerContainer().onAccountChanged();
+        }
         if (!ApplicationLoader.mainInterfacePaused) {
             ConnectionsManager.getInstance(currentAccount).setAppPaused(false, false);
         }
@@ -1244,8 +1309,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             showTosActivity(account, UserConfig.getInstance(account).unacceptedTermsOfService);
         }
         updateCurrentConnectionState(currentAccount);
+        ApplicationLoader.updateMapsProvider();
 
         switchingAccount = false;
+        AndroidUtilities.runOnUIThread(() -> PillStackConfig.notifySettingsChanged(PillType.GRAM.getId(), PillType.BTC.getId(), PillType.USD.getId()), 150);
     }
 
     private void switchToAvailableAccountOrLogout() {
@@ -1329,6 +1396,19 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             .add(NotificationCenter.currentUserPremiumStatusChanged)
             .add(NotificationCenter.chatSwitchedForum)
             .add(NotificationCenter.guardBotDecisionResult);
+    }
+
+    private void syncDrawerContainerEnabled() {
+        if (drawerLayoutContainer == null) {
+            return;
+        }
+        if (ExteraConfig.getNavigationDrawer()) {
+            if (drawerLayoutContainer.getDrawerContainer() == null) {
+                drawerLayoutContainer.setDrawerContainer(new DrawerContainer(this));
+            }
+        } else if (drawerLayoutContainer.getDrawerContainer() != null) {
+            drawerLayoutContainer.setDrawerContainer(null);
+        }
     }
 
     private void checkLayout() {
@@ -1696,12 +1776,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                             }
                             if (!error && uri != null) {
                                 if (type != null && type.startsWith("image/") || uri.toString().toLowerCase().endsWith(".jpg")) {
-                                    if (photoPathsArray == null) {
-                                        photoPathsArray = new ArrayList<>();
-                                    }
-                                    SendMessagesHelper.SendingMediaInfo info = new SendMessagesHelper.SendingMediaInfo();
-                                    info.uri = uri;
-                                    photoPathsArray.add(info);
+                                    addSharedPhotoUri(uri, false);
                                 } else {
                                     String originalPath = uri.toString();
                                     if (dialogId == 0 && originalPath != null) {
@@ -1807,14 +1882,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                                         parcelable = Uri.parse(parcelable.toString());
                                     }
                                     Uri uri = (Uri) parcelable;
-                                    if (photoPathsArray == null) {
-                                        photoPathsArray = new ArrayList<>();
-                                    }
-                                    SendMessagesHelper.SendingMediaInfo info = new SendMessagesHelper.SendingMediaInfo();
-                                    info.uri = uri;
                                     final String itemType = getContentResolver().getType(uri);
-                                    info.isVideo = itemType != null ? itemType.startsWith("video/") : type.startsWith("video/");
-                                    photoPathsArray.add(info);
+                                    addSharedPhotoUri(uri, itemType != null ? itemType.startsWith("video/") : type.startsWith("video/"));
                                 }
                             } else {
                                 Set<String> exportUris = MessagesController.getInstance(intentAccount[0]).exportUri;
@@ -6778,6 +6847,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         pipActivityHandler.onPause();
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.stopAllHeavyOperations, 4096);
         ApplicationLoader.mainInterfacePaused = true;
+        Choreographer60FpsContent.onApplicationStateChanged();
         int account = currentAccount;
         Utilities.stageQueue.postRunnable(() -> {
             ApplicationLoader.mainInterfacePausedStageQueue = true;
@@ -6991,6 +7061,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             editorView.destroy();
         }
         FloatingDebugController.onDestroy();
+        IconPickerController.onDestroy();
         AnimatedEmojiDrawable.dropGlobalEmojiCache();
         if (BuildConfig.DEBUG_PRIVATE_VERSION) {
             LeakDetector.getInstance().stop();
@@ -7027,6 +7098,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.startAllHeavyOperations, 4096);
         MediaController.getInstance().setFeedbackView(feedbackView = actionBarLayout.getView(), true);
         ApplicationLoader.mainInterfacePaused = false;
+        Choreographer60FpsContent.onApplicationStateChanged();
         MessagesController.getInstance(currentAccount).sortDialogs(null);
         showLanguageAlert(false);
         Utilities.stageQueue.postRunnable(() -> {
@@ -7166,6 +7238,15 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
+        DisplayMetrics displayMetrics = super.getResources().getDisplayMetrics();
+        for (WeakReference<ExteraResources> ref : resHistory) {
+            ExteraResources resources = ref.get();
+            if (resources == null) {
+                resHistory.remove(ref);
+            } else {
+                resources.updateConfiguration(newConfig, displayMetrics);
+            }
+        }
         AndroidUtilities.checkDisplaySize(this, newConfig);
         AndroidUtilities.setPreferredMaxRefreshRate(getWindow());
         super.onConfigurationChanged(newConfig);
@@ -7232,7 +7313,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 updateCurrentConnectionState(account);
             }
         } else if (id == NotificationCenter.mainUserInfoChanged) {
-
+            syncDrawerContainerEnabled();
         } else if (id == NotificationCenter.attachMenuBotsDidLoad) {
 
         } else if (id == NotificationCenter.needShowAlert) {
@@ -7596,6 +7677,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 onThemeLoadFinish();
             }
         } else if (id == NotificationCenter.screenStateChanged) {
+            Choreographer60FpsContent.onApplicationStateChanged();
             if (ApplicationLoader.mainInterfacePaused) {
                 return;
             }
@@ -8371,7 +8453,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     public boolean onBackPressed(boolean invoked) {
-        if (FloatingDebugController.onBackPressed(invoked)) {
+        if (FloatingDebugController.onBackPressed(invoked) || IconPickerController.onBackPressed(invoked)) {
             return false;
         }
         if (passcodeDialog != null && passcodeDialog.passcodeView.getVisibility() == View.VISIBLE) {

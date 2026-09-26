@@ -54,6 +54,10 @@ import android.widget.TextView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.text.LocaleUtils;
+import com.exteragram.messenger.utils.ui.UIUtil;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ChatObject;
@@ -991,10 +995,11 @@ public class PhotoPickerActivity extends BaseFragment implements NotificationCen
             if (commentTextView != null) {
                 commentTextView.onDestroy();
             }
-            commentTextView = new EditTextEmoji(context, sizeNotifierFrameLayout, null, EditTextEmoji.STYLE_DIALOG, false);
+            commentTextView = new EditTextEmoji(context, sizeNotifierFrameLayout, null, EditTextEmoji.STYLE_DIALOG, UserConfig.getInstance(currentAccount).isPremium() || LocaleUtils.canUseLocalPremiumEmojis(currentAccount));
             InputFilter[] inputFilters = new InputFilter[1];
             inputFilters[0] = new InputFilter.LengthFilter(MessagesController.getInstance(UserConfig.selectedAccount).maxCaptionLength);
             commentTextView.setFilters(inputFilters);
+            commentTextView.allowEmojisForNonPremium(LocaleUtils.canUseLocalPremiumEmojis(currentAccount));
             commentTextView.setHint(LocaleController.getString(R.string.AddCaption));
             commentTextView.onResume();
             EditTextBoldCursor editText = commentTextView.getEditText();
@@ -1042,7 +1047,7 @@ public class PhotoPickerActivity extends BaseFragment implements NotificationCen
             sizeNotifierFrameLayout.addView(writeButtonContainer, LayoutHelper.createFrame(60, 60, Gravity.RIGHT | Gravity.BOTTOM, 0, 0, 12, 10));
 
             writeButton = new ImageView(context);
-            writeButtonDrawable = Theme.createSimpleSelectorCircleDrawable(AndroidUtilities.dp(56), Theme.getColor(Theme.key_dialogFloatingButton), Theme.getColor(Build.VERSION.SDK_INT >= 21 ? Theme.key_dialogFloatingButtonPressed : Theme.key_dialogFloatingButton));
+            writeButtonDrawable = UIUtil.createFabBackground(56, getThemedColor(Theme.key_chat_editMediaButton), getThemedColor(Theme.key_dialogFloatingButtonPressed));
             if (Build.VERSION.SDK_INT < 21) {
                 Drawable shadowDrawable = context.getResources().getDrawable(R.drawable.floating_shadow_profile).mutate();
                 shadowDrawable.setColorFilter(new PorterDuffColorFilter(0xff000000, PorterDuff.Mode.MULTIPLY));
@@ -1060,7 +1065,11 @@ public class PhotoPickerActivity extends BaseFragment implements NotificationCen
                     @SuppressLint("NewApi")
                     @Override
                     public void getOutline(View view, Outline outline) {
-                        outline.setOval(0, 0, AndroidUtilities.dp(56), AndroidUtilities.dp(56));
+                        if (ExteraConfig.getSquareFab()) {
+                            outline.setRoundRect(0, 0, AndroidUtilities.dp(56), AndroidUtilities.dp(56), AndroidUtilities.dp(16));
+                        } else {
+                            outline.setOval(0, 0, AndroidUtilities.dp(56), AndroidUtilities.dp(56));
+                        }
                     }
                 });
             }

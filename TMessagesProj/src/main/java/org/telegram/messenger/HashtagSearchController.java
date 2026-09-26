@@ -6,6 +6,7 @@ import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 
+import com.exteragram.messenger.utils.chats.ChatUtils;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
@@ -237,7 +238,12 @@ public class HashtagSearchController {
             if (res instanceof TLRPC.messages_Messages) {
                 TLRPC.messages_Messages messages = (TLRPC.messages_Messages) res;
                 ArrayList<MessageObject> messageObjects = new ArrayList<>();
+                int filtered = 0;
                 for (TLRPC.Message msg : messages.messages) {
+                    if (ChatUtils.hasRestrictionReason(msg.restriction_reason, "terms")) {
+                        filtered++;
+                        continue;
+                    }
                     MessageObject obj = new MessageObject(currentAccount, msg, null, null, null, null, null, true, true, 0, false, false, false, searchType);
                     if (obj.hasValidGroupId()) {
                         obj.isPrimaryGroupMessage = true;
@@ -246,6 +252,7 @@ public class HashtagSearchController {
                     messageObjects.add(obj);
                 }
 
+                final int filteredCount = filtered;
                 AndroidUtilities.runOnUIThread(() -> {
                     if (reqId[0] == search.reqId) {
                         search.reqId = -1;
@@ -253,6 +260,10 @@ public class HashtagSearchController {
                         return;
                     }
                     search.loading = false;
+                    if (search.lastOffsetId == 0 && search.messages.isEmpty()) {
+                        search.filteredCount = 0;
+                    }
+                    search.filteredCount += filteredCount;
                     search.lastOffsetRate = messages.next_rate;
 
                     for (MessageObject msg : messageObjects) {
@@ -269,7 +280,7 @@ public class HashtagSearchController {
 
                     if (!messages.messages.isEmpty()) {
                         TLRPC.Message lastMsg = messages.messages.get(messages.messages.size() - 1);
-                        search.lastOffsetId = lastMsg.realId;
+                        search.lastOffsetId = lastMsg.realId != 0 ? lastMsg.realId : lastMsg.id;
                         search.lastOffsetPeer = lastMsg.peer_id;
                     }
 
@@ -278,7 +289,12 @@ public class HashtagSearchController {
                     MessagesController.getInstance(currentAccount).putChats(messages.chats, false);
 
                     search.endReached = messages.messages.size() < limit;
-                    search.count = Math.max(messages.count, messages.messages.size());
+                    search.count = Math.max(Math.max(messages.count - search.filteredCount, 0), search.messages.size());
+
+                    if (messageObjects.isEmpty() && !search.endReached) {
+                        searchHashtag(null, guid, searchType, loadIndex);
+                        return;
+                    }
 
                     NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.messagesDidLoad, 0L, messageObjects.size(), messageObjects, false, 0, 0, 0, 0, 2, true, guid, loadIndex, 0, 0, ChatActivity.MODE_SEARCH);
                     NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.hashtagSearchUpdated, guid, search.count, search.endReached, search.getMask(), search.selectedIndex, 0);
@@ -351,6 +367,7 @@ public class HashtagSearchController {
         public String lastHashtag;
         public int selectedIndex;
         public int count;
+        public int filteredCount;
         public boolean endReached;
 
         int getMask() {
@@ -382,6 +399,7 @@ public class HashtagSearchController {
             lastHashtag = null;
             selectedIndex = 0;
             count = 0;
+            filteredCount = 0;
             endReached = false;
         }
     }

@@ -11,6 +11,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 
+import com.exteragram.messenger.ExteraConfig;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
@@ -59,7 +60,7 @@ public class BusinessBotButton extends FrameLayout {
         TLRPC.User user = chatActivity.getMessagesController().getUser(botId);
         avatarDrawable = new AvatarDrawable();
         avatarDrawable.setInfo(user);
-        avatarView.setRoundRadius(dp(16));
+        avatarView.setRoundRadius(ExteraConfig.getAvatarCorners(32));
         avatarView.setForUserOrChat(user, avatarDrawable);
         addView(avatarView, LayoutHelper.createFrame(32, 32, Gravity.CENTER_VERTICAL | Gravity.LEFT, 10, 0, 10, 0));
 

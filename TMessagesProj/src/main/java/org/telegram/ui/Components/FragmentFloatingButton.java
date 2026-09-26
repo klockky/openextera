@@ -18,11 +18,15 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RawRes;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.ui.FabUiHelper;
+import com.exteragram.messenger.utils.ui.UIUtil;
+
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.utils.ViewOutlineProviderImpl;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
-import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProviderThemed;
+import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceColor;
 
 import java.util.ArrayList;
@@ -70,33 +74,20 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
 
         ScaleStateListAnimator.apply(this);
         if (!isSubButton) {
-            setOutlineProvider(ViewOutlineProviderImpl.BOUNDS_OVAL);
-            setTranslationZ(dpf2(0.5f));
+            if (ExteraConfig.getSquareFab()) {
+                setOutlineProvider(ViewOutlineProviderImpl.boundsWithPaddingRoundRect(0, dp(FabUiHelper.getFabCornerRadiusDp())));
+            } else {
+                setOutlineProvider(ViewOutlineProviderImpl.BOUNDS_OVAL);
+            }
+            setTranslationZ(dpf2(FabUiHelper.getFabElevationDp()));
         }
 
         if (isSubButton) {
-            iBlur3ColorProviderTabs = new BlurredBackgroundColorProviderThemed(null, Theme.key_dialogBackground) {
-                @Override
-                public int getStrokeColorTop() {
-                    return isDark() ? 0x06FFFFFF : 0x11000000;
-                }
-
-                @Override
-                public int getStrokeColorBottom() {
-                    return isDark() ? 0x11FFFFFF : 0x20000000;
-                }
-
-                @Override
-                public int getShadowColor() {
-                    return isDark() ? 0x04FFFFFF : 0x20000000;
-                }
-            };
             iBlur3SourceColor = new BlurredBackgroundSourceColor();
             iBlur3Background = iBlur3SourceColor.createDrawable();
-            iBlur3Background.setColorProvider(iBlur3ColorProviderTabs);
-            iBlur3Background.setStrokeWidth(dpf2(0.4f), dpf2(0.4f));
-            iBlur3Background.setRadius(dp(18));
-            iBlur3Background.setPadding(dp(5.66f));
+            iBlur3Background.setColorProvider(BlurredBackgroundProviderImpl.subFloatingButton(resourcesProvider));
+            iBlur3Background.setRadius(dp(FabUiHelper.getSubFabBackgroundRadiusDp()));
+            iBlur3Background.setPadding(dp(FabUiHelper.getSubFabPaddingDp()));
         }
 
         updateColors();
@@ -145,25 +136,23 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
 
     private BlurredBackgroundSourceColor iBlur3SourceColor;
     private BlurredBackgroundDrawable iBlur3Background;
-    private BlurredBackgroundColorProviderThemed iBlur3ColorProviderTabs;
 
     public void updateColors() {
         if (isSubButton) {
             imageView.setColorFilter(Theme.getColor(Theme.key_actionBarDefaultIcon, resourcesProvider), PorterDuff.Mode.SRC_IN);
             progressView.setProgressColor(Theme.getColor(Theme.key_actionBarDefaultIcon, resourcesProvider));
 
-            iBlur3SourceColor.setColor(Theme.getColor(Theme.key_windowBackgroundWhite));
-            iBlur3ColorProviderTabs.updateColors();
+            iBlur3SourceColor.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
             iBlur3Background.updateColors();
             invalidate();
 
-            int rad = dp(18);
+            int rad = dp(FabUiHelper.getSubFabBackgroundRadiusDp());
             int pressedColor = Theme.getColor(Theme.key_listSelector, resourcesProvider);
-            setBackground(Theme.createInsetRoundRectDrawable(pressedColor, rad, dp(6)));
+            setBackground(Theme.createInsetRoundRectDrawable(pressedColor, rad, dp(FabUiHelper.getSubFabPaddingDp())));
         } else {
             imageView.setColorFilter(Theme.getColor(Theme.key_chats_actionIcon, resourcesProvider), PorterDuff.Mode.SRC_IN);
             progressView.setProgressColor(Theme.getColor(Theme.key_chats_actionIcon, resourcesProvider));
-            setBackground(Theme.createSimpleSelectorCircleDrawable(dp(48),
+            setBackground(UIUtil.createFabBackground(FabUiHelper.getFabSizeDp(),
                 Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider),
                 Theme.getColor(Theme.key_featuredStickers_addButtonPressed, resourcesProvider)
             ));
@@ -173,22 +162,22 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
     public static final int SIZE = 48;
 
     public static FrameLayout.LayoutParams createSubButtonLayoutParams() {
-        return LayoutHelper.createFrame(48, 48,
+        return LayoutHelper.createFrame(FabUiHelper.getFabSizeDp(), FabUiHelper.getFabSizeDp(),
                 (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.BOTTOM,
-                20, 0, 20, 14);
+                20, 0, 20, FabUiHelper.getSubFabBottomMarginDp());
     }
 
     public static FrameLayout.LayoutParams createDefaultLayoutParams() {
-        return LayoutHelper.createFrame(48, 48,
+        return LayoutHelper.createFrame(FabUiHelper.getFabSizeDp(), FabUiHelper.getFabSizeDp(),
                 (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.BOTTOM,
-                20, 0, 20, 14);
+                20, 0, 20, FabUiHelper.getFabBottomMarginDp());
     }
 
 
     public static FrameLayout.LayoutParams createDefaultLayoutParamsBig() {
         return LayoutHelper.createFrame(56, 56,
                 (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.BOTTOM,
-                20 /*24*/, 0, 20 /*24*/, 14 /*16*/);
+                20 /*24*/, 0, 20 /*24*/, FabUiHelper.getFabBottomMarginDp());
     }
 
     private float additionalTranslationY;

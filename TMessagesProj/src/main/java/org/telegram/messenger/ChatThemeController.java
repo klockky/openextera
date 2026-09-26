@@ -9,6 +9,7 @@ import android.util.LongSparseArray;
 
 import androidx.annotation.Nullable;
 
+import com.exteragram.messenger.ExteraConfig;
 import org.telegram.messenger.wallpaper.WallpaperBitmapHolder;
 import org.telegram.messenger.wallpaper.WallpaperGiftPatternPosition;
 import org.telegram.messenger.wallpaper.pgm.PGMImage;
@@ -369,6 +370,9 @@ public class ChatThemeController extends BaseController {
     }
 
     public TLRPC.WallPaper getDialogWallpaper(long dialogId) {
+        if (!ExteraConfig.getCustomThemes()) {
+            return null;
+        }
         if (dialogId >= 0) {
             TLRPC.UserFull userFull = getMessagesController().getUserFull(dialogId);
             if (userFull != null) {

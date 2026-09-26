@@ -71,6 +71,7 @@ android {
             jniDebuggable true
             signingConfig signingConfigs.debug
             applicationIdSuffix ".beta"
+            versionNameSuffix "-" + new Date().format("MMdd.HHmm", TimeZone.getTimeZone("UTC"))
             minifyEnabled false
             shrinkResources false
             multiDexEnabled true
