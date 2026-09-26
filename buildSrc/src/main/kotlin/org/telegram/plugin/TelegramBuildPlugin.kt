@@ -4,6 +4,7 @@ import com.android.build.api.variant.AndroidComponentsExtension
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.register
+import org.telegram.tasks.localization.GenerateExteraLocaleAssetsTask
 import org.telegram.tasks.localization.GenerateLocalizationUtilsJavaTask
 
 class TelegramBuildPlugin : Plugin<Project> {
@@ -22,6 +23,7 @@ class TelegramBuildPlugin : Plugin<Project> {
                 localizationFiles.from(
                     project.fileTree("src/main/res") {
                         include("values-*/strings.xml")
+                        include("values-*/strings_extera.xml")
                     }
                 )
 
@@ -35,6 +37,28 @@ class TelegramBuildPlugin : Plugin<Project> {
             variant.sources.java?.addGeneratedSourceDirectory(
                 task,
                 GenerateLocalizationUtilsJavaTask::javaOutputDir
+            )
+
+            val exteraLocalesTask = project.tasks.register<GenerateExteraLocaleAssetsTask>(
+                "generate${suffix}ExteraLocaleAssets"
+            ) {
+                localeFiles.from(
+                    project.fileTree("src/main/res") {
+                        include("values/strings_extera.xml")
+                        include("values-*/strings_extera.xml")
+                    }
+                )
+
+                assetsOutputDir.set(
+                    project.layout.buildDirectory.dir(
+                        "generated/exteraLocaleAssets/${variant.name}"
+                    )
+                )
+            }
+
+            variant.sources.assets?.addGeneratedSourceDirectory(
+                exteraLocalesTask,
+                GenerateExteraLocaleAssetsTask::assetsOutputDir
             )
         }
     }

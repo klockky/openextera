@@ -30,6 +30,14 @@ public interface IMapsProvider {
     ICameraUpdate newCameraUpdateLatLngBounds(ILatLngBounds bounds, int padding);
     IMapStyleOptions loadRawResourceStyle(Context context, int resId);
     String getMapsAppPackageName();
+
+    default boolean isApplicationRequired() {
+        return true;
+    }
+
+    default boolean supportsOtherMapTypes() {
+        return true;
+    }
     int getInstallMapsString();
 
     interface IMap {

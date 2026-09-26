@@ -222,6 +222,7 @@ public class StarParticlesView extends View {
         public int type = -1;
         public Theme.ResourcesProvider resourcesProvider;
         public int colorKey = Theme.key_premiumStartSmallStarsColor;
+        public Integer color;
 
         public long pausedTime;
 
@@ -467,6 +468,9 @@ public class StarParticlesView extends View {
         }
 
         protected int getPathColor(int i) {
+            if (color != null) {
+                return color;
+            }
             if (type == 100) {
                 return ColorUtils.setAlphaComponent(Theme.getColor(colorKey, resourcesProvider), 200);
             } else {

@@ -130,6 +130,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
+import com.exteragram.messenger.feed.FeedChatIntegration;
+import com.exteragram.messenger.feed.FeedController;
+import com.exteragram.messenger.feed.FeedMessageUtils;
+import com.exteragram.messenger.utils.chats.WidePosts;
 import com.google.zxing.common.detector.MathUtils;
 
 import org.telegram.PhoneFormat.PhoneFormat;
@@ -681,6 +685,17 @@ public class ChatActivity extends BaseFragment implements
     public static final int SEARCH_MY_MESSAGES = 1;
     public static final int SEARCH_PUBLIC_POSTS = 2;
     public static final int SEARCH_CHANNEL_POSTS = 3;
+    public static final int SEARCH_FEED = 4;
+
+    private FeedChatIntegration feedIntegration;
+    private Runnable glassSourceInvalidationCallback;
+    public boolean hasMainTabs;
+    private final Runnable loadNextNewerFeedPage = () -> {
+        if (isFinished) {
+            return;
+        }
+        loadNewerFeed(true);
+    };
     private int searchType;
 
     public TL_account.TL_businessChatLink businessLink = null;
@@ -2613,6 +2628,10 @@ public class ChatActivity extends BaseFragment implements
 
     public ChatActivity(Bundle args) {
         super(args);
+
+        if (args != null) {
+            hasMainTabs = args.getBoolean("hasMainTabs", false);
+        }
 
         navbarContentSourceWallpaper = new BlurredBackgroundSourceWrapped();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SharedConfig.chatBlurEnabled()) {
@@ -10624,6 +10643,10 @@ public class ChatActivity extends BaseFragment implements
     private boolean forceScrollToMessageBottom;
 
     public void onPageDownClicked() {
+        onPageDownClicked(false);
+    }
+
+    public void onPageDownClicked(boolean ignoreReturnMessage) {
         wasManualScroll = true;
         textSelectionHelper.cancelTextSelectionRunnable();
         final Runnable inCaseLoading = () -> {
@@ -10631,8 +10654,15 @@ public class ChatActivity extends BaseFragment implements
         };
         if (createUnreadMessageAfterId != 0) {
             scrollToMessageId(createUnreadMessageAfterId, 0, false, returnToLoadIndex, true, 0, null, inCaseLoading);
-        } else if (returnToMessageId > 0) {
+        } else if (!ignoreReturnMessage && returnToMessageId > 0) {
             scrollToMessageId(returnToMessageId, 0, true, returnToLoadIndex, true, 0, null, inCaseLoading);
+        } else if (isFeedSearch()) {
+            if (!feedIntegration().scrollToUnreadDividerIfAbove()) {
+                feedIntegration().settleUnreadDivider();
+                scrollToLastMessage(true, false, inCaseLoading);
+                feedIntegration().onScrollAnimationFinished();
+            }
+            forceScrollToMessageBottom = false;
         } else {
             scrollToLastMessage(true, !forceScrollToMessageBottom, inCaseLoading);
             forceScrollToMessageBottom = false;
@@ -10641,6 +10671,478 @@ public class ChatActivity extends BaseFragment implements
                 forceNextPinnedMessageId = pinnedMessageIds.get(0);
             }
         }
+    }
+
+    public boolean isFeedSearch() {
+        return chatMode == MODE_SEARCH && searchType == SEARCH_FEED;
+    }
+
+    private FeedChatIntegration feedIntegration() {
+        if (feedIntegration == null) {
+            feedIntegration = new FeedChatIntegration(currentAccount, new FeedChatIntegration.Host() {
+                @Override
+                public ArrayList<MessageObject> getMessages() {
+                    return messages;
+                }
+
+                @Override
+                public boolean isListReady() {
+                    return isFeedSearch() && chatAdapter != null;
+                }
+
+                @Override
+                public void notifyMessageRemoved(int index) {
+                    if (chatAdapter != null) {
+                        chatAdapter.notifyItemRemoved(chatAdapter.messagesStartRow + index);
+                    }
+                }
+
+                @Override
+                public void notifyMessageInserted(int index) {
+                    if (chatAdapter != null) {
+                        chatAdapter.notifyItemInserted(chatAdapter.messagesStartRow + index);
+                    }
+                }
+
+                @Override
+                public void notifyAllMessagesChanged() {
+                    if (chatAdapter != null) {
+                        chatAdapter.notifyDataSetChanged();
+                    }
+                }
+
+                @Override
+                public void scrollToMessage(int index, int offset) {
+                    if (chatLayoutManager == null || chatAdapter == null) {
+                        return;
+                    }
+                    chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + index, offset, false);
+                }
+
+                @Override
+                public void scrollToMessageAnimated(int index, int offset) {
+                    if (chatLayoutManager == null || chatAdapter == null || chatListView == null || chatScrollHelper == null || chatListView.isFastScrollAnimationRunning() || index < 0 || index >= messages.size()) {
+                        return;
+                    }
+                    chatAdapter.updateRowsSafe();
+                    chatScrollHelper.setScrollDirection(RecyclerAnimationScrollHelper.SCROLL_DIRECTION_DOWN);
+                    chatScrollHelperCallback.scrollTo = messages.get(index);
+                    chatScrollHelperCallback.lastBottom = false;
+                    chatScrollHelperCallback.lastItemOffset = offset;
+                    chatScrollHelperCallback.lastPadding = (int) chatListViewPaddingTop;
+                    final int position = chatAdapter.messagesStartRow + index;
+                    chatScrollHelperCallback.position = position;
+                    chatScrollHelperCallback.offset = offset;
+                    chatScrollHelperCallback.bottom = false;
+                    chatScrollHelper.scrollToPosition(position, offset, false, true);
+                }
+
+                @Override
+                public int getLastVisibleMessageIndex() {
+                    if (chatLayoutManager == null || chatAdapter == null) {
+                        return Integer.MIN_VALUE;
+                    }
+                    final int lastVisible = chatLayoutManager.findLastVisibleItemPosition();
+                    if (lastVisible == RecyclerView.NO_POSITION) {
+                        return Integer.MIN_VALUE;
+                    }
+                    return lastVisible - chatAdapter.messagesStartRow;
+                }
+
+                @Override
+                public int getNewestVisibleMessageIndex() {
+                    if (chatLayoutManager != null && chatAdapter != null) {
+                        final int firstVisible = chatLayoutManager.findFirstVisibleItemPosition();
+                        final int lastVisible = chatLayoutManager.findLastVisibleItemPosition();
+                        if (firstVisible != RecyclerView.NO_POSITION && lastVisible != RecyclerView.NO_POSITION) {
+                            return Math.min(firstVisible, lastVisible) - chatAdapter.messagesStartRow;
+                        }
+                    }
+                    return Integer.MIN_VALUE;
+                }
+
+                @Override
+                public boolean canScrollToNewer() {
+                    return chatListView != null && chatListView.canScrollVertically(1);
+                }
+
+                @Override
+                public int getDistanceToNewerPx() {
+                    if (chatListView == null) {
+                        return Integer.MAX_VALUE;
+                    }
+                    if (chatListView.canScrollVertically(1)) {
+                        return chatListView.computeVerticalScrollRange() - chatListView.computeVerticalScrollExtent() - chatListView.computeVerticalScrollOffset();
+                    }
+                    return 0;
+                }
+
+                @Override
+                public boolean isListScrollIdle() {
+                    return chatListView != null && chatListView.getScrollState() == RecyclerView.SCROLL_STATE_IDLE;
+                }
+
+                @Override
+                public boolean isScrollAnimationRunning() {
+                    return chatListView != null && chatListView.isFastScrollAnimationRunning();
+                }
+
+                @Override
+                public void setPagedownCount(int count) {
+                    if (sideControlsButtonsLayout != null) {
+                        sideControlsButtonsLayout.setButtonCount(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, count, true);
+                    }
+                }
+
+                @Override
+                public void setPagedownButtonVisible(boolean visible) {
+                    if (visible != canShowPagedownButton) {
+                        canShowPagedownButton = visible;
+                        updatePagedownButtonVisibility(true);
+                    }
+                }
+
+                @Override
+                public boolean isPagedownButtonVisible() {
+                    return sideControlsButtonsLayout != null && sideControlsButtonsLayout.isButtonVisible(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN);
+                }
+
+                @Override
+                public void invalidateVisiblePart() {
+                    invalidateMessagesVisiblePart();
+                }
+
+                @Override
+                public int nextStableId() {
+                    return lastStableId++;
+                }
+
+                @Override
+                public boolean isFirstLoadComplete() {
+                    return firstMessagesLoaded;
+                }
+
+                @Override
+                public void reloadFeed() {
+                    ChatActivity.this.reloadFeed();
+                }
+
+                @Override
+                public void requestOlderFeedPage() {
+                    final FeedController feedController = FeedController.getInstance(currentAccount);
+                    if (loading || feedController.getStore().isEndReached()) {
+                        return;
+                    }
+                    final int loadIndex = lastLoadIndex;
+                    loading = true;
+                    waitingForLoad.add(loadIndex);
+                    if (feedController.loadMore(classGuid, loadIndex)) {
+                        lastLoadIndex++;
+                    } else {
+                        waitingForLoad.remove((Integer) loadIndex);
+                        loading = false;
+                    }
+                }
+
+                @Override
+                public FeedChatIntegration.ScrollAnchor captureScrollAnchor() {
+                    if (chatListView != null && chatAdapter != null) {
+                        for (int i = 0; i < chatListView.getChildCount(); i++) {
+                            final View child = chatListView.getChildAt(i);
+                            MessageObject messageObject = null;
+                            if (child instanceof ChatMessageCell) {
+                                messageObject = ((ChatMessageCell) child).getMessageObject();
+                            } else if (child instanceof ChatActionCell) {
+                                messageObject = ((ChatActionCell) child).getMessageObject();
+                            }
+                            if (FeedMessageUtils.isPostRow(messageObject)) {
+                                return new FeedChatIntegration.ScrollAnchor(messageObject, getScrollingOffsetForView(child));
+                            }
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public void restoreScrollAnchor(FeedChatIntegration.ScrollAnchor anchor) {
+                    if (anchor == null || chatLayoutManager == null || chatAdapter == null) {
+                        return;
+                    }
+                    final int index = messages.indexOf(anchor.row);
+                    if (index < 0) {
+                        return;
+                    }
+                    chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + index, anchor.offsetTop);
+                }
+
+                @Override
+                public void materializeRow(MessageObject messageObject) {
+                    if (messagesDict[0].indexOfKey(messageObject.getId()) >= 0) {
+                        return;
+                    }
+                    if (messageObject.stableId == 0) {
+                        messageObject.stableId = lastStableId++;
+                    }
+                    messagesDict[0].put(messageObject.getId(), messageObject);
+                    ArrayList<MessageObject> dayArray = messagesByDays.get(messageObject.dateKey);
+                    if (dayArray == null) {
+                        dayArray = new ArrayList<>();
+                        messagesByDays.put(messageObject.dateKey, dayArray);
+                        messagesByDaysSorted.put(messageObject.dateKeyInt, dayArray);
+                    }
+                    dayArray.add(messageObject);
+                    if (messageObject.hasValidGroupId()) {
+                        MessageObject.GroupedMessages groupedMessages = groupedMessagesMap.get(messageObject.getGroupId());
+                        if (groupedMessages == null) {
+                            groupedMessages = new MessageObject.GroupedMessages();
+                            groupedMessages.groupId = messageObject.getGroupId();
+                            groupedMessagesMap.put(groupedMessages.groupId, groupedMessages);
+                        }
+                        if (!groupedMessages.messages.contains(messageObject)) {
+                            groupedMessages.messages.add(0, messageObject);
+                            groupedMessages.calculate();
+                        }
+                    }
+                    getMessagesController().getTranslateController().checkTranslation(messageObject, false);
+                }
+
+                @Override
+                public void dematerializeRow(MessageObject messageObject) {
+                    unregisterFeedRow(messageObject);
+                }
+
+                @Override
+                public void deleteRows(ArrayList<Integer> ids) {
+                    processFeedDeletedMessages(ids, 0, false, false);
+                }
+
+                @Override
+                public int stableIdForDateHeader(int date) {
+                    return getStableIdForDateObject(date);
+                }
+
+                @Override
+                public void onFeedListChanged() {
+                    if (chatAdapter != null) {
+                        chatAdapter.updateRowsSafe();
+                    }
+                    if (messagesSearchAdapter != null) {
+                        messagesSearchAdapter.notifyDataSetChanged();
+                    }
+                    updateSearchListEmptyView();
+                }
+
+                @Override
+                public void showEmptyFeedState() {
+                    showMessagesSearchListView(true);
+                }
+
+                @Override
+                public void showEmptyFeedProgress() {
+                    if (hashtagSearchEmptyView != null) {
+                        hashtagSearchEmptyView.showProgress(true);
+                    }
+                }
+
+                @Override
+                public BaseFragment getFragment() {
+                    return ChatActivity.this;
+                }
+            }, !hasMainTabs);
+        }
+        return feedIntegration;
+    }
+
+    public void reattachCurrentFeedVideoTexture() {
+        if (!isFeedSearch() || fragmentView == null || fragmentView.getParent() == null || chatListView == null) {
+            return;
+        }
+        final MessageObject playing = MediaController.getInstance().getPlayingMessageObject();
+        if (playing == null || !(playing.isRoundVideo() || playing.isVideo()) || playing.eventId != 0) {
+            return;
+        }
+        if (FeedController.getInstance(currentAccount).getMessage(playing.getDialogId(), playing.getRealId()) == null) {
+            return;
+        }
+        final TextureView textureView = createTextureView(false);
+        if (textureView != null) {
+            MediaController.getInstance().setTextureView(textureView, aspectRatioFrameLayout, videoPlayerContainer, true);
+            updateTextureViewPosition(true, false);
+        }
+    }
+
+    public void setFeedChannelsChangedCallback(Runnable callback) {
+        if (callback == null && feedIntegration == null) {
+            return;
+        }
+        feedIntegration().setChannelsChangedCallback(callback);
+    }
+
+    public void setFeedViewportActive(boolean active) {
+        feedIntegration().setViewportActive(active);
+    }
+
+    public void saveFeedScrollPosition() {
+        if (!isFeedSearch() || hasMainTabs || feedIntegration == null) {
+            return;
+        }
+        feedIntegration.saveDrawerScrollPosition();
+    }
+
+    public void reloadFeed() {
+        if (!isFeedSearch()) {
+            return;
+        }
+        if (feedIntegration != null) {
+            feedIntegration.resetUiState();
+        }
+        if (messagesSearchAdapter == null) {
+            FeedController.getInstance(currentAccount).clear();
+            firstMessagesLoaded = false;
+            return;
+        }
+        showMessagesSearchListView(false);
+        clearChatData(true);
+        startMessageAppearTransitionMs = 0;
+        firstMessagesLoaded = false;
+        FeedController.getInstance(currentAccount).clear();
+        messagesSearchAdapter.notifyDataSetChanged();
+        messagesSearchListView.requestLayout();
+        if (messagesSearchListView.getLayoutManager() != null) {
+            messagesSearchListView.getLayoutManager().scrollToPosition(0);
+        }
+        updateSearchListEmptyView();
+        hashtagSearchEmptyView.showProgress(true);
+        firstLoadMessages();
+    }
+
+    public void loadNewerFeed(boolean preserveScroll) {
+        if (!isFeedSearch()) {
+            return;
+        }
+        final FeedController feedController = FeedController.getInstance(currentAccount);
+        if (feedController.getMessages().isEmpty()) {
+            if (!feedController.isLoading()) {
+                reloadFeed();
+            }
+            return;
+        }
+        final int loadIndex = lastLoadIndex;
+        waitingForLoad.add(loadIndex);
+        if (feedController.loadNewer(classGuid, loadIndex)) {
+            if (preserveScroll) {
+                feedIntegration().onPreserveScrollLoadStarted(loadIndex);
+            }
+            lastLoadIndex++;
+        } else {
+            waitingForLoad.remove((Integer) loadIndex);
+        }
+    }
+
+    public void markFeedAsRead() {
+        if (isFeedSearch()) {
+            feedIntegration().markAllRead();
+        }
+    }
+
+    public void refreshFeedUnreadDivider() {
+        if (isFeedSearch()) {
+            FeedController.getInstance(currentAccount).refreshReadState(() -> {
+                if (isFeedSearch()) {
+                    feedIntegration().onReadStateRefreshed();
+                }
+            });
+        }
+    }
+
+    public void onFeedChannelsChanged(boolean reload) {
+        if (isFeedSearch()) {
+            if (reload) {
+                reloadFeed();
+            } else {
+                reconcileFeedList();
+            }
+        }
+    }
+
+    public void applyFeedConfigChange() {
+        if (isFeedSearch()) {
+            FeedController.getInstance(currentAccount).applyConfigChange(needReload -> {
+                if (isFinished || !isFeedSearch()) {
+                    return;
+                }
+                if (needReload) {
+                    reloadFeed();
+                } else {
+                    reconcileFeedList();
+                    loadNextNewerFeedPage.run();
+                }
+                feedIntegration().notifyChannelsChanged();
+            });
+        }
+    }
+
+    public void reconcileFeedList() {
+        if (!isFeedSearch() || chatAdapter == null) {
+            return;
+        }
+        feedIntegration().reconcileWithStore();
+    }
+
+    public void hideFeedChannelWithUndo(long channelId, CharSequence title) {
+        feedIntegration().hideChannelWithUndo(channelId, title);
+    }
+
+    private void processFeedDeletedMessages(ArrayList<Integer> ids, long channelId, boolean sent, boolean thanos) {
+        if (ids.isEmpty()) {
+            return;
+        }
+        processDeletedMessages(ids, channelId, sent, thanos);
+        for (int i = 0; i < ids.size(); i++) {
+            unregisterFeedRow(messagesDict[0].get(ids.get(i)));
+        }
+        feedIntegration().onMessagesDeleted();
+        feedIntegration().refreshAds();
+        if (messagesSearchAdapter != null) {
+            messagesSearchAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void unregisterFeedRow(MessageObject messageObject) {
+        if (messageObject == null || messagesDict[0].get(messageObject.getId()) != messageObject || messages.indexOf(messageObject) >= 0) {
+            return;
+        }
+        final int id = messageObject.getId();
+        messagesDict[0].remove(id);
+        repliesMessagesDict.remove(id);
+        updateReplyMessageOwners(id, null);
+        final ArrayList<MessageObject> dayArray = messagesByDays.get(messageObject.dateKey);
+        if (dayArray != null) {
+            dayArray.remove(messageObject);
+            if (dayArray.isEmpty()) {
+                messagesByDays.remove(messageObject.dateKey);
+                messagesByDaysSorted.remove(messageObject.dateKeyInt);
+            }
+        }
+        if (messageObject.hasValidGroupId()) {
+            final MessageObject.GroupedMessages groupedMessages = groupedMessagesMap.get(messageObject.getGroupId());
+            if (groupedMessages != null) {
+                groupedMessages.messages.remove(messageObject);
+                if (groupedMessages.messages.isEmpty()) {
+                    groupedMessagesMap.remove(groupedMessages.groupId);
+                } else {
+                    groupedMessages.calculate();
+                }
+            }
+        }
+    }
+
+    public BlurredBackgroundSourceRenderNode getGlassSource() {
+        return LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? glassBackgroundSourceRenderNode : glassBackgroundSourceFrostedRenderNode;
+    }
+
+    public void setGlassSourceInvalidationCallback(Runnable callback) {
+        glassSourceInvalidationCallback = callback;
     }
 
     public ActionBarMenuItem getHeaderItem() {
@@ -29759,6 +30261,14 @@ public class ChatActivity extends BaseFragment implements
 
     Bulletin.Delegate bulletinDelegate;
 
+    public int getBulletinTopOffset() {
+        return bulletinDelegate != null ? bulletinDelegate.getTopOffset(0) : AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight();
+    }
+
+    public int getBulletinBottomOffset() {
+        return bulletinDelegate != null ? bulletinDelegate.getBottomOffset(0) : 0;
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -34906,6 +35416,24 @@ public class ChatActivity extends BaseFragment implements
         if (lastVisibleItem != RecyclerView.NO_POSITION) {
             chatLayoutManager.scrollToPositionWithOffset(lastVisibleItem, top);
         }
+    }
+
+    public void updateWidePostsCommentsAuthor(ArrayList<MessageObject> updatedMessages) {
+        if (updatedMessages == null || updatedMessages.isEmpty()) {
+            return;
+        }
+        updateVisibleRows(messageObject -> {
+            if (!WidePosts.isCommentsChannelPost(messageObject)) {
+                return false;
+            }
+            for (int i = 0; i < updatedMessages.size(); ++i) {
+                final MessageObject updated = updatedMessages.get(i);
+                if (updated != null && updated.getId() == messageObject.getId() && updated.getDialogId() == messageObject.getDialogId()) {
+                    return true;
+                }
+            }
+            return false;
+        });
     }
 
     private void updateVisibleRows(Utilities.CallbackReturn<MessageObject, Boolean> condition) {
@@ -47141,6 +47669,9 @@ public class ChatActivity extends BaseFragment implements
                 actionBar.invalidate();
             }
             invalidateAllGlassAttachedViews();
+            if (glassSourceInvalidationCallback != null) {
+                glassSourceInvalidationCallback.run();
+            }
         }
 
         //}

@@ -51,6 +51,23 @@
 -keep class ru.noties.jlatexmath.** { *; }
 -dontwarn org.scilab.forge.jlatexmath.**
 
+# exteraGram / OpenExtera
+# Native ad blocker: JNI methods are resolved by name, and the native side constructs the data classes.
+-keepclasseswithmembernames,includedescriptorclasses class com.exteragram.messenger.adblock.interop.NativeAdBlock {
+    native <methods>;
+}
+-keep class com.exteragram.messenger.adblock.interop.NativeAdBlock { *; }
+-keep class com.exteragram.messenger.adblock.data.BlockResult { <init>(...); *; }
+-keep class com.exteragram.messenger.adblock.data.FilterListMetadata { <init>(...); *; }
+-keep class com.exteragram.messenger.adblock.data.UrlCosmeticResources { <init>(...); *; }
+
+# Vosk speech recognition talks to libvosk through JNA, which relies on reflection
+-keep class com.sun.jna.** { *; }
+-keep class * implements com.sun.jna.** { *; }
+-keep class org.vosk.** { *; }
+-dontwarn java.awt.**
+-dontwarn com.sun.jna.**
+
 # Use -keep to explicitly keep any other classes shrinking would remove
 #-dontoptimize
 #-dontobfuscate

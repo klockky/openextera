@@ -9,6 +9,7 @@ import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import org.telegram.tasks.LanguageCodes
 import java.io.File
 import java.nio.charset.StandardCharsets
 import kotlin.text.iterator
@@ -89,6 +90,11 @@ abstract class GenerateLocalizationUtilsJavaTask : DefaultTask() {
 
                 for (tag in languageTags) {
                     if (!tag.contains('-')) {
+                        for (alias in LanguageCodes.legacyAliases(tag)) {
+                            java.append("            case \"")
+                            java.append(escapeJavaString(alias))
+                            java.appendLine("\":")
+                        }
                         java.append("            case \"")
                         java.append(escapeJavaString(tag))
                         java.append("\": return \"")
@@ -145,13 +151,13 @@ abstract class GenerateLocalizationUtilsJavaTask : DefaultTask() {
         val regionIndex = qualifier.indexOf("-r")
 
         if (regionIndex != -1) {
-            val language = qualifier.substring(0, regionIndex)
+            val language = LanguageCodes.normalize(qualifier.substring(0, regionIndex))
             val region = qualifier.substring(regionIndex + 2)
 
             return "$language-$region"
         }
 
-        return qualifier
+        return LanguageCodes.normalize(qualifier)
     }
 
     private fun escapeJavaString(

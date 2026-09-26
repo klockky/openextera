@@ -47,6 +47,28 @@ public class MainTabsLayout extends AnimatedLinearLayout {
     private static final int[] PASS_PADDINGS_DP = {16, 8, 4};
 
     private int maxWidthPx;
+    private boolean fillAvailableWidth;
+    private boolean swipeSelectionEnabled = true;
+    private boolean drawTopDivider;
+    private final Paint dividerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    public void setFillAvailableWidth(boolean fill) {
+        if (fillAvailableWidth != fill) {
+            fillAvailableWidth = fill;
+            requestLayout();
+        }
+    }
+
+    public void setSwipeSelectionEnabled(boolean enabled) {
+        swipeSelectionEnabled = enabled;
+    }
+
+    public void setDrawTopDivider(boolean draw) {
+        if (drawTopDivider != draw) {
+            drawTopDivider = draw;
+            invalidate();
+        }
+    }
 
     public void setMaxWidth(int maxWidthPx) {
         if (this.maxWidthPx != maxWidthPx) {
@@ -96,19 +118,33 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
         float totalWidth = 0;
         int totalWeight = 0;
-        for (int a = 0, N = getChildCount(); a < N; a++) {
-            final View child = getChildAt(a);
-            if (!isViewVisible(child)) {
-                tabsTextWidth[a] = tabsTextWidthWithMargin[a] = 0;
+        if (fillAvailableWidth && visibleChildCount > 0) {
+            final float tabWidth = maxTotalWidthForTabs / (float) visibleChildCount;
+            for (int a = 0, N = getChildCount(); a < N; a++) {
+                if (!isViewVisible(getChildAt(a))) {
+                    tabsTextWidth[a] = tabsTextWidthWithMargin[a] = 0;
+                } else {
+                    tabsTextWidthWithMargin[a] = tabWidth;
+                }
                 tabsWeight[a] = 0;
-                continue;
             }
+            totalWidth = maxTotalWidthForTabs;
+            totalWeight = visibleChildCount;
+        } else {
+            for (int a = 0, N = getChildCount(); a < N; a++) {
+                final View child = getChildAt(a);
+                if (!isViewVisible(child)) {
+                    tabsTextWidth[a] = tabsTextWidthWithMargin[a] = 0;
+                    tabsWeight[a] = 0;
+                    continue;
+                }
 
-            tabsTextWidthWithMargin[a] = tabsTextWidth[a] + tabPadding * 2;
-            tabsWeight[a] = tabsTextWidthWithMargin[a] > (maxTabTextWidthIfEq + tabPadding * 2) ? 0 : 1;
+                tabsTextWidthWithMargin[a] = tabsTextWidth[a] + tabPadding * 2;
+                tabsWeight[a] = tabsTextWidthWithMargin[a] > (maxTabTextWidthIfEq + tabPadding * 2) ? 0 : 1;
 
-            totalWidth += tabsTextWidthWithMargin[a];
-            totalWeight += tabsWeight[a];
+                totalWidth += tabsTextWidthWithMargin[a];
+                totalWeight += tabsWeight[a];
+            }
         }
 
         if (totalWeight == 0) {
@@ -321,6 +357,10 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         }
 
         super.dispatchDraw(canvas);
+        if (drawTopDivider) {
+            dividerPaint.setColor(Theme.getDividerColor(resourcesProvider));
+            canvas.drawLine(0, 1, getMeasuredWidth(), 1, dividerPaint);
+        }
     }
 
 
@@ -463,6 +503,9 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
         @Override
         public boolean onLongPressRequestedAt(View view, float x, float y) {
+            if (!swipeSelectionEnabled) {
+                return false;
+            }
             checkPivot(view, x, y);
             isInLongPress = true;
             AndroidUtilities.cancelRunOnUIThread(restoreDrawSelector);

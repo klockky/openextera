@@ -72,6 +72,22 @@ public class EditTextCell extends FrameLayout {
         }
     }
 
+    public void setMaxLength(int maxLength) {
+        this.maxLength = maxLength;
+        updateLimitText();
+        editText.invalidate();
+    }
+
+    public void setMultiline(boolean multiline) {
+        if (multiline) {
+            editText.setMaxLines(5);
+            editText.setSingleLine(false);
+        } else {
+            editText.setMaxLines(1);
+            editText.setSingleLine(true);
+        }
+    }
+
     public void setShowLimitWhenNear(int near) {
         showLimitWhenNear = near;
         updateLimitText();

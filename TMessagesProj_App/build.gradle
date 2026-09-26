@@ -26,6 +26,8 @@ android {
     buildToolsVersion '36.0.0'
 
     defaultConfig.applicationId = APP_PACKAGE
+    // Google Maps SDK key (restricted to your package + signing key), see BUILDING-OPENEXTERA.md
+    defaultConfig.manifestPlaceholders = [mapsApiKey: localProperty("openextera.mapsApiKey", "OPENEXTERA_MAPS_API_KEY", "")]
 
     sourceSets.main.jniLibs.srcDirs = ['../TMessagesProj/jni/']
 
@@ -36,8 +38,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
 
         coreLibraryDesugaringEnabled true
     }
@@ -77,6 +79,7 @@ android {
         }
 
         standalone {
+            matchingFallbacks = ['release']
             debuggable false
             jniDebuggable false
             signingConfig signingConfigs.release
@@ -134,7 +137,7 @@ android {
             sourceSets.release {
                 manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
             }
-            minSdkVersion 23
+            minSdkVersion 24
             ext {
                 abiVersionCode = 2
             }
@@ -177,7 +180,7 @@ android {
     }
 
     defaultConfig {
-        minSdkVersion 21
+        minSdkVersion 24
         targetSdkVersion 36
         versionName APP_VERSION_NAME
         ndkVersion "27.2.12479018"
@@ -205,4 +208,22 @@ android {
     }
 }
 
-apply plugin: 'com.google.gms.google-services'
+def localProperty(String propName, String envName, String defaultValue) {
+    def propsFile = rootProject.file('local.properties')
+    def value = null
+    if (propsFile.exists()) {
+        def props = new Properties()
+        propsFile.withInputStream { props.load(it) }
+        value = props.getProperty(propName)
+    }
+    if (value == null || value.trim().isEmpty()) {
+        value = System.getenv(envName)
+    }
+    return (value == null || value.trim().isEmpty()) ? defaultValue : value.trim()
+}
+
+// There is no google-services.json for OpenExtera yet; apply the plugin only when one is provided.
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+}
+

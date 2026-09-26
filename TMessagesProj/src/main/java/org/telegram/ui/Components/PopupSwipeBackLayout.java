@@ -10,6 +10,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.util.SparseIntArray;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -134,12 +135,17 @@ public class PopupSwipeBackLayout extends FrameLayout {
         int i = indexOfChild(child);
         int s = canvas.save();
         if (i != 0) {
-            if (foregroundColor == 0) {
-                foregroundPaint.setColor(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, resourcesProvider));
+            if (foregroundDrawable != null) {
+                foregroundDrawable.setBounds((int) child.getX(), 0, (int) (child.getX() + child.getMeasuredWidth()), getMeasuredHeight());
+                foregroundDrawable.draw(canvas);
             } else {
-                foregroundPaint.setColor(foregroundColor);
+                if (foregroundColor == 0) {
+                    foregroundPaint.setColor(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, resourcesProvider));
+                } else {
+                    foregroundPaint.setColor(foregroundColor);
+                }
+                canvas.drawRect(child.getX(), 0, child.getX() + child.getMeasuredWidth(), getMeasuredHeight(), foregroundPaint);
             }
-            canvas.drawRect(child.getX(), 0, child.getX() + child.getMeasuredWidth(), getMeasuredHeight(), foregroundPaint);
         }
         boolean b = super.drawChild(canvas, child, drawingTime);
         if (i == 0) {
@@ -148,6 +154,12 @@ public class PopupSwipeBackLayout extends FrameLayout {
         }
         canvas.restoreToCount(s);
         return b;
+    }
+
+    private Drawable foregroundDrawable;
+    public void setForegroundDrawable(Drawable drawable) {
+        foregroundDrawable = drawable;
+        invalidate();
     }
 
     public void invalidateTransforms() {

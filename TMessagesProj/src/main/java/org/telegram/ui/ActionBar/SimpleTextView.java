@@ -98,6 +98,8 @@ public class SimpleTextView extends View implements Drawable.Callback {
     private int textHeight;
     public int rightDrawableX;
     public int rightDrawableY;
+    public int rightDrawable2X;
+    public int rightDrawable2Y;
     private boolean wasLayout;
 
     private boolean leftDrawableOutside, rightDrawableOutside;
@@ -130,6 +132,9 @@ public class SimpleTextView extends View implements Drawable.Callback {
     private OnClickListener rightDrawableOnClickListener;
     private boolean maybeClick;
     private float touchDownX, touchDownY;
+    private OnClickListener rightDrawable2OnClickListener;
+    private boolean maybeClick2;
+    private float touchDown2X, touchDown2Y;
 
     private AnimatedEmojiSpan.EmojiGroupedSpans emojiStack;
     private int emojiCacheType = AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES;
@@ -930,6 +935,8 @@ public class SimpleTextView extends View implements Drawable.Callback {
                 y = getPaddingTop() + (textHeight - dh) / 2 + rightDrawableTopPadding;
             }
             rightDrawable2.setBounds(x, y, x + dw, y + dh);
+            rightDrawable2X = x + (dw >> 1);
+            rightDrawable2Y = y + (dh >> 1);
             rightDrawable2.draw(canvas);
             totalWidth += drawablePadding + dw;
         }
@@ -976,6 +983,8 @@ public class SimpleTextView extends View implements Drawable.Callback {
                     y = getPaddingTop() + (textHeight - dh) / 2 + rightDrawableTopPadding;
                 }
                 rightDrawable2.setBounds(x, y, x + dw, y + dh);
+                rightDrawable2X = x + (dw >> 1);
+                rightDrawable2Y = y + (dh >> 1);
                 rightDrawable2.draw(canvas);
             }
         }
@@ -1328,6 +1337,44 @@ public class SimpleTextView extends View implements Drawable.Callback {
         rightDrawableOnClickListener = onClickListener;
     }
 
+    public void setRightDrawable2OnClick(OnClickListener onClickListener) {
+        rightDrawable2OnClickListener = onClickListener;
+    }
+
+    private boolean handleRightDrawable2Touch(MotionEvent event) {
+        if (rightDrawable2OnClickListener == null || rightDrawable2 == null) {
+            return false;
+        }
+        AndroidUtilities.rectTmp.set(rightDrawable2X - dp(16), rightDrawable2Y - dp(16), rightDrawable2X + dp(16), rightDrawable2Y + dp(16));
+        if (event.getAction() == MotionEvent.ACTION_DOWN && AndroidUtilities.rectTmp.contains((int) event.getX(), (int) event.getY())) {
+            maybeClick2 = true;
+            touchDown2X = event.getX();
+            touchDown2Y = event.getY();
+            getParent().requestDisallowInterceptTouchEvent(true);
+            if (rightDrawable2 instanceof PressableDrawable) {
+                ((PressableDrawable) rightDrawable2).setPressed(true);
+            }
+        } else if (event.getAction() == MotionEvent.ACTION_MOVE && maybeClick2) {
+            if (Math.abs(event.getX() - touchDown2X) >= AndroidUtilities.touchSlop || Math.abs(event.getY() - touchDown2Y) >= AndroidUtilities.touchSlop) {
+                maybeClick2 = false;
+                getParent().requestDisallowInterceptTouchEvent(false);
+                if (rightDrawable2 instanceof PressableDrawable) {
+                    ((PressableDrawable) rightDrawable2).setPressed(false);
+                }
+            }
+        } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+            if (maybeClick2 && event.getAction() == MotionEvent.ACTION_UP) {
+                rightDrawable2OnClickListener.onClick(this);
+            }
+            if (rightDrawable2 instanceof PressableDrawable) {
+                ((PressableDrawable) rightDrawable2).setPressed(false);
+            }
+            maybeClick2 = false;
+            getParent().requestDisallowInterceptTouchEvent(false);
+        }
+        return maybeClick2;
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (rightDrawableOnClickListener != null && rightDrawable != null) {
@@ -1359,7 +1406,8 @@ public class SimpleTextView extends View implements Drawable.Callback {
                 getParent().requestDisallowInterceptTouchEvent(false);
             }
         }
-        return super.onTouchEvent(event) || maybeClick;
+        final boolean drawable2Touch = handleRightDrawable2Touch(event);
+        return super.onTouchEvent(event) || maybeClick || drawable2Touch;
     }
 
     public static interface PressableDrawable {

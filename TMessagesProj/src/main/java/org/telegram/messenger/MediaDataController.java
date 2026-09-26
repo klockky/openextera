@@ -1308,6 +1308,37 @@ public class MediaDataController extends BaseController {
         });
     }
 
+    public void setPlaceholderImageByIndex(BackupImageView imageView, String setName, int index, String filter) {
+        setPlaceholderImageByIndex(imageView, setName, index, filter, null);
+    }
+
+    public void setPlaceholderImageByIndex(BackupImageView imageView, String setName, int index, String filter, Theme.ResourcesProvider resourcesProvider) {
+        final TLRPC.InputStickerSet inputStickerSet = new TLRPC.TL_inputStickerSetShortName();
+        inputStickerSet.short_name = setName;
+        final String tag = "sticker_" + setName + "_" + index;
+        imageView.setTag(tag);
+        imageView.setImageDrawable(null);
+        imageView.setColorFilter(null);
+        MediaDataController.getInstance(currentAccount).getStickerSet(inputStickerSet, 0, false, set -> {
+            if (!tag.equals(imageView.getTag())) {
+                return;
+            }
+            if (set == null || set.documents == null || set.documents.isEmpty() || index < 0 || index >= set.documents.size()) {
+                imageView.setImageDrawable(null);
+                return;
+            }
+            final TLRPC.Document document = set.documents.get(index);
+            if (document == null) {
+                imageView.setImageDrawable(null);
+                return;
+            }
+            Drawable thumbDrawable = DocumentObject.getSvgThumb(document, Theme.key_windowBackgroundWhiteGrayIcon, 0.2f, 1f, null);
+            imageView.setColorFilter(MessageObject.isTextColorEmoji(document) ? Theme.getAnimatedEmojiColorFilter(resourcesProvider) : null);
+            imageView.setImage(ImageLocation.getForDocument(document), filter, thumbDrawable, 0, document);
+            imageView.invalidate();
+        });
+    }
+
     public static String inputSetKey(TLRPC.InputStickerSet i) {
         if (i instanceof TLRPC.TL_inputStickerSetID)
             return "id" + i.id + "access_hash" + i.access_hash;

@@ -7,6 +7,8 @@ import android.text.TextUtils;
 import android.util.LongSparseArray;
 import android.view.View;
 
+import com.exteragram.messenger.preferences.utils.SettingsRegistry;
+
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.TLObject;
@@ -64,6 +66,14 @@ public class UItem extends AdapterWithDiffUtils.Item {
     public Object object2;
 
     public boolean withUsername = true;
+
+    public boolean drawLine = true;
+    public boolean multiline;
+    public boolean prioritizeTitleOverValue;
+    public int checkBoxIconResId;
+    public Integer iconColor;
+    public boolean exteraExpandableSwitch;
+    public View.OnClickListener switchClickCallback;
 
     public UItem(int viewType, boolean selectable) {
         super(viewType, selectable);
@@ -231,6 +241,17 @@ public class UItem extends AdapterWithDiffUtils.Item {
         return i;
     }
 
+    public static UItem asButtonWithSubtext(int id, int iconResId, CharSequence text, CharSequence subtext, int pad, int intValue) {
+        UItem i = new UItem(UniversalAdapter.VIEW_TYPE_TEXT, false);
+        i.id = id;
+        i.iconResId = iconResId;
+        i.text = text;
+        i.subtext = subtext;
+        i.pad = pad;
+        i.intValue = intValue;
+        return i;
+    }
+
     public static UItem asButton(int id, int iconResId, CharSequence text) {
         UItem i = new UItem(UniversalAdapter.VIEW_TYPE_TEXT, false);
         i.id = id;
@@ -299,6 +320,23 @@ public class UItem extends AdapterWithDiffUtils.Item {
         return i;
     }
 
+    public static UItem asCheck(int id, CharSequence text, int iconResId) {
+        UItem i = new UItem(UniversalAdapter.VIEW_TYPE_CHECK, false);
+        i.id = id;
+        i.text = text;
+        i.iconResId = iconResId;
+        return i;
+    }
+
+    public static UItem asCheck(int id, CharSequence text, CharSequence value, boolean multiline) {
+        UItem i = new UItem(UniversalAdapter.VIEW_TYPE_CHECK, false);
+        i.id = id;
+        i.text = text;
+        i.textValue = value;
+        i.multiline = multiline;
+        return i;
+    }
+
     public static UItem asRadio(int id, CharSequence text) {
         UItem i = new UItem(UniversalAdapter.VIEW_TYPE_RADIO, false);
         i.id = id;
@@ -328,6 +366,10 @@ public class UItem extends AdapterWithDiffUtils.Item {
         i.text = text;
         i.subtext = subtext;
         return i;
+    }
+
+    public static UItem asShadow() {
+        return new UItem(UniversalAdapter.VIEW_TYPE_SHADOW, false);
     }
 
     public static UItem asShadow(CharSequence text) {
@@ -387,6 +429,12 @@ public class UItem extends AdapterWithDiffUtils.Item {
         UItem item = new UItem(UniversalAdapter.VIEW_TYPE_USER_ADD, false);
         item.dialogId = dialogId;
         item.textValue = query;
+        return item;
+    }
+
+    public static UItem asSlideView(int id, String[] choices, int chosen, Utilities.Callback<Integer> whenChose) {
+        UItem item = asSlideView(choices, chosen, whenChose);
+        item.id = id;
         return item;
     }
 
@@ -535,6 +583,16 @@ public class UItem extends AdapterWithDiffUtils.Item {
         return item;
     }
 
+    public static UItem asExteraExpandableSwitch(int id, CharSequence text, CharSequence subText, View.OnClickListener onSwitchClick) {
+        UItem item = new UItem(UniversalAdapter.VIEW_TYPE_EXPANDABLE_SWITCH, false);
+        item.id = id;
+        item.text = text;
+        item.animatedText = subText;
+        item.exteraExpandableSwitch = true;
+        item.switchClickCallback = onSwitchClick;
+        return item;
+    }
+
     public static UItem asExpandableSwitch(int id, CharSequence text, CharSequence subText) {
         UItem item = new UItem(UniversalAdapter.VIEW_TYPE_EXPANDABLE_SWITCH, false);
         item.id = id;
@@ -671,6 +729,51 @@ public class UItem extends AdapterWithDiffUtils.Item {
 
     public UItem setEnabled(boolean enabled) {
         this.enabled = enabled;
+        return this;
+    }
+
+    public UItem setTransparent(boolean transparent) {
+        this.transparent = transparent;
+        return this;
+    }
+
+    public UItem setCheckBoxIcon(int resId) {
+        this.checkBoxIconResId = resId;
+        return this;
+    }
+
+    public UItem showDivider(boolean show) {
+        this.hideDivider = !show;
+        return this;
+    }
+
+    public UItem setSearchable(BaseFragment fragment) {
+        if (SettingsRegistry.isValidForSearch(this)) {
+            SettingsRegistry.getInstance().addSearchEntry(fragment, this);
+        }
+        return this;
+    }
+
+    public UItem setLinkAlias(String alias, BaseFragment fragment) {
+        if (SettingsRegistry.isValidForLinkAliases(this)) {
+            SettingsRegistry.getInstance().addLinkAliasForOption(alias, fragment, this);
+        }
+        return this;
+    }
+
+    public UItem setIcon(int resId) {
+        this.iconResId = resId;
+        return this;
+    }
+
+    public UItem setColorfulIcon(int resId, int color) {
+        setIcon(resId);
+        this.iconColor = color;
+        return this;
+    }
+
+    public UItem prioritizeTitleOverValue(boolean prioritize) {
+        this.prioritizeTitleOverValue = prioritize;
         return this;
     }
 

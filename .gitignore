@@ -14,3 +14,12 @@ TMessagesProj_AppHockeyApp/afat/
 TMessagesProj_AppStandalone/afat/
 TMessagesProj_AppHuawei/afat/
 TMessagesProj/jni/ffmpeg/build_android
+
+# OpenExtera
+.kotlin/
+**/.cxx/
+captures/
+*.apk
+*.aab
+# Firebase config is project-specific and must not be committed
+google-services.json

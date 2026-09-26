@@ -249,6 +249,10 @@ public class AndroidUtilities {
     public final static int REPLACING_TAG_TYPE_LINK_NBSP = 3;
     public final static int REPLACING_TAG_TYPE_UNDERLINE = 4;
 
+    public final static String TYPEFACE_ROBOTO_REGULAR = "fonts/rregular.ttf";
+    public final static String TYPEFACE_ROBOTO_ITALIC = "fonts/ritalic.ttf";
+    public final static String TYPEFACE_ROBOTO_CONDENSED_BOLD = "fonts/rcondensedbold.ttf";
+    public final static String TYPEFACE_NUNITO_EXTRABOLD = "fonts/nunito_extrabold.ttf";
     public final static String TYPEFACE_ROBOTO_MEDIUM = "fonts/rmedium.ttf";
     public final static String TYPEFACE_ROBOTO_EXTRA_BOLD = "fonts/rextrabold.ttf";
     public final static String TYPEFACE_ROBOTO_MEDIUM_ITALIC = "fonts/rmediumitalic.ttf";
@@ -268,6 +272,10 @@ public class AndroidUtilities {
             }
         }
         return mediumTypeface;
+    }
+
+    public static Typeface regular() {
+        return getTypeface(TYPEFACE_ROBOTO_REGULAR);
     }
 
     private static final Hashtable<String, Typeface> typefaceCache = new Hashtable<>();
@@ -1244,6 +1252,12 @@ public class AndroidUtilities {
         int end;
     }
 
+    private static final Pattern IPV4_URL = Pattern.compile("(?:\\d{1,3}\\.){3}\\d{1,3}(?:[:/?#]|$)");
+
+    public static String defaultUrlScheme(CharSequence url) {
+        return url != null && IPV4_URL.matcher(url).lookingAt() ? "http://" : "https://";
+    }
+
     private static String makeUrl(String url, String[] prefixes, Matcher matcher) {
         boolean hasPrefix = false;
         for (int i = 0; i < prefixes.length; i++) {
@@ -1799,6 +1813,9 @@ public class AndroidUtilities {
     }
 
     public static boolean isMapsInstalled(BaseFragment fragment) {
+        if (!ApplicationLoader.getMapsProvider().isApplicationRequired()) {
+            return true;
+        }
         String pkg = ApplicationLoader.getMapsProvider().getMapsAppPackageName();
         try {
             ApplicationLoader.applicationContext.getPackageManager().getApplicationInfo(pkg, 0);
@@ -2418,6 +2435,13 @@ public class AndroidUtilities {
                 }
             }
             return typefaceCache.get(assetPath);
+        }
+    }
+
+    public static void clearTypefaceCache() {
+        synchronized (typefaceCache) {
+            typefaceCache.clear();
+            mediumTypeface = null;
         }
     }
 
@@ -4334,6 +4358,10 @@ public class AndroidUtilities {
         String fileName = FileLoader.getAttachFileName(document);
         File f = FileLoader.getInstance(UserConfig.selectedAccount).getPathToAttach(document, true);
         return openForView(f, fileName, document.mime_type, activity, null, false);
+    }
+
+    public static boolean openForView(TLRPC.Document document, Activity activity) {
+        return openForView(document, true, activity);
     }
 
     public static SpannableStringBuilder formatSpannableSimple(CharSequence format, CharSequence... cs) {

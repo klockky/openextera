@@ -283,6 +283,74 @@ public class ItemOptions {
         return options;
     }
 
+    public ItemOptions makeSwipeback(boolean scrollable) {
+        ItemOptions options = new ItemOptions(lastLayout, resourcesProvider);
+        if (scrollable) {
+            ScrollView scrollView = new ScrollView(context) {
+                @Override
+                protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                    super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(Math.min(dp(380), MeasureSpec.getSize(heightMeasureSpec)), MeasureSpec.getMode(heightMeasureSpec)));
+                }
+            };
+            scrollView.setVerticalScrollBarEnabled(false);
+            scrollView.addView(options.linearLayout, LayoutHelper.createScroll(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
+            options.foregroundIndex = lastLayout.addViewToSwipeBack(scrollView);
+        } else {
+            options.foregroundIndex = lastLayout.addViewToSwipeBack(options.linearLayout);
+        }
+        if (lastLayout.getSwipeBack() != null) {
+            lastLayout.getSwipeBack().addOnSwipeBackProgressListener((swipeBack, toProgress, progress) -> {
+                if (toProgress == 0 && progress == 0 || toProgress == 1 && progress == 1) {
+                    dontDismiss = false;
+                }
+            });
+        }
+        return options;
+    }
+
+    private boolean dismissOnMoveOutside;
+    public ItemOptions setDismissOnMoveOutside(boolean dismissOnMoveOutside) {
+        this.dismissOnMoveOutside = dismissOnMoveOutside;
+        return this;
+    }
+
+    public boolean isDismissOnMoveOutside() {
+        return dismissOnMoveOutside;
+    }
+
+    private boolean forceBelowScrim;
+    public ItemOptions forceBelowScrim(boolean force) {
+        forceBelowScrim = force;
+        return this;
+    }
+
+    private boolean canHandleCapturedTouch() {
+        if (layout == null) {
+            return false;
+        }
+        return actionBarPopupWindow != null && actionBarPopupWindow.isShowing() || layout.getParent() != null;
+    }
+
+    public void dispatchCapturedTouchEvent(MotionEvent event) {
+        if (!canHandleCapturedTouch()) {
+            return;
+        }
+        MotionEvent localEvent = MotionEvent.obtain(event);
+        int[] location = new int[2];
+        layout.getLocationOnScreen(location);
+        localEvent.offsetLocation(-location[0], -location[1]);
+        layout.dispatchTouchEvent(localEvent);
+        final int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_MOVE) {
+            updateHover((int) event.getRawX(), (int) event.getRawY());
+        } else if (action == MotionEvent.ACTION_UP) {
+            releaseHover((int) event.getRawX(), (int) event.getRawY());
+        } else if (action == MotionEvent.ACTION_CANCEL) {
+            cancelHover();
+        }
+        localEvent.recycle();
+    }
+
     public LinearLayout getLinearLayout() {
         return linearLayout;
     }
@@ -399,7 +467,7 @@ public class ItemOptions {
         return subItem;
     }
 
-    public void add(ActionBarMenuSubItem subItem) {
+    public ItemOptions add(ActionBarMenuSubItem subItem) {
         AndroidUtilities.removeFromParent(subItem);
         subItem.setPadding(dp(18), 0, dp(18), 0);
 
@@ -413,6 +481,7 @@ public class ItemOptions {
         } else {
             addView(subItem, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         }
+        return this;
     }
 
     public ItemOptions addCheckedIf(boolean condition, boolean checked, CharSequence text, Runnable onClickListener) {
@@ -1429,7 +1498,9 @@ public class ItemOptions {
         int Y;
         float scrimHeight = onTopOfScrim ? 0 : scrimViewBounds.height();
         boolean above = false;
-        if (forceBottom) {
+        if (forceBelowScrim && scrimView != null) {
+            Y = (int) (y + scrimHeight + container.getY());
+        } else if (forceBottom) {
             if (allowMoveScrim) {
                 Y = (int) (y + scrimHeight);
             } else {
@@ -1891,6 +1962,12 @@ public class ItemOptions {
             hoveredItem = null;
             target.setPressed(false);
             target.performClick();
+        } else if (dismissOnMoveOutside && scrimView != null) {
+            int[] location = new int[2];
+            scrimView.getLocationOnScreen(location);
+            if (rawX < location[0] || rawX > location[0] + scrimView.getWidth() || rawY < location[1] || rawY > location[1] + scrimView.getHeight()) {
+                dismiss();
+            }
         }
     }
 

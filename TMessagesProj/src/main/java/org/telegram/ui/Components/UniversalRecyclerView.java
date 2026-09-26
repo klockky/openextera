@@ -262,6 +262,18 @@ public class UniversalRecyclerView extends RecyclerListView {
         reorderingLongPressEnabled = enabled;
     }
 
+    private boolean reorderHandleOnly;
+    public void setReorderHandleOnly(boolean handleOnly) {
+        reorderHandleOnly = handleOnly;
+    }
+
+    public void startDrag(RecyclerView.ViewHolder holder) {
+        if (itemTouchHelper == null || holder == null) {
+            return;
+        }
+        itemTouchHelper.startDrag(holder);
+    }
+
     public boolean isReorderAllowed() {
         return reorderingAllowed;
     }
@@ -328,7 +340,7 @@ public class UniversalRecyclerView extends RecyclerListView {
     private class TouchHelperCallback extends ItemTouchHelper.Callback {
         @Override
         public boolean isLongPressDragEnabled() {
-            return reorderingAllowed && reorderingLongPressEnabled;
+            return reorderingAllowed && !reorderHandleOnly && reorderingLongPressEnabled;
         }
 
         @Override

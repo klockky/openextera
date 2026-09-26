@@ -2092,7 +2092,7 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
             button = new ButtonWithCounterView(context, resourcesProvider).setRound();
             button.setText(getString(R.string.AIEditorStyleCreate));
             button.setOnClickListener(v -> {
-                if (button.isLoading()) return;
+                if (button.isLoading() || localPreview) return;
                 if (!button.isEnabled()) {
                     if (emoji_id == null) {
                         openIconDialog();
@@ -2101,6 +2101,17 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
                 }
 
                 button.setLoading(true);
+                if (localMode) {
+                    final boolean saved = onLocalSaved == null || onLocalSaved.run(titleCell.getText().toString(), promptCell.getText().toString(), emoji_id);
+                    button.setLoading(false);
+                    if (saved) {
+                        dismiss();
+                    } else {
+                        titleCell.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                        AndroidUtilities.shakeView(titleCell);
+                    }
+                    return;
+                }
                 if (editing != null) {
                     final TL_aicompose.updateTone req = new TL_aicompose.updateTone();
                     req.flags |= TLObject.FLAG_0;
@@ -2156,7 +2167,7 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
         }
 
         private void openIconDialog() {
-            if (selectAnimatedEmojiDialog != null) {
+            if (localPreview || selectAnimatedEmojiDialog != null) {
                 return;
             }
             final SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow[] popup = new SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow[1];
@@ -2219,6 +2230,51 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
             return this;
         }
 
+        private boolean localMode;
+        private boolean localEditing;
+        private boolean localPreview;
+        private Utilities.Callback3Return<String, String, Long, Boolean> onLocalSaved;
+
+        public CreateAiStyleAlert setLocalStyle(String title, String prompt, long emojiId, boolean isEditing, int titleMaxLength, int promptMaxLength, Utilities.Callback3Return<String, String, Long, Boolean> onSaved) {
+            localMode = true;
+            localEditing = isEditing;
+            localPreview = false;
+            onLocalSaved = onSaved;
+            emoji_id = emojiId != 0 ? emojiId : null;
+            updateIcon();
+            titleCell.setMaxLength(titleMaxLength);
+            titleCell.editText.setHint(getString(R.string.RoleName));
+            titleCell.setText(title);
+            promptCell.setMaxLength(promptMaxLength);
+            promptCell.setShowLimitWhenNear(Math.max(100, promptMaxLength / 2));
+            promptCell.editText.setHint(getString(R.string.RolePrompt));
+            promptCell.setText(prompt);
+            actionBar.setTitle(getString(isEditing ? R.string.EditRole : R.string.NewRole));
+            button.setText(getString(isEditing ? R.string.AIEditorStyleEdit : R.string.AIEditorStyleCreate));
+            updateButton();
+            adapter.update(false);
+            return this;
+        }
+
+        public CreateAiStyleAlert setLocalStylePreview(String title, String prompt, long emojiId, int titleMaxLength, int promptMaxLength) {
+            setLocalStyle(title, prompt, emojiId, false, titleMaxLength, promptMaxLength, null);
+            localPreview = true;
+            iconButton.setEnabled(false);
+            titleCell.editText.setFocusable(false);
+            titleCell.editText.setFocusableInTouchMode(false);
+            titleCell.editText.setCursorVisible(false);
+            promptCell.editText.setFocusable(false);
+            promptCell.editText.setFocusableInTouchMode(false);
+            promptCell.editText.setCursorVisible(false);
+            promptCell.editText.setMaxLines(Integer.MAX_VALUE);
+            recyclerListView.setPadding(backgroundPaddingLeft, 0, backgroundPaddingLeft, dp(6));
+            buttonContainer.setVisibility(View.GONE);
+            actionBar.setTitle(getString(R.string.Info));
+            updateButton();
+            adapter.update(false);
+            return this;
+        }
+
         private Utilities.Callback<TL_aicompose.AiComposeTone> onToneCreated;
         public CreateAiStyleAlert setOnToneCreated(Utilities.Callback<TL_aicompose.AiComposeTone> listener) {
             this.onToneCreated = listener;
@@ -2243,6 +2299,10 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
         }
 
         private void updateButton() {
+            if (localPreview) {
+                button.setEnabled(false);
+                return;
+            }
             button.setEnabled(
                 emoji_id != null &&
                 titleCell.getText().length() > 0 &&
@@ -2266,15 +2326,21 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
             items.add(UItem.asShadow(null));
             items.add(UItem.asCustom(promptCell));
             items.add(UItem.asShadow(null));
-            if (editing != null) {
+            if (editing != null && !localMode) {
                 items.add(UItem.asButton(1, getString(R.string.AIEditorDeleteStyle)).red());
                 items.add(UItem.asShadow(null));
+            }
+            if (localMode) {
+                return;
             }
             items.add(UItem.asCustomShadow(checkboxCell));
         }
 
         @Override
         protected CharSequence getTitle() {
+            if (localMode) {
+                return getString(localEditing ? R.string.EditRole : R.string.NewRole);
+            }
             return editing != null ? getString(R.string.AIEditorEditStyle) : getString(R.string.AIEditorNewStyle);
         }
     }

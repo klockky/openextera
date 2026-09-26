@@ -1438,6 +1438,7 @@ public class Bulletin {
 
     public static class TwoLineLottieLayout extends ButtonLayout {
 
+        public final StickerImageView stickerImageView;
         public final RLottieImageView imageView;
         public final LinkSpanDrawable.LinksTextView titleTextView;
         public final LinkSpanDrawable.LinksTextView subtitleTextView;
@@ -1449,6 +1450,12 @@ public class Bulletin {
             super(context, resourcesProvider);
             this.textColor = getThemedColor(Theme.key_undo_infoColor);
             setBackground(getThemedColor(Theme.key_undo_background));
+
+            stickerImageView = new StickerImageView(context, UserConfig.selectedAccount);
+            stickerImageView.setStickerPackName("exteraGramPlaceholders");
+            stickerImageView.setVisibility(GONE);
+            stickerImageView.setSize(dp(32), dp(32));
+            addView(stickerImageView, LayoutHelper.createFrameRelatively(56, 48, Gravity.START | Gravity.CENTER_VERTICAL));
 
             imageView = new RLottieImageView(context);
             imageView.setScaleType(ImageView.ScaleType.CENTER);
@@ -1509,6 +1516,12 @@ public class Bulletin {
         public void hideImage() {
             imageView.setVisibility(GONE);
             ((MarginLayoutParams) linearLayout.getLayoutParams()).setMarginStart(dp(10));
+        }
+
+        public void setSticker(int stickerNum) {
+            stickerImageView.setStickerNum(stickerNum);
+            stickerImageView.setVisibility(VISIBLE);
+            imageView.setVisibility(GONE);
         }
     }
 

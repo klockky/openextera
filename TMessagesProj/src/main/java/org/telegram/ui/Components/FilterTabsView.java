@@ -125,6 +125,8 @@ public class FilterTabsView extends FrameLayout {
         public boolean isLocked;
         public boolean noanimate;
 
+        public String emoticon;
+
         public Tab(int i, CharSequence title, boolean noanimate) {
             this.id = i;
             this.title = title;
@@ -1257,6 +1259,18 @@ public class FilterTabsView extends FrameLayout {
         title = Emoji.replaceEmoji(title, textPaint.getFontMetricsInt(), false);
         title = MessageObject.replaceAnimatedEmoji(title, e, textPaint.getFontMetricsInt());
         return title;
+    }
+
+    private boolean isStaticAllChats;
+
+    public void setStaticAllChats(boolean staticAllChats) {
+        isStaticAllChats = staticAllChats;
+    }
+
+    public void addTab(int id, int stableId, String text, String emoticon, ArrayList<TLRPC.MessageEntity> entities, boolean noanimate, boolean isDefault, boolean isLocked) {
+        // TODO(openextera): lite measures/draws the folder icon (emoticon) in the tab — stage 2
+        addTab(id, stableId, text, entities, noanimate, isDefault, isLocked);
+        tabs.get(tabs.size() - 1).emoticon = emoticon;
     }
 
     public void addTab(int id, int stableId, String text, ArrayList<TLRPC.MessageEntity> entities, boolean noanimate, boolean isDefault, boolean isLocked) {

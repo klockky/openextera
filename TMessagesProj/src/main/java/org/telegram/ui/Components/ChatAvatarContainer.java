@@ -37,6 +37,7 @@ import android.widget.ImageView;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 
+import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ChatObject;
@@ -930,6 +931,23 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         botVerificationDrawable.setColor(getThemedColor(Theme.key_profile_verifiedBackground));
         botVerificationDrawable.offset(0, dp(1));
         return botVerificationDrawable;
+    }
+
+    public void setAvatarSizeInDp(int sizeDp) {
+        if (avatarSizeInDp != sizeDp) {
+            avatarSizeInDp = sizeDp;
+            // TODO(openextera): lite also recalculates the avatar round radius via ChatHeaderUiHelper (stage 2)
+            requestLayout();
+        }
+    }
+
+    public void setFeedAvatar() {
+        avatarDrawable.setInfo(UserConfig.getInstance(currentAccount).getClientUserId());
+        avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_SAVED);
+        avatarDrawable.setCustomIcon(Theme.avatarDrawables[25]);
+        if (avatarImageView != null) {
+            avatarImageView.setImage((ImageLocation) null, null, avatarDrawable, null);
+        }
     }
 
     public void setTitle(CharSequence value) {

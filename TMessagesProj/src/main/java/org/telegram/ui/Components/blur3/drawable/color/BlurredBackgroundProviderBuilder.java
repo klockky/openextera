@@ -24,6 +24,8 @@ public class BlurredBackgroundProviderBuilder implements BlurredBackgroundProvid
     private ColorProvider strokeColorTop;
     private ColorProvider strokeColorBottom;
     private ColorProvider backgroundColor;
+    private ColorProvider strokeColorFull;
+    private boolean shadowAlwaysVisible;
     private float strokeWidthTop, strokeWidthBottom, shadowRadius, shadowDx, shadowDy;
 
     public BlurredBackgroundProviderBuilder setShadowColor(@ColorInt int light, @ColorInt int dark) {
@@ -38,6 +40,21 @@ public class BlurredBackgroundProviderBuilder implements BlurredBackgroundProvid
 
     public BlurredBackgroundProviderBuilder setStrokeColorBottom(@ColorInt int light, @ColorInt int dark) {
         strokeColorBottom = create(light, dark);
+        return this;
+    }
+
+    public BlurredBackgroundProviderBuilder setStrokeColorFull(@ColorInt int light, @ColorInt int dark) {
+        this.strokeColorFull = create(light, dark);
+        return this;
+    }
+
+    public BlurredBackgroundProviderBuilder setStrokeColorFull(ColorProvider colorProvider) {
+        this.strokeColorFull = colorProvider;
+        return this;
+    }
+
+    public BlurredBackgroundProviderBuilder setShadowAlwaysVisible() {
+        this.shadowAlwaysVisible = true;
         return this;
     }
 
@@ -94,6 +111,16 @@ public class BlurredBackgroundProviderBuilder implements BlurredBackgroundProvid
     @Override
     public int getStrokeColorBottom() {
         return get(strokeColorBottom, 0);
+    }
+
+    @Override
+    public int getStrokeColorFull() {
+        return strokeColorFull != null ? get(strokeColorFull, 0) : Theme.getDividerColor(resourcesProvider);
+    }
+
+    @Override
+    public boolean isShadowAlwaysVisible() {
+        return shadowAlwaysVisible;
     }
 
     @Override

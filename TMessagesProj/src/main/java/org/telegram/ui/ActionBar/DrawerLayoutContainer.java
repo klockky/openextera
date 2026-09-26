@@ -9,8 +9,10 @@
 package org.telegram.ui.ActionBar;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.drawable.BitmapDrawable;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,15 +24,23 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.exteragram.messenger.drawer.DrawerContainer;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.Utilities;
 
 public class DrawerLayoutContainer extends FrameLayout {
 
     private INavigationLayout parentActionBarLayout;
     private ActionBarLayout actionBarLayout;
+    private DrawerContainer drawerContainer;
     private boolean inLayout;
+
+    private boolean drawCurrentPreviewFragmentAbove;
+    private BitmapDrawable previewBlurDrawable;
+    private float previewStartY;
 
     public DrawerLayoutContainer(Context context) {
         super(context);
@@ -43,21 +53,78 @@ public class DrawerLayoutContainer extends FrameLayout {
         parentActionBarLayout = layout;
     }
 
+    public INavigationLayout getParentActionBarLayout() {
+        return parentActionBarLayout;
+    }
+
     public void setActionBarLayout(ActionBarLayout actionBarLayout) {
         this.actionBarLayout = actionBarLayout;
     }
 
-    public boolean isDrawCurrentPreviewFragmentAbove() {
-        return false;
+    public void setDrawerContainer(DrawerContainer container) {
+        if (drawerContainer == container) {
+            return;
+        }
+        if (drawerContainer != null) {
+            drawerContainer.dispose();
+            removeView(drawerContainer);
+        }
+        drawerContainer = container;
+        if (container != null) {
+            addView(container, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        }
     }
 
+    public DrawerContainer getDrawerContainer() {
+        return drawerContainer;
+    }
+
+    public boolean isDrawCurrentPreviewFragmentAbove() {
+        return drawCurrentPreviewFragmentAbove;
+    }
+
+    public void setDrawCurrentPreviewFragmentAbove(boolean drawAbove) {
+        if (drawCurrentPreviewFragmentAbove != drawAbove) {
+            drawCurrentPreviewFragmentAbove = drawAbove;
+            if (drawAbove) {
+                createBlurDrawable();
+            } else {
+                previewStartY = 0;
+                previewBlurDrawable = null;
+            }
+            invalidate();
+        }
+    }
+
+    private void createBlurDrawable() {
+        int measuredWidth = getMeasuredWidth();
+        int measuredHeight = getMeasuredHeight();
+        int w = (int) (measuredWidth / 6.0f);
+        int h = (int) (measuredHeight / 6.0f);
+        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.scale(1.0f / 6.0f, 1.0f / 6.0f);
+        super.dispatchDraw(canvas);
+        Utilities.stackBlurBitmap(bitmap, Math.max(7, Math.max(w, h) / 180));
+        previewBlurDrawable = new BitmapDrawable(bitmap);
+        previewBlurDrawable.setBounds(0, 0, measuredWidth, measuredHeight);
+    }
+
+    @Override
     public boolean onTouchEvent(MotionEvent ev) {
-        return false;
+        return drawerContainer != null && drawerContainer.handleEdgeSwipeTouch(ev);
     }
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
-        return parentActionBarLayout.checkTransitionAnimation();
+        if (drawerContainer != null && drawerContainer.getVisibility() == VISIBLE) {
+            return false;
+        }
+        if (drawerContainer != null && drawerContainer.handleEdgeSwipeIntercept(ev)) {
+            return true;
+        }
+        // TODO(openextera): lite also checks !parentActionBarLayout.isIncomingFragmentTouchable() (stage 2)
+        return parentActionBarLayout != null && parentActionBarLayout.checkTransitionAnimation();
     }
 
     @Override
@@ -144,11 +211,39 @@ public class DrawerLayoutContainer extends FrameLayout {
         }
 
         super.dispatchDraw(canvas);
+        if (drawCurrentPreviewFragmentAbove && parentActionBarLayout != null) {
+            if (previewBlurDrawable != null) {
+                previewBlurDrawable.setAlpha((int) (parentActionBarLayout.getCurrentPreviewFragmentAlpha() * 255));
+                previewBlurDrawable.draw(canvas);
+            }
+            parentActionBarLayout.drawCurrentPreviewFragment(canvas, null);
+        }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (drawCurrentPreviewFragmentAbove && parentActionBarLayout != null) {
+            int action = ev.getActionMasked();
+            if (action == MotionEvent.ACTION_MOVE) {
+                if (previewStartY == 0) {
+                    previewStartY = ev.getY();
+                    MotionEvent event = MotionEvent.obtain(0, 0, MotionEvent.ACTION_CANCEL, 0, 0, 0);
+                    super.dispatchTouchEvent(event);
+                    event.recycle();
+                } else {
+                    parentActionBarLayout.movePreviewFragment(previewStartY - ev.getY());
+                }
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP || action == MotionEvent.ACTION_CANCEL) {
+                parentActionBarLayout.finishPreviewFragment();
+            }
+            return true;
+        }
+        return super.dispatchTouchEvent(ev);
     }
 
     @Override
     public boolean hasOverlappingRendering() {
-        return false;
+        return drawCurrentPreviewFragmentAbove;
     }
 
     private final Paint internalNavbarPaint = new Paint(Paint.ANTI_ALIAS_FLAG);

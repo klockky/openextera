@@ -59,6 +59,10 @@ public final class TelegramQRCodeWriter {
   }
 
   public Bitmap encode(String contents, int width, int height, Map<EncodeHintType, ?> hints, Bitmap bitmap, float radiusFactor, int backgroundColor, int color) throws WriterException {
+    return encode(contents, width, height, hints, bitmap, radiusFactor, backgroundColor, color, true);
+  }
+
+  public Bitmap encode(String contents, int width, int height, Map<EncodeHintType, ?> hints, Bitmap bitmap, float radiusFactor, int backgroundColor, int color, boolean withLogo) throws WriterException {
 
     if (contents.isEmpty()) {
       throw new IllegalArgumentException("Found empty contents");
@@ -118,7 +122,7 @@ public final class TelegramQRCodeWriter {
     rect.setShape(GradientDrawable.RECTANGLE);
     rect.setCornerRadii(radii);
 
-    imageBloks = Math.round((size - 32) / 4.65f / multiple);
+    imageBloks = withLogo ? Math.round((size - 32) / 4.65f / multiple) : 0;
     if (imageBloks % 2 != inputWidth % 2) {
       imageBloks++;
     }
@@ -184,9 +188,11 @@ public final class TelegramQRCodeWriter {
       }
     }
 
-    Bitmap icon = SvgHelper.getBitmap(readRes(R.raw.qr_logo), imageSize, imageSize, false);
-    canvas.drawBitmap(icon, imageX, imageX, null);
-    icon.recycle();
+    if (withLogo) {
+      Bitmap icon = SvgHelper.getBitmap(readRes(R.raw.qr_logo), imageSize, imageSize, false);
+      canvas.drawBitmap(icon, imageX, imageX, null);
+      icon.recycle();
+    }
 
     canvas.setBitmap(null);
 

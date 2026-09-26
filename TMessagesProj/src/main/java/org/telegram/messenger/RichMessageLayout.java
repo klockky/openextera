@@ -202,6 +202,7 @@ public class RichMessageLayout {
     public boolean isRtl() { return richMessage != null && richMessage.rtl; }
     public boolean isOut() { return messageObject != null && messageObject.isOutOwner(); }
     public boolean forceTranslationLoading;
+    public Utilities.Callback<URLSpan> onLinkPress;
     public boolean isTranslating() { return forceTranslationLoading || (messageObject != null && MessagesController.getInstance(currentAccount).getTranslateController().isTranslating(messageObject)); }
 
     public boolean isPinnedTop() { return cell != null && cell.isPinnedTop(); }
@@ -3056,6 +3057,13 @@ public class RichMessageLayout {
                     if (view != null) {
                         view.playSoundEffect(SoundEffectConstants.CLICK);
                     }
+                    return;
+                }
+                if (url != null && !url.startsWith("#") && root.onLinkPress != null) {
+                    if (view != null) {
+                        view.playSoundEffect(SoundEffectConstants.CLICK);
+                    }
+                    root.onLinkPress.run((URLSpan) span);
                     return;
                 }
             }
@@ -9815,6 +9823,12 @@ public class RichMessageLayout {
             invalidate();
         }
 
+        private Utilities.Callback<URLSpan> onLinkPress;
+        public void setOnLinkPress(Utilities.Callback<URLSpan> callback) {
+            onLinkPress = callback;
+            if (layout != null) layout.onLinkPress = callback;
+        }
+
         private boolean translationLoading;
         public void setTranslationLoading(boolean loading) {
             translationLoading = loading;
@@ -9863,6 +9877,7 @@ public class RichMessageLayout {
             if (layout != null) layout.detach(this);
             layout = new RichMessageLayout(messageObject, width, null);
             layout.forceTranslationLoading = translationLoading;
+            layout.onLinkPress = onLinkPress;
             layout.setResourcesProvider(resourcesProvider);
             layout.invalidateAnimatedEmojiInParent = true;
             layout.checkQuoteLine(null, null);

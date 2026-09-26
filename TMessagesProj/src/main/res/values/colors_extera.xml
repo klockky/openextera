@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="white">#ffffff</color>
+    <color name="black">#000000</color>
+
+    <color name="ic_background">#e83030</color>
+    <color name="ic_background_cyberpunk">#0c0e15</color>
+    <color name="ic_background_sus">#ffde2a</color>
+
+    <color name="mGreen200">#a5d6a7</color>
+    <color name="mGreen500">#4caf50</color>
+    <color name="mGreen800">#2e7d32</color>
+    <color name="mRed200">#ef9a9a</color>
+    <color name="mRed500">#f44336</color>
+    <color name="mRed800">#c62828</color>
+</resources>

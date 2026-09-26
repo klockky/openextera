@@ -3,8 +3,11 @@ package org.telegram.ui.Components;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.StateListAnimator;
+import android.animation.ValueAnimator;
 import android.view.View;
 import android.view.animation.OvershootInterpolator;
+
+import java.util.function.Consumer;
 
 public class ScaleStateListAnimator {
 
@@ -13,6 +16,10 @@ public class ScaleStateListAnimator {
     }
 
     public static void apply(View view, float scale, float tension) {
+        apply(view, scale, tension, null, null);
+    }
+
+    public static void apply(View view, float scale, float tension, Consumer<Float> onPressProgress, Consumer<Float> onReleaseProgress) {
         if (view == null) {
             return;
         }
@@ -34,8 +41,28 @@ public class ScaleStateListAnimator {
 
         StateListAnimator scaleStateListAnimator = new StateListAnimator();
 
-        scaleStateListAnimator.addState(new int[]{android.R.attr.state_pressed}, pressedAnimator);
-        scaleStateListAnimator.addState(new int[0], defaultAnimator);
+        if (onPressProgress != null) {
+            ValueAnimator pressProgressAnimator = ValueAnimator.ofFloat(0f, 1f);
+            pressProgressAnimator.setDuration(80);
+            pressProgressAnimator.addUpdateListener(animation -> onPressProgress.accept((Float) animation.getAnimatedValue()));
+            AnimatorSet set = new AnimatorSet();
+            set.playTogether(pressedAnimator, pressProgressAnimator);
+            scaleStateListAnimator.addState(new int[]{android.R.attr.state_pressed}, set);
+        } else {
+            scaleStateListAnimator.addState(new int[]{android.R.attr.state_pressed}, pressedAnimator);
+        }
+
+        if (onReleaseProgress != null) {
+            ValueAnimator releaseProgressAnimator = ValueAnimator.ofFloat(1f, 0f);
+            releaseProgressAnimator.setDuration(350);
+            releaseProgressAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+            releaseProgressAnimator.addUpdateListener(animation -> onReleaseProgress.accept((Float) animation.getAnimatedValue()));
+            AnimatorSet set = new AnimatorSet();
+            set.playTogether(defaultAnimator, releaseProgressAnimator);
+            scaleStateListAnimator.addState(new int[0], set);
+        } else {
+            scaleStateListAnimator.addState(new int[0], defaultAnimator);
+        }
 
         view.setStateListAnimator(scaleStateListAnimator);
     }

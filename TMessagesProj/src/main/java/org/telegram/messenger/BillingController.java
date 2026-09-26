@@ -7,6 +7,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -26,6 +27,8 @@ import com.android.billingclient.api.PurchasesUpdatedListener;
 import com.android.billingclient.api.QueryProductDetailsParams;
 import com.android.billingclient.api.QueryPurchasesParams;
 
+import org.telegram.PhoneFormat.CallingCodeInfo;
+import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.utils.BillingUtilities;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
@@ -42,6 +45,7 @@ import java.util.Collections;
 import java.util.Currency;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -75,6 +79,46 @@ public class BillingController implements PurchasesUpdatedListener, BillingClien
             instance = new BillingController(ApplicationLoader.applicationContext);
         }
         return instance;
+    }
+
+    public String getTargetCurrency(int account, boolean usd) {
+        if (usd) {
+            return "USD";
+        }
+        return getCurrencyByPhone(UserConfig.getInstance(account).getClientPhone());
+    }
+
+    private String getCurrencyByPhone(String phone) {
+        if (TextUtils.isEmpty(phone)) {
+            return null;
+        }
+        String number = PhoneFormat.stripExceptNumbers(phone);
+        if (TextUtils.isEmpty(number)) {
+            return null;
+        }
+        CallingCodeInfo info = PhoneFormat.getInstance().findCallingCodeInfo(number);
+        if (info == null || info.countries == null || info.countries.isEmpty()) {
+            return null;
+        }
+        String countryCode = info.countries.get(0);
+        String localCountry = Locale.getDefault().getCountry();
+        if (!TextUtils.isEmpty(localCountry)) {
+            for (String country : info.countries) {
+                if (localCountry.equalsIgnoreCase(country)) {
+                    countryCode = country;
+                    break;
+                }
+            }
+        }
+        if (!TextUtils.isEmpty(countryCode) && countryCode.charAt(0) != '_') {
+            try {
+                Currency currency = Currency.getInstance(new Locale("", countryCode.toUpperCase(Locale.ROOT)));
+                return currency != null ? currency.getCurrencyCode() : null;
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
+        return null;
     }
 
     private BillingController(Context ctx) {

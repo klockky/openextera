@@ -120,7 +120,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private View fadeView;
 
     public MainTabsActivity() {
-        super();
+        this(null);
+    }
+
+    public MainTabsActivity(Bundle args) {
+        super(args);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             iBlur3SourceTabGlass = new BlurredBackgroundSourceRenderNode(null);
             iBlur3SourceTabGlass.setupRenderer(new RenderNodeWithHash.Renderer() {
@@ -877,6 +881,18 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         default BlurredBackgroundSourceRenderNode getGlassSource() {
             return null;
+        }
+
+        default void onParentBecomeFullyVisible() {
+
+        }
+
+        default void setParentTabsGlassInvalidationCallback(Runnable callback) {
+
+        }
+
+        default void updateMainTabsVisibility() {
+
         }
     }
 

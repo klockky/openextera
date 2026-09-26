@@ -52,6 +52,10 @@ public class ViewOutlineProviderImpl {
         };
     }
 
+    public static ViewOutlineProvider boundsWithRoundRect(float radius) {
+        return boundsWithPaddingRoundRect(0, radius);
+    }
+
     public static ViewOutlineProvider boundsWithPaddingRoundRect(int padding, float radius) {
         return new ViewOutlineProvider() {
             @Override

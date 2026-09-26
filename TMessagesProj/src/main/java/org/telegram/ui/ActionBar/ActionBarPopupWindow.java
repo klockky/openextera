@@ -45,6 +45,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
 import org.telegram.messenger.FileLog;
@@ -289,6 +290,16 @@ public class ActionBarPopupWindow extends PopupWindow {
 
         public int getBackgroundColor() {
             return backgroundColor;
+        }
+
+        private BlurredBackgroundDrawableViewFactory glassBackgroundFactory;
+
+        public void setGlassBackgroundFactory(BlurredBackgroundDrawableViewFactory factory) {
+            glassBackgroundFactory = factory;
+        }
+
+        public BlurredBackgroundDrawableViewFactory getGlassBackgroundFactory() {
+            return glassBackgroundFactory;
         }
 
         public void setBackgroundColor(int color) {
@@ -1110,6 +1121,7 @@ public class ActionBarPopupWindow extends PopupWindow {
     public static class GapView extends FrameLayout {
 
         Drawable shadowDrawable;
+        boolean dividerVisible = true;
 
         public GapView(Context context, Theme.ResourcesProvider resourcesProvider) {
             this(context, resourcesProvider, Theme.key_actionBarDefaultSubmenuSeparator);
@@ -1129,10 +1141,15 @@ public class ActionBarPopupWindow extends PopupWindow {
             setBackgroundColor(color);
         }
 
+        public void setDividerVisible(boolean visible) {
+            dividerVisible = visible;
+            invalidate();
+        }
+
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (shadowDrawable != null) {
+            if (dividerVisible && shadowDrawable != null) {
                 shadowDrawable.setBounds(0, 0, getWidth(), getHeight());
                 shadowDrawable.draw(canvas);
             }

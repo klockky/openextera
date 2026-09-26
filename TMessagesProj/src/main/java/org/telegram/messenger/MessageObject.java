@@ -1249,6 +1249,8 @@ public class MessageObject {
     }
 
     public static class GroupedMessages {
+        public static final int GROUPED_AVATAR_OFFSET = 108;
+
         public long groupId;
         public boolean hasSibling;
         public boolean hasCaption;
@@ -1686,7 +1688,7 @@ public class MessageObject {
                     y += lineHeight;
                 }
             }
-            int avatarOffset = 108;
+            int avatarOffset = GROUPED_AVATAR_OFFSET;
             for (int a = 0; a < count; a++) {
                 GroupedMessagePosition pos = posArray.get(a);
                 if (isOut) {
@@ -9878,6 +9880,10 @@ public class MessageObject {
 
     public int getRealId() {
         return messageOwner.realId != 0 ? messageOwner.realId : messageOwner.id;
+    }
+
+    public int getFeedRealId() {
+        return searchType == ChatActivity.SEARCH_FEED ? getRealId() : getId();
     }
 
     public static long getMessageSize(TLRPC.Message message) {

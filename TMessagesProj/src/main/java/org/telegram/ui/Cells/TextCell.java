@@ -57,6 +57,8 @@ public class TextCell extends FrameLayout {
     private Switch checkBox;
     private ImageView valueImageView;
     public int leftPadding;
+    public int valueImageRight = 23;
+    private boolean isIcon;
     private boolean needDivider;
     public int offsetFromImage = 58;
     public int heightDp = 50;
@@ -202,10 +204,18 @@ public class TextCell extends FrameLayout {
             subtitleView.measure(MeasureSpec.makeMeasureSpec(width - dp(71 + leftPadding) - valueWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY));
         }
         if (imageView.getVisibility() == VISIBLE) {
-            imageView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
+            if (isIcon) {
+                imageView.measure(MeasureSpec.makeMeasureSpec(dp(24), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(31), MeasureSpec.EXACTLY));
+            } else {
+                imageView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
+            }
         }
         if (valueImageView.getVisibility() == VISIBLE) {
-            valueImageView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
+            if (isIcon) {
+                valueImageView.measure(MeasureSpec.makeMeasureSpec(dp(24), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(31), MeasureSpec.EXACTLY));
+            } else {
+                valueImageView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
+            }
         }
         if (checkBox != null) {
             checkBox.measure(MeasureSpec.makeMeasureSpec(dp(37), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY));
@@ -283,7 +293,7 @@ public class TextCell extends FrameLayout {
 
         if (valueImageView.getVisibility() == VISIBLE) {
             viewTop = (height - valueImageView.getMeasuredHeight()) / 2 + dp(1);
-            viewLeft = LocaleController.isRTL ? dp(23) : width - valueImageView.getMeasuredWidth() - dp(23);
+            viewLeft = LocaleController.isRTL ? dp(valueImageRight) : width - valueImageView.getMeasuredWidth() - dp(valueImageRight);
             valueImageView.layout(viewLeft, viewTop, viewLeft + valueImageView.getMeasuredWidth(), viewTop + valueImageView.getMeasuredHeight());
         }
         if (checkBox != null && checkBox.getVisibility() == VISIBLE) {
@@ -687,6 +697,70 @@ public class TextCell extends FrameLayout {
         imageView.setImageDrawable(resDrawable);
         needDivider = divider;
         setWillNotDraw(!needDivider);
+        if (emojiDrawable != null) {
+            emojiDrawable.set((Drawable) null, false);
+        }
+    }
+
+    public void reset() {
+        textView.setText("");
+        subtitleView.setText("");
+        valueTextView.setText("", false);
+        valueSpoilersTextView.setText("");
+        imageView.setVisibility(GONE);
+        valueTextView.setVisibility(GONE);
+        valueSpoilersTextView.setVisibility(GONE);
+        valueImageView.setVisibility(GONE);
+        subtitleView.setVisibility(GONE);
+        if (checkBox != null) {
+            checkBox.setVisibility(GONE);
+        }
+        imageView.setImageDrawable(null);
+        imageView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(inDialogs ? Theme.key_dialogIcon : Theme.key_windowBackgroundWhiteGrayIcon, resourcesProvider), PorterDuff.Mode.MULTIPLY));
+        imageView.setBackground(null);
+        if (emojiDrawable != null) {
+            emojiDrawable.set((Drawable) null, false);
+        }
+        textView.setRightDrawable((Drawable) null);
+        prioritizeTitleOverValue = false;
+        // TODO(openextera): lite resets to its redesigned defaults (offsetFromImage 71, imageLeft 21, valueImageRight = leftPadding) — stage 2
+        offsetFromImage = 58;
+        heightDp = 50;
+        imageLeft = 16;
+        valueImageRight = 23;
+        isIcon = false;
+        imageView.setScaleType(ImageView.ScaleType.CENTER);
+    }
+
+    public void setIsIcon(boolean isIcon) {
+        this.isIcon = isIcon;
+        imageView.setScaleType(isIcon ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER);
+        valueImageView.setScaleType(isIcon ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER);
+    }
+
+    public void setTextAndIconAndValueDrawable(CharSequence text, Drawable icon, Drawable valueDrawable, boolean divider) {
+        offsetFromImage = 71;
+        imageLeft = 21;
+        textView.setText(text);
+        textView.setRightDrawable(null);
+        valueTextView.setText(valueText = null, false);
+        valueTextView.setVisibility(GONE);
+        valueSpoilersTextView.setVisibility(GONE);
+        imageView.setColorFilter(null);
+        if (icon instanceof RLottieDrawable) {
+            imageView.setAnimation((RLottieDrawable) icon);
+        } else {
+            imageView.setImageDrawable(icon);
+        }
+        imageView.setVisibility(VISIBLE);
+        imageView.setPadding(0, dp(6), 0, 0);
+        valueImageView.setVisibility(VISIBLE);
+        valueImageView.setImageDrawable(valueDrawable);
+        needDivider = divider;
+        setWillNotDraw(!needDivider);
+        if (checkBox != null) {
+            checkBox.setVisibility(GONE);
+        }
         if (emojiDrawable != null) {
             emojiDrawable.set((Drawable) null, false);
         }

@@ -1,9 +1,9 @@
 include ':TMessagesProj'
 include ':TMessagesProj_App'
-include ':TMessagesProj_AppHuawei'
-include ':TMessagesProj_AppHockeyApp'
-include ':TMessagesProj_AppStandalone'
-include ':TMessagesProj_AppTests'
+// OpenExtera builds only the regular app module. The upstream Telegram flavours
+// (TMessagesProj_AppHuawei, TMessagesProj_AppHockeyApp, TMessagesProj_AppStandalone,
+// TMessagesProj_AppTests) are kept in the tree for easier upstream merges but are not
+// part of the build: they depend on Telegram's Firebase/Crashlytics/HMS configuration.
 include ':jlatexmath'
 project(':jlatexmath').projectDir = file('TMessagesProj/lib/jlatexmath/jlatexmath')
 

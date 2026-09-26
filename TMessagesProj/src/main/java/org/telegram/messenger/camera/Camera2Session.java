@@ -58,6 +58,7 @@ public class Camera2Session {
     private final boolean isFront;
     public final String cameraId;
     private CameraCharacteristics cameraCharacteristics;
+    private volatile int recordingFrameRate = 30;
 
     private HandlerThread thread;
     private Handler handler;
@@ -513,6 +514,17 @@ public class Camera2Session {
         } catch (Exception e) {
             FileLog.e("Camera2Sessions setRepeatingRequest error in updateCaptureRequest", e);
         }
+    }
+
+    public Range<Integer>[] getAvailableFpsRanges() {
+        if (cameraCharacteristics == null) {
+            return null;
+        }
+        return cameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+    }
+
+    public int getRecordingFrameRate() {
+        return recordingFrameRate;
     }
 
     public boolean takePicture(final File file, Utilities.Callback<Integer> whenDone) {

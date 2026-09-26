@@ -268,6 +268,52 @@ public class ConnectionsManager extends BaseController {
         init(SharedConfig.buildVersion(), TLRPC.LAYER, BuildVars.APP_ID, deviceModel, systemVersion, appVersion, langCode, systemLangCode, configPath, FileLog.getNetworkLogPath(), pushString, fingerprint, timezoneOffset, getUserConfig().getClientUserId(), userPremium, enablePushConnection);
     }
 
+    private static final String DEBUG_DNS_PREFS = "debugdnsconfig";
+    private static final String DEBUG_DNS_CONFIG_KEY = "ipconfigv3_override";
+
+    private static SharedPreferences getDebugDnsPreferences() {
+        return ApplicationLoader.applicationContext.getSharedPreferences(DEBUG_DNS_PREFS, Context.MODE_PRIVATE);
+    }
+
+    public static String getDebugDnsConfigOverride() {
+        return getDebugDnsPreferences().getString(DEBUG_DNS_CONFIG_KEY, "");
+    }
+
+    public static void setDebugDnsConfigOverride(String config) {
+        SharedPreferences.Editor editor = getDebugDnsPreferences().edit();
+        if (TextUtils.isEmpty(config)) {
+            editor.remove(DEBUG_DNS_CONFIG_KEY);
+        } else {
+            editor.putString(DEBUG_DNS_CONFIG_KEY, config.trim());
+        }
+        editor.apply();
+    }
+
+    private static boolean applyDnsConfigString(int currentAccount, String config, int date) {
+        if (TextUtils.isEmpty(config)) {
+            return false;
+        }
+        try {
+            byte[] bytes = Base64.decode(config, Base64.DEFAULT);
+            NativeByteBuffer buffer = new NativeByteBuffer(bytes.length);
+            buffer.writeBytes(bytes);
+            native_applyDnsConfig(currentAccount, buffer.address, AccountInstance.getInstance(currentAccount).getUserConfig().getClientPhone(), date);
+            return true;
+        } catch (Throwable e) {
+            FileLog.e(e);
+            return false;
+        }
+    }
+
+    private static boolean applyStoredDnsConfigOverride(int currentAccount) {
+        return applyDnsConfigString(currentAccount, getDebugDnsConfigOverride(), 0);
+    }
+
+    public static boolean setAndApplyDebugDnsConfigOverride(int currentAccount, String config) {
+        setDebugDnsConfigOverride(config);
+        return applyStoredDnsConfigOverride(currentAccount);
+    }
+
     private String getRegId() {
         String pushString = SharedConfig.pushString;
         if (!TextUtils.isEmpty(pushString) && SharedConfig.pushType == PushListenerController.PUSH_TYPE_HUAWEI) {
@@ -869,7 +915,11 @@ public class ConnectionsManager extends BaseController {
                     return;
                 }
                 lastDnsRequestTime = System.currentTimeMillis();
-                if (second == 2) {
+                if (second == 0 && applyStoredDnsConfigOverride(currentAccount)) {
+                    if (BuildVars.LOGS_ENABLED) {
+                        FileLog.d("applied debug ipconfigv3 override");
+                    }
+                } else if (second == 2) {
                     if (BuildVars.LOGS_ENABLED) {
                         FileLog.d("start mozilla txt task");
                     }

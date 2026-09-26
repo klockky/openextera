@@ -44,9 +44,10 @@ public class CombinedDrawable extends Drawable implements Drawable.Callback {
         }
     }
 
-    public void setIconSize(int width, int height) {
+    public CombinedDrawable setIconSize(int width, int height) {
         iconWidth = width;
         iconHeight = height;
+        return this;
     }
 
     public CombinedDrawable(Context context, int backgroundDrawableResId, int iconDrawableResId) {

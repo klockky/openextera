@@ -481,6 +481,14 @@ public final class BulletinFactory {
         return create(layout, Bulletin.DURATION_LONG);
     }
 
+    public Bulletin createSimpleBulletin(CharSequence text, CharSequence subtitle, int stickerNum) {
+        final Bulletin.TwoLineLottieLayout layout = new Bulletin.TwoLineLottieLayout(getContext(), resourcesProvider);
+        layout.setSticker(stickerNum);
+        layout.titleTextView.setText(text);
+        layout.subtitleTextView.setText(subtitle);
+        return create(layout, 5000);
+    }
+
     public Bulletin createSimpleBulletin(CharSequence text, CharSequence subtitle) {
         final Bulletin.TwoLineLottieLayout layout = new Bulletin.TwoLineLottieLayout(getContext(), resourcesProvider);
         layout.hideImage();
@@ -710,10 +718,10 @@ public final class BulletinFactory {
         return create(layout, Bulletin.DURATION_LONG);
     }
 
-    public Bulletin createEmojiBulletin(String emoji, String text) {
+    public Bulletin createEmojiBulletin(String emoji, CharSequence text) {
         final Bulletin.LottieLayout layout = new Bulletin.LottieLayout(getContext(), resourcesProvider);
         layout.setAnimation(MediaDataController.getInstance(UserConfig.selectedAccount).getEmojiAnimatedSticker(emoji), 36, 36);
-        layout.textView.setText(text);
+        layout.textView.setText(AndroidUtilities.replaceTags(text));
         layout.textView.setSingleLine(false);
         layout.textView.setMaxLines(2);
         return create(layout, Bulletin.DURATION_LONG);

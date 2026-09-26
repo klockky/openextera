@@ -385,6 +385,13 @@ public class SharedConfig {
             settings = proxySettings;
         }
 
+        public static long normalizeAvailableCheckTime(long time) {
+            if (time <= 0 || time > SystemClock.elapsedRealtime()) {
+                return 0;
+            }
+            return time;
+        }
+
         private static ProxyInfo fromSerializedData(int version, InputSerializedData data) {
             ProxySettings.Builder builder = ProxySettings.builder()
                     .setAddress(data.readString(false))
@@ -506,6 +513,18 @@ public class SharedConfig {
             value = lastLocalId--;
         }
         return value;
+    }
+
+    public static void toggleUseSystemEmoji() {
+        useSystemEmoji = !useSystemEmoji;
+        SharedPreferences.Editor editor = MessagesController.getGlobalMainSettings().edit();
+        editor.putBoolean("useSystemEmoji", useSystemEmoji);
+        editor.apply();
+    }
+
+    public static void reloadConfig() {
+        configLoaded = false;
+        loadConfig();
     }
 
     public static void loadConfig() {

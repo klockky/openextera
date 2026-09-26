@@ -11221,6 +11221,18 @@ public class MessagesStorage extends BaseController {
         }
     }
 
+    public void clearAllMessageCustomParams() {
+        storageQueue.postRunnable(() -> {
+            try {
+                database.executeFast("UPDATE messages_v2 SET custom_params = NULL").stepThis().dispose();
+                database.executeFast("UPDATE messages_topics SET custom_params = NULL").stepThis().dispose();
+                database.executeFast("UPDATE stories SET custom_params = NULL").stepThis().dispose();
+            } catch (Exception e) {
+                checkSQLException(e);
+            }
+        });
+    }
+
     public void clearDownloadQueue(int type) {
         storageQueue.postRunnable(() -> {
             try {

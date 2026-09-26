@@ -37,6 +37,8 @@ import androidx.annotation.StringRes;
 
 import org.telegram.utils.localization.Localization;
 import org.telegram.localization.LocalizationUtils;
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.time.FastDateFormat;
 import org.telegram.tgnet.Vector;
 import org.telegram.ui.Components.TypefaceSpan;
@@ -141,6 +143,32 @@ public class LocaleController {
             }
         }
         return formatterWeek;
+    }
+
+    private volatile FastDateFormat exportFullDateFormatter;
+    public FastDateFormat getExportFullDateFormatter() {
+        if (exportFullDateFormatter == null) {
+            synchronized (this) {
+                if (exportFullDateFormatter == null) {
+                    final Locale locale = currentLocale == null ? Locale.getDefault() : currentLocale;
+                    exportFullDateFormatter = createFormatter(locale, null, "dd MMM yyyy HH:mm:ss");
+                }
+            }
+        }
+        return exportFullDateFormatter;
+    }
+
+    private volatile FastDateFormat exportFileFormatter;
+    public FastDateFormat getExportFileFormatter() {
+        if (exportFileFormatter == null) {
+            synchronized (this) {
+                if (exportFileFormatter == null) {
+                    final Locale locale = currentLocale == null ? Locale.getDefault() : currentLocale;
+                    exportFileFormatter = createFormatter(locale, null, "dd-MM-yyyy_HH-mm");
+                }
+            }
+        }
+        return exportFileFormatter;
     }
 
     private volatile FastDateFormat formatterWeekLong;
@@ -2595,6 +2623,50 @@ public class LocaleController {
             text = String.format("%d", time);
         }
         return text;
+    }
+
+    public static String formatRelativeDate(long seconds) {
+        try {
+            long minutes = seconds / 60;
+            long hours = minutes / 60;
+            long days = hours / 24;
+            long months = days / 30;
+            long years = days / 365;
+            if (years >= 1) {
+                return years == 1 ? getString(R.string.YearAgo) : formatPluralStringComma("YearsAgo", (int) years);
+            } else if (months >= 1) {
+                return months == 1 ? getString(R.string.MonthAgo) : formatPluralStringComma("MonthsAgo", (int) months);
+            } else if (days >= 1) {
+                return days == 1 ? getString(R.string.DayAgo) : formatPluralStringComma("DaysAgo", (int) days);
+            } else if (hours >= 1) {
+                return hours == 1 ? getString(R.string.HourAgo) : formatPluralStringComma("HoursAgo", (int) hours);
+            } else if (minutes < 1) {
+                return getString(R.string.LessMinuteAgo);
+            } else if (minutes == 1) {
+                return getString(R.string.MinuteAgo);
+            }
+            return formatPluralStringComma("MinutesAgo", (int) minutes);
+        } catch (Exception e) {
+            FileLog.e(e);
+            return "LOC_ERR";
+        }
+    }
+
+    public static String formatDateOnline(long date, boolean[] madeShorter, boolean[] relative) {
+        if (relative != null) {
+            try {
+                if (ExteraConfig.getRelativeLastSeen()) {
+                    long diff = Math.max(0, System.currentTimeMillis() / 1000 - date);
+                    if (diff < 24 * 60 * 60) {
+                        return formatString(R.string.LastSeenDateFormatted, formatRelativeDate(diff));
+                    }
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+                return "LOC_ERR";
+            }
+        }
+        return formatDateOnline(date, madeShorter);
     }
 
     public static String formatDateOnline(long date, boolean[] madeShorter) {

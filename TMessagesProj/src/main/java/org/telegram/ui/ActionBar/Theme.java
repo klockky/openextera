@@ -74,6 +74,9 @@ import androidx.annotation.UiThread;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 
+import com.exteragram.messenger.DividerStyle;
+import com.exteragram.messenger.ExteraConfig;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.telegram.messenger.AndroidUtilities;
@@ -1642,6 +1645,10 @@ public class Theme {
             return defaultAccentCount != 0;
         }
 
+        public boolean isMonet() {
+            return "Monet Dark".equals(name) || "Monet Light".equals(name) || "Monet Black".equals(name);
+        }
+
         public boolean isDark() {
             if (isDark != UNKNOWN) {
                 return isDark == DARK;
@@ -2151,6 +2158,10 @@ public class Theme {
         default ColorFilter getAnimatedEmojiColorFilter() {
             return Theme.chat_animatedEmojiTextColorFilter;
         }
+
+        default boolean isMonet() {
+            return Theme.isCurrentThemeMonet();
+        }
     }
 
     private static final Object sync = new Object();
@@ -2261,7 +2272,7 @@ public class Theme {
     public static Paint avatar_backgroundPaint;
 
     public static Drawable listSelector;
-    public static Drawable[] avatarDrawables = new Drawable[25];
+    public static Drawable[] avatarDrawables = new Drawable[26];
 
     public static Drawable moveUpDrawable;
 
@@ -2474,6 +2485,8 @@ public class Theme {
     public static Drawable chat_msgOutInstantDrawable;
     public static Drawable chat_msgErrorDrawable;
     public static Drawable chat_muteIconDrawable;
+    public static Drawable chat_pencilIconDrawable;
+    public static Drawable chat_channelIconDrawable;
     public static Drawable chat_lockIconDrawable;
     public static Drawable chat_inlineResultFile;
     public static Drawable chat_inlineResultAudio;
@@ -5291,6 +5304,7 @@ public class Theme {
         private Path path = new Path();
         private float[] radii = new float[8];
         boolean invalidatePath = true;
+        private float paddingLeft, paddingTop, paddingRight, paddingBottom;
 
         public RippleRadMaskDrawable(float top, float bottom) {
             radii[0] = radii[1] = radii[2] = radii[3] = dp(top);
@@ -5318,6 +5332,15 @@ public class Theme {
             invalidateSelf();
         }
 
+        public void setPadding(float left, float top, float right, float bottom) {
+            paddingLeft = AndroidUtilities.dpf2(left);
+            paddingTop = AndroidUtilities.dpf2(top);
+            paddingRight = AndroidUtilities.dpf2(right);
+            paddingBottom = AndroidUtilities.dpf2(bottom);
+            invalidatePath = true;
+            invalidateSelf();
+        }
+
         @Override
         protected void onBoundsChange(Rect bounds) {
             invalidatePath = true;
@@ -5328,7 +5351,8 @@ public class Theme {
             if (invalidatePath) {
                 invalidatePath = false;
                 path.reset();
-                AndroidUtilities.rectTmp.set(getBounds());
+                final Rect bounds = getBounds();
+                AndroidUtilities.rectTmp.set(bounds.left + paddingLeft, bounds.top + paddingTop, bounds.right - paddingRight, bounds.bottom - paddingBottom);
                 path.addRoundRect(AndroidUtilities.rectTmp, radii, Path.Direction.CW);
             }
             canvas.drawPath(path, maskPaint);
@@ -6425,6 +6449,46 @@ public class Theme {
 
     public static boolean isCurrentThemeDark() {
         return currentTheme.isDark();
+    }
+
+    public static boolean isCurrentThemeMonet() {
+        return currentTheme.isMonet();
+    }
+
+    public static boolean isCurrentThemeMonet(ResourcesProvider resourcesProvider) {
+        return resourcesProvider != null ? resourcesProvider.isMonet() : isCurrentThemeMonet();
+    }
+
+    public static boolean isCurrentAccentMonet() {
+        return MonetAccentHelper.isMonetAccent(currentTheme != null ? currentTheme.getAccent(false) : null);
+    }
+
+    public static void refreshMonetColors() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || themes == null) {
+            return;
+        }
+        boolean reloadPatterns = false;
+        for (int i = 0, N = themes.size(); i < N; i++) {
+            ThemeInfo themeInfo = themes.get(i);
+            if (themeInfo != null) {
+                reloadPatterns |= MonetAccentHelper.refresh(themeInfo);
+            }
+        }
+        if (reloadPatterns) {
+            PatternsLoader.createLoader(true);
+        }
+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.themeListUpdated);
+    }
+
+    public static int getDividerColor(ResourcesProvider resourcesProvider) {
+        final DividerStyle dividerStyle = ExteraConfig.getDividerStyle();
+        if (dividerStyle == DividerStyle.HIDDEN) {
+            return 0x00ffffff;
+        }
+        if (resourcesProvider != null) {
+            return resourcesProvider.getColor(key_divider);
+        }
+        return getColor(key_divider, null, dividerStyle != DividerStyle.LINE);
     }
 
     public static ThemeInfo getActiveTheme() {
@@ -7676,6 +7740,7 @@ public class Theme {
             avatarDrawables[22] = resources.getDrawable(R.drawable.filled_giveaway_premium);
             avatarDrawables[23] = resources.getDrawable(R.drawable.filled_giveaway_stars);
             avatarDrawables[24] = resources.getDrawable(R.drawable.filled_suggest_chat_avatar);
+            avatarDrawables[25] = resources.getDrawable(R.drawable.ic_feed_filled);
 
             if (dialogs_archiveAvatarDrawable != null) {
                 dialogs_archiveAvatarDrawable.setCallback(null);
@@ -8239,6 +8304,8 @@ public class Theme {
                 chat_pollHintDrawable[a] = resources.getDrawable(R.drawable.msg_emoji_objects).mutate();
                 chat_psaHelpDrawable[a] = resources.getDrawable(R.drawable.msg_psa).mutate();
             }
+            chat_pencilIconDrawable = resources.getDrawable(R.drawable.pencil).mutate();
+            chat_channelIconDrawable = resources.getDrawable(R.drawable.channel).mutate();
 
             calllog_msgCallUpRedDrawable = resources.getDrawable(R.drawable.mini_call_out_16).mutate();
             calllog_msgCallUpGreenDrawable = resources.getDrawable(R.drawable.mini_call_out_16).mutate();

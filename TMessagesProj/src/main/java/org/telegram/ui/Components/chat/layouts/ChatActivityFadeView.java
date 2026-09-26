@@ -51,6 +51,11 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
         fadeDrawableBottom.setFadeHeight(dp(30), true);
     }
 
+    public void setTopFadeColor(int color) {
+        fadeDrawableTop.setOverrideFadeColor(color);
+        invalidate();
+    }
+
     public void setFadeHeightTop(int height, boolean opacity) {
         fadeDrawableTop.setFadeHeight(-height, opacity);
     }

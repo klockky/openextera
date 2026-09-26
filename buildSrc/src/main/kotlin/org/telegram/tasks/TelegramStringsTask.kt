@@ -489,12 +489,12 @@ abstract class TelegramStringsTask : DefaultTask() {
         val regionIndex = qualifier.indexOf("-r")
 
         if (regionIndex != -1) {
-            val language = qualifier.substring(0, regionIndex)
+            val language = LanguageCodes.normalize(qualifier.substring(0, regionIndex))
             val region = qualifier.substring(regionIndex + 2)
             return "$language-$region"
         }
 
-        return qualifier
+        return LanguageCodes.normalize(qualifier)
     }
 
     private fun formatHash(

@@ -12,6 +12,8 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -28,10 +30,20 @@ import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.telephony.TelephonyManager;
+import android.util.Log;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.appicons.AppIconController;
+import com.exteragram.messenger.icons.IconManager;
+import com.exteragram.messenger.maps.yandex.YandexLocationProvider;
+import com.exteragram.messenger.maps.yandex.YandexMapsProvider;
+import com.exteragram.messenger.plugins.PluginsController;
+import com.exteragram.messenger.plugins.utils.NativeCrashHandler;
+import com.exteragram.messenger.utils.chats.ChatUtils;
+import com.exteragram.messenger.utils.network.RemoteUtils;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 
@@ -44,7 +56,6 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.Components.ForegroundDetector;
 import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.IUpdateLayout;
-import org.telegram.ui.LauncherIconController;
 
 import java.io.File;
 import java.util.Locale;
@@ -92,6 +103,9 @@ public class ApplicationLoader extends Application {
     }
 
     protected ILocationServiceProvider onCreateLocationServiceProvider() {
+        if (allowToUseYandexMaps() && ExteraConfig.getUseYandexMaps()) {
+            return new YandexLocationProvider();
+        }
         return new GoogleLocationProvider();
     }
 
@@ -102,8 +116,24 @@ public class ApplicationLoader extends Application {
         return mapsProvider;
     }
 
+    public static void updateMapsProvider() {
+        mapsProvider = applicationLoaderInstance.onCreateMapsProvider();
+        locationServiceProvider = applicationLoaderInstance.onCreateLocationServiceProvider();
+        locationServiceProvider.init(applicationContext);
+    }
+
     protected IMapsProvider onCreateMapsProvider() {
+        if (allowToUseYandexMaps() && ExteraConfig.getUseYandexMaps()) {
+            return new YandexMapsProvider();
+        }
         return new GoogleMapsProvider();
+    }
+
+    public boolean allowToUseYandexMaps() {
+        if (!YandexMapsProvider.isSupported() || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return false;
+        }
+        return !RemoteUtils.getBooleanConfigValue("yandex_maps_only_ru", false) || ChatUtils.getInstance().isRussianUser() || ChatUtils.getInstance().isFragmentUser();
     }
 
     public static PushListenerController.IPushListenerServiceProvider getPushProvider() {
@@ -118,7 +148,7 @@ public class ApplicationLoader extends Application {
     }
 
     public static String getApplicationId() {
-        return applicationLoaderInstance.onGetApplicationId();
+        return applicationContext.getPackageName();
     }
 
     protected String onGetApplicationId() {
@@ -200,6 +230,7 @@ public class ApplicationLoader extends Application {
         } catch (Exception e) {
             e.printStackTrace();
         }
+        IconManager.INSTANCE.initialize(false);
 
         try {
             connectivityManager = (ConnectivityManager) ApplicationLoader.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -324,9 +355,11 @@ public class ApplicationLoader extends Application {
         }
 
         NativeLoader.initNativeLibs(ApplicationLoader.applicationContext);
+        NativeCrashHandler.init(NativeCrashHandler.getCrashFlagPath());
 
         try {
             ConnectionsManager.native_setJava(false);
+            PluginsController.applyArtOpts();
         } catch (UnsatisfiedLinkError error) {
             throw new RuntimeException("can't load native libraries " +  Build.CPU_ABI + " lookup folder " + NativeLoader.getAbiFolder());
         }
@@ -348,12 +381,45 @@ public class ApplicationLoader extends Application {
             FileLog.d("load libs time = " + (SystemClock.elapsedRealtime() - startTime));
         }
 
+        if (BuildVars.DEBUG_VERSION || ExteraConfig.getPluginsEngine()) {
+            final Thread.UncaughtExceptionHandler defaultHandler = Thread.getDefaultUncaughtExceptionHandler();
+            Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+                final String stackTrace = Log.getStackTraceString(throwable);
+                try {
+                    if (ExteraConfig.getPluginsEngine()) {
+                        SharedPreferences.Editor editor = PluginsController.getInstance().getPreferences().edit();
+                        editor.putBoolean("had_crash", true).apply();
+                        String crashedPluginId = null;
+                        for (String pluginId : PluginsController.getInstance().getPlugins().keySet()) {
+                            if (stackTrace.contains(pluginId)) {
+                                crashedPluginId = pluginId;
+                            }
+                        }
+                        if (crashedPluginId != null) {
+                            editor.putString("crashed_plugin_id", crashedPluginId).apply();
+                            FileLog.e("Plugin crash detected for plugin: " + crashedPluginId);
+                        }
+                    }
+                    ClipboardManager clipboard = (ClipboardManager) applicationContext.getSystemService(Context.CLIPBOARD_SERVICE);
+                    clipboard.setPrimaryClip(ClipData.newPlainText("label", stackTrace));
+                } catch (Exception e) {
+                    FileLog.e(e);
+                }
+                FileLog.e(stackTrace);
+                if (defaultHandler != null) {
+                    defaultHandler.uncaughtException(thread, throwable);
+                }
+            });
+        }
+
         applicationHandler = new Handler(applicationContext.getMainLooper());
+        RemoteUtils.initCached();
 
         AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
 
-        LauncherIconController.tryFixLauncherIconIfNeeded();
+        AppIconController.fixLauncherIconIfNeeded();
         ProxyRotationController.init();
+        ProxyPingController.init();
 
         //if (BuildConfig.DEBUG_PRIVATE_VERSION) {
         //    Choreographer60FpsContent.getInstance().addFrameCallback(debugEverySecondChecks, 1);
@@ -363,6 +429,14 @@ public class ApplicationLoader extends Application {
     private final Runnable debugEverySecondChecks = () -> AndroidUtilities.runOnUIThread(() -> {
         NotificationCenter.sanitize();
     });
+
+    @Override
+    public void onTerminate() {
+        if (ExteraConfig.getUseYandexMaps()) {
+            YandexMapsProvider.terminate();
+        }
+        super.onTerminate();
+    }
 
     public static void startPushService() {
         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();

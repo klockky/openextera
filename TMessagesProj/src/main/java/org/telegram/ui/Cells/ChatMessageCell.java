@@ -99,6 +99,8 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
@@ -810,6 +812,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
         default void onDiceFinished() {
 
+        }
+
+        default boolean shouldDrawAvatarOnlineStatus(ChatMessageCell cell) {
+            return true;
         }
 
         default boolean shouldDrawThreadProgress(ChatMessageCell cell, boolean delayed) {
@@ -18651,7 +18657,115 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return messageObject.messageOwner.fwd_from != null && messageObject.messageOwner.fwd_from.saved_from_peer != null && (delegate == null || delegate.isReplyOrSelf());
     }
 
-    protected boolean checkNeedDrawShareButton(MessageObject messageObject) {
+    public boolean shouldHideShareButton(MessageObject messageObject, boolean hide) {
+        return ExteraConfig.getHideShareButton() || hide;
+    }
+
+    private static Paint avatarOnlineClearPaint;
+    private float avatarOnlineProgress;
+    private long avatarOnlineUserId;
+    private boolean avatarOnlineLastOnline;
+
+    private void postInvalidateParentOnAnimation() {
+        if (getParent() instanceof View) {
+            ((View) getParent()).postInvalidateOnAnimation();
+        } else {
+            postInvalidateOnAnimation();
+        }
+    }
+
+    public void drawAvatarWithOnlineStatus(Canvas canvas, ImageReceiver imageReceiver) {
+        if (!isAvatarVisible) {
+            imageReceiver.draw(canvas);
+            return;
+        }
+        if (!imageReceiver.hasBitmapImage() || delegate != null && !delegate.shouldDrawAvatarOnlineStatus(this)) {
+            imageReceiver.draw(canvas);
+            avatarOnlineProgress = 0f;
+            return;
+        }
+        final TLRPC.User user = getOnlineStatusUser();
+        final long userId = user != null ? user.id : 0;
+        if (!ExteraConfig.getShowOnlineStatus() && avatarOnlineProgress == 0f) {
+            imageReceiver.draw(canvas);
+            avatarOnlineUserId = userId;
+            avatarOnlineLastOnline = false;
+            return;
+        }
+        final boolean online = isUserOnline(user) && ExteraConfig.getShowOnlineStatus();
+        boolean animating = false;
+        if (userId != avatarOnlineUserId) {
+            avatarOnlineUserId = userId;
+            avatarOnlineLastOnline = online;
+            avatarOnlineProgress = online ? 1f : 0f;
+        } else {
+            avatarOnlineLastOnline = online;
+            if (online) {
+                if (avatarOnlineProgress < 1f) {
+                    avatarOnlineProgress = Math.min(1f, avatarOnlineProgress + 16f / 150f);
+                    animating = true;
+                }
+            } else if (avatarOnlineProgress > 0f) {
+                avatarOnlineProgress = Math.max(0f, avatarOnlineProgress - 16f / 150f);
+                animating = true;
+            }
+        }
+        if (Theme.dialogs_onlineCirclePaint == null) {
+            Theme.dialogs_onlineCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        }
+        final float size = Math.min(imageReceiver.getImageX2() - imageReceiver.getImageX(), imageReceiver.getImageY2() - imageReceiver.getImageY());
+        final float squareness = ExteraConfig.getAvatarSquareness();
+        final float dotRadius = size / 9f * (1f + 0.12f * squareness);
+        final float clearRadius = size / 27f * (1f + 0.3f * squareness) + dotRadius;
+        if (avatarOnlineProgress <= 0f) {
+            imageReceiver.draw(canvas);
+            if (animating) {
+                postInvalidateParentOnAnimation();
+            }
+            return;
+        }
+        final float cx = imageReceiver.getImageX2() - ExteraConfig.getOnlineDotOffset(dp(6), clearRadius);
+        final float cy = imageReceiver.getImageY2() - ExteraConfig.getOnlineDotOffset(dp(8), clearRadius);
+        if (avatarOnlineClearPaint == null) {
+            avatarOnlineClearPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            avatarOnlineClearPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+        }
+        final int restoreCount = canvas.saveLayer(imageReceiver.getImageX(), imageReceiver.getImageY(), imageReceiver.getImageX2(), imageReceiver.getImageY2(), null);
+        imageReceiver.draw(canvas);
+        canvas.drawCircle(cx, cy, clearRadius * avatarOnlineProgress, avatarOnlineClearPaint);
+        canvas.restoreToCount(restoreCount);
+        Theme.dialogs_onlineCirclePaint.setColor(Theme.getColor(Theme.key_chats_onlineCircle));
+        canvas.drawCircle(cx, cy, dotRadius * avatarOnlineProgress, Theme.dialogs_onlineCirclePaint);
+        if (animating) {
+            postInvalidateParentOnAnimation();
+        }
+    }
+
+    public boolean isUserOnline(TLRPC.User user) {
+        if (user == null || user.self || user.bot || MessagesController.isSupportUser(user)) {
+            return false;
+        }
+        if (user.status != null && user.status.expires <= 0 && MessagesController.getInstance(currentAccount).onlinePrivacy.containsKey(user.id)) {
+            return true;
+        }
+        return user.status != null && user.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime();
+    }
+
+    private TLRPC.User getOnlineStatusUser() {
+        // TODO(openextera): lite also resolves wide-posts profile / feed channel peers here (stage 2)
+        if (currentUser != null) {
+            return currentUser;
+        }
+        if (currentChat != null && currentChat.signature_profiles && currentMessageObject != null && currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.from_id != null) {
+            final long dialogId = DialogObject.getPeerDialogId(currentMessageObject.messageOwner.from_id);
+            if (dialogId >= 0) {
+                return MessagesController.getInstance(currentAccount).getUser(dialogId);
+            }
+        }
+        return null;
+    }
+
+    public boolean checkNeedDrawShareButton(MessageObject messageObject) {
         if (isReportChat) return false;
         if (currentMessageObject.deleted && !currentMessageObject.deletedByThanos) return false;
         if (currentMessageObject.isSponsored()) return false;

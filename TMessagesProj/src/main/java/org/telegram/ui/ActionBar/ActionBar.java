@@ -39,6 +39,7 @@ import android.transition.Fade;
 import android.transition.TransitionManager;
 import android.transition.TransitionSet;
 import android.transition.TransitionValues;
+import android.view.ViewTreeObserver;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -51,6 +52,8 @@ import android.widget.ImageView;
 import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.exteragram.messenger.ExteraConfig;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -196,6 +199,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     private boolean glassMode;
     private boolean glassOnlyBack;
     private boolean glassModeIsForum;
+    private int glassPadding = dp(6);
+    private int glassTitleTextSize = 17;
+    private boolean drawGlassMiddlePill = true;
+    private AnimatorSet titleAnimator;
 
     private ChatAvatarContainer chatAvatarContainer;
 
@@ -205,6 +212,74 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     public void setChatAvatarContainer(ChatAvatarContainer chatAvatarContainer) {
         this.chatAvatarContainer = chatAvatarContainer;
+    }
+
+    public void setGlassPadding(int padding) {
+        if (glassPadding == padding) {
+            return;
+        }
+        glassPadding = padding;
+        if (glassMode) {
+            applyGlassPadding();
+            requestLayout();
+            invalidate();
+        }
+    }
+
+    public void setGlassTitleTextSize(int size) {
+        if (glassTitleTextSize == size) {
+            return;
+        }
+        glassTitleTextSize = size;
+        if (glassMode) {
+            requestLayout();
+        }
+    }
+
+    private float getGlassMenuTranslationX() {
+        return -AndroidUtilities.lerp(glassPadding + dp(4), glassPadding - dp(1), searchFieldVisibleAlpha);
+    }
+
+    private void applyGlassPadding() {
+        if (glassDrawable != null) {
+            glassDrawable.setPadding(glassPadding);
+        }
+        if (glassDrawableBack != null) {
+            glassDrawableBack.setPadding(glassPadding);
+        }
+        if (glassDrawableMenu != null) {
+            glassDrawableMenu.setPadding(glassPadding);
+        }
+        if (menu != null) {
+            menu.setTranslationX(getGlassMenuTranslationX());
+        }
+        if (actionMode != null) {
+            actionMode.setTranslationX(-glassPadding - dp(4));
+        }
+        if (backButtonImageView != null) {
+            backButtonImageView.setPadding(0, 0, 0, 0);
+            backButtonImageView.setTranslationX(glassPadding - dp(4));
+        }
+    }
+
+    public void setDrawGlassMiddlePill(boolean draw) {
+        if (drawGlassMiddlePill != draw) {
+            drawGlassMiddlePill = draw;
+            invalidate();
+        }
+    }
+
+    public void setGlassShadowAlpha(float alpha) {
+        if (glassDrawable != null) {
+            glassDrawable.setShadowAlpha(alpha);
+        }
+        if (glassDrawableBack != null) {
+            glassDrawableBack.setShadowAlpha(alpha);
+        }
+        if (glassDrawableMenu != null) {
+            glassDrawableMenu.setShadowAlpha(alpha);
+        }
+        invalidate();
     }
 
     public void setupGlass(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundColorProvider colorProvider) {
@@ -221,7 +296,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
         glassDrawable = factory.create(this)
             .setColorProvider(colorProvider)
-            .setPadding(dp(6));
+            .setPadding(glassPadding);
         if (isForum) {
             glassDrawable.setRadius(dp(18.33f), dp(23), dp(23), dp(18.33f));
         } else {
@@ -232,12 +307,12 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         glassDrawableBack = factory.create(this)
             .setColorProvider(colorProvider)
             .setRadius(dp(23))
-            .setPadding(dp(6));
+            .setPadding(glassPadding);
 
         glassDrawableMenu = factory.create(this)
             .setColorProvider(colorProvider)
             .setRadius(dp(23))
-            .setPadding(dp(6));
+            .setPadding(glassPadding);
 
         if (menu != null) {
             menu.setTranslationX(-dp(10));
@@ -1915,6 +1990,166 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         } else {
             return dp(56);
         }
+    }
+
+    public void setTitleAnimatedX(CharSequence title, Drawable rightDrawable, boolean toLeft, int duration) {
+        if (titleTextView[0] == null || title == null) {
+            setTitle(title, rightDrawable);
+            return;
+        }
+        if (titleTextView[1] != null) {
+            if (titleTextView[1].getParent() != null) {
+                ((ViewGroup) titleTextView[1].getParent()).removeView(titleTextView[1]);
+            }
+            titleTextView[1] = null;
+        }
+        if (titleAnimator != null) {
+            titleAnimator.cancel();
+            titleAnimator = null;
+        }
+        titleTextView[1] = titleTextView[0];
+        titleTextView[0] = null;
+        setTitle(title, rightDrawable);
+        titleAnimationRunning = true;
+        final float offset = dp(10) * (toLeft ? -1 : 1);
+        titleTextView[1].setTranslationX(0);
+        titleTextView[1].setTranslationY(0);
+        titleTextView[0].setTranslationX(-offset);
+        titleTextView[0].setTranslationY(0);
+        titleTextView[0].setAlpha(0f);
+        titleTextView[1].setAlpha(1f);
+        titleTextView[0].setVisibility(VISIBLE);
+        titleTextView[1].setVisibility(VISIBLE);
+        ArrayList<Animator> animators = new ArrayList<>();
+        animators.add(ObjectAnimator.ofFloat(titleTextView[1], View.ALPHA, 0f));
+        animators.add(ObjectAnimator.ofFloat(titleTextView[0], View.ALPHA, 1f));
+        animators.add(ObjectAnimator.ofFloat(titleTextView[1], View.TRANSLATION_X, offset));
+        animators.add(ObjectAnimator.ofFloat(titleTextView[0], View.TRANSLATION_X, 0f));
+        titleAnimator = new AnimatorSet();
+        titleAnimator.playTogether(animators);
+        titleAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (titleTextView[1] != null && titleTextView[1].getParent() != null) {
+                    ((ViewGroup) titleTextView[1].getParent()).removeView(titleTextView[1]);
+                }
+                titleTextView[1] = null;
+                titleAnimationRunning = false;
+                requestLayout();
+            }
+        });
+        titleAnimator.setDuration(duration);
+        titleAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+        titleAnimator.start();
+        requestLayout();
+    }
+
+    private boolean shouldCenterTitle() {
+        return isCenterTitle || ExteraConfig.getCenterTitle();
+    }
+
+    private int getTitleGravity() {
+        return shouldCenterTitle() ? Gravity.CENTER : Gravity.LEFT | Gravity.CENTER_VERTICAL;
+    }
+
+    private int getSubtitleGravity() {
+        return shouldCenterTitle() ? Gravity.CENTER : Gravity.LEFT;
+    }
+
+    public void refreshTitlePosition(boolean animated) {
+        final int titleGravity = getTitleGravity();
+        final int subtitleGravity = getSubtitleGravity();
+        if (!animated) {
+            for (int i = 0; i < 2; i++) {
+                if (titleTextView[i] != null) {
+                    titleTextView[i].setGravity(titleGravity);
+                }
+            }
+            if (subtitleTextView != null) {
+                subtitleTextView.setGravity(subtitleGravity);
+            }
+            if (additionalSubtitleTextView != null) {
+                additionalSubtitleTextView.setGravity(subtitleGravity);
+            }
+            requestLayout();
+            return;
+        }
+        final ArrayList<View> views = new ArrayList<>();
+        final ArrayList<Float> fromX = new ArrayList<>();
+        final ArrayList<Float> fromY = new ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            if (titleTextView[i] != null && titleTextView[i].getVisibility() == VISIBLE) {
+                views.add(titleTextView[i]);
+            }
+        }
+        if (subtitleTextView != null && subtitleTextView.getVisibility() == VISIBLE) {
+            views.add(subtitleTextView);
+        }
+        if (additionalSubtitleTextView != null && additionalSubtitleTextView.getVisibility() == VISIBLE) {
+            views.add(additionalSubtitleTextView);
+        }
+        for (View view : views) {
+            view.animate().cancel();
+            if (view instanceof SimpleTextView) {
+                SimpleTextView textView = (SimpleTextView) view;
+                fromX.add(textView.getTextStartX() + view.getTranslationX());
+                fromY.add(textView.getTextStartY() + view.getTranslationY());
+            } else {
+                fromX.add(view.getLeft() + view.getTranslationX());
+                fromY.add(view.getTop() + view.getTranslationY());
+            }
+        }
+        for (int i = 0; i < 2; i++) {
+            if (titleTextView[i] != null) {
+                titleTextView[i].setGravity(titleGravity);
+            }
+        }
+        if (subtitleTextView != null) {
+            subtitleTextView.setGravity(subtitleGravity);
+        }
+        if (additionalSubtitleTextView != null) {
+            additionalSubtitleTextView.setGravity(subtitleGravity);
+        }
+        requestLayout();
+        final ViewTreeObserver.OnPreDrawListener preDrawListener = new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                getViewTreeObserver().removeOnPreDrawListener(this);
+                for (int i = 0; i < views.size(); i++) {
+                    final View view = views.get(i);
+                    final float left, top;
+                    if (view instanceof SimpleTextView) {
+                        left = ((SimpleTextView) view).getTextStartX();
+                        top = ((SimpleTextView) view).getTextStartY();
+                    } else {
+                        left = view.getLeft();
+                        top = view.getTop();
+                    }
+                    AnimatorSet animatorSet = new AnimatorSet();
+                    animatorSet.playTogether(
+                        ObjectAnimator.ofFloat(view, View.TRANSLATION_X, fromX.get(i) - left, 0f),
+                        ObjectAnimator.ofFloat(view, View.TRANSLATION_Y, fromY.get(i) - top, 0f)
+                    );
+                    animatorSet.setDuration(300);
+                    animatorSet.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+                    animatorSet.start();
+                }
+                return true;
+            }
+        };
+        getViewTreeObserver().addOnPreDrawListener(preDrawListener);
+        addOnAttachStateChangeListener(new OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                getViewTreeObserver().removeOnPreDrawListener(preDrawListener);
+                removeOnAttachStateChangeListener(this);
+            }
+        });
     }
 
     public void setTitleAnimated(CharSequence title, boolean fromBottom, long duration) {

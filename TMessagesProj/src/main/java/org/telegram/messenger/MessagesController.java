@@ -1276,6 +1276,7 @@ public class MessagesController extends BaseController implements NotificationCe
     public static class DialogFilter {
         public int id;
         public String name;
+        public String emoticon;
         public ArrayList<TLRPC.MessageEntity> entities = new ArrayList<>();
         public int unreadCount;
         public volatile int pendingUnreadCount;
@@ -9851,6 +9852,11 @@ public class MessagesController extends BaseController implements NotificationCe
         return dialogs;
     }
 
+    public boolean hasArchivedChatsActual() {
+        ArrayList<TLRPC.Dialog> dialogs = dialogsByFolder.get(1);
+        return dialogs != null && !dialogs.isEmpty();
+    }
+
     public int getAllFoldersDialogsCount() {
         int count = 0;
         for (int i = 0; i < dialogsByFolder.size(); i++) {
@@ -11507,6 +11513,7 @@ public class MessagesController extends BaseController implements NotificationCe
     public final static int LOAD_FORWARD = 1;
     public final static int LOAD_FROM_UNREAD = 2;
     public final static int LOAD_AROUND_MESSAGE = 3;
+    public final static int LOAD_SEARCH_RESULTS = -3;
     public final static int LOAD_AROUND_DATE = 4;
 
     public void loadMessages(long dialogId, long mergeDialogId, boolean loadInfo, int count, int max_id, int offset_date, boolean fromCache, int midDate, int classGuid, int load_type, int last_message_id, int mode, long threadMessageId, int replyFirstUnread, int loadIndex, boolean isTopic) {

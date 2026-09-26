@@ -23,6 +23,8 @@ import androidx.annotation.Nullable;
 //import com.google.mlkit.nl.translate.Translator;
 //import com.google.mlkit.nl.translate.TranslatorOptions;
 
+import com.exteragram.messenger.translator.ChatTranslator;
+
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.InputSerializedData;
 import org.telegram.tgnet.OutputSerializedData;
@@ -832,6 +834,31 @@ public class TranslateController extends BaseController {
         });
     }
 
+
+    public void clearTranslationCache() {
+        cleanup();
+        ChatTranslator.clearCache();
+        getMessagesStorage().clearAllMessageCustomParams();
+    }
+
+    public void clearMessageTranslationState(MessageObject messageObject) {
+        if (messageObject == null || messageObject.messageOwner == null) {
+            return;
+        }
+        if (messageObject.replyMessageObject != null && messageObject.replyMessageObject != messageObject) {
+            clearMessageTranslationState(messageObject.replyMessageObject);
+        }
+        final TLRPC.Message message = messageObject.messageOwner;
+        message.originalLanguage = null;
+        message.translatedText = null;
+        message.translatedVoiceTranscription = null;
+        message.translatedPoll = null;
+        message.translatedToLanguage = null;
+        message.summaryText = null;
+        message.translatedSummaryText = null;
+        message.translatedSummaryLanguage = null;
+        messageObject.updateTranslation(false);
+    }
 
     public void cleanup() {
         cancelAllTranslations();
