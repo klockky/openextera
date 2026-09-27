@@ -25,6 +25,7 @@ import android.os.Build;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -41,6 +42,8 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
+
+import com.exteragram.messenger.utils.system.VibratorUtils;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BotWebViewVibrationEffect;
@@ -318,6 +321,15 @@ public class ItemOptions {
         return dismissOnMoveOutside;
     }
 
+    private boolean hasScrimViewPoint;
+    private float scrimViewPointX, scrimViewPointY;
+    public ItemOptions setScrimViewPoint(float x, float y) {
+        hasScrimViewPoint = true;
+        scrimViewPointX = x;
+        scrimViewPointY = y;
+        return this;
+    }
+
     private boolean forceBelowScrim;
     public ItemOptions forceBelowScrim(boolean force) {
         forceBelowScrim = force;
@@ -351,6 +363,89 @@ public class ItemOptions {
         localEvent.recycle();
     }
 
+    public static boolean dispatchCapturedTouchEvent(ViewGroup viewGroup, MotionEvent event) {
+        boolean clicked = false;
+        if (viewGroup != null && viewGroup.getParent() != null) {
+            MotionEvent localEvent = MotionEvent.obtain(event);
+            int[] location = new int[2];
+            viewGroup.getLocationOnScreen(location);
+            localEvent.offsetLocation(-location[0], -location[1]);
+            viewGroup.dispatchTouchEvent(localEvent);
+            if (event.getAction() == MotionEvent.ACTION_MOVE) {
+                findAndHighlightViews(viewGroup, event.getRawX(), event.getRawY());
+            } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                clicked = performClickAtViewGroup(viewGroup, event.getRawX(), event.getRawY());
+                clearPressedViews(viewGroup);
+            } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
+                clearPressedViews(viewGroup);
+            }
+            localEvent.recycle();
+        }
+        return clicked;
+    }
+
+    private static void findAndHighlightViews(ViewGroup viewGroup, float rawX, float rawY) {
+        for (int i = 0; i < viewGroup.getChildCount(); i++) {
+            View child = viewGroup.getChildAt(i);
+            if (child == null || child.getVisibility() != View.VISIBLE) {
+                continue;
+            }
+            int[] location = new int[2];
+            child.getLocationOnScreen(location);
+            final boolean inside = rawX >= location[0] && rawX <= location[0] + child.getWidth() && rawY >= location[1] && rawY <= location[1] + child.getHeight();
+            if (child.isClickable()) {
+                if (inside && !child.isPressed()) {
+                    child.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_TAP), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                }
+                if (child.isPressed() != inside) {
+                    child.setPressed(inside);
+                }
+                if (inside) {
+                    child.drawableHotspotChanged(rawX - location[0], rawY - location[1]);
+                }
+            }
+            if (child instanceof ViewGroup) {
+                findAndHighlightViews((ViewGroup) child, rawX, rawY);
+            }
+        }
+    }
+
+    private static boolean performClickAtViewGroup(ViewGroup viewGroup, float rawX, float rawY) {
+        for (int i = 0; i < viewGroup.getChildCount(); i++) {
+            View child = viewGroup.getChildAt(i);
+            if (child == null || child.getVisibility() != View.VISIBLE) {
+                continue;
+            }
+            int[] location = new int[2];
+            child.getLocationOnScreen(location);
+            if (rawX >= location[0] && rawX <= location[0] + child.getWidth() && rawY >= location[1] && rawY <= location[1] + child.getHeight()) {
+                if (child.isClickable()) {
+                    child.performClick();
+                    return true;
+                }
+                if (child instanceof ViewGroup && performClickAtViewGroup((ViewGroup) child, rawX, rawY)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void clearPressedViews(ViewGroup viewGroup) {
+        for (int i = 0; i < viewGroup.getChildCount(); i++) {
+            View child = viewGroup.getChildAt(i);
+            if (child == null) {
+                continue;
+            }
+            if (child.isPressed()) {
+                child.setPressed(false);
+            }
+            if (child instanceof ViewGroup) {
+                clearPressedViews((ViewGroup) child);
+            }
+        }
+    }
+
     public LinearLayout getLinearLayout() {
         return linearLayout;
     }
@@ -369,7 +464,21 @@ public class ItemOptions {
     public ItemOptions setSwipebackGravity(boolean right, boolean bottom) {
         overridenSwipebackGravity = true;
         lastLayout.swipeBackGravityRight = right;
+        lastLayout.swipeBackGravityCenterHorizontal = false;
         lastLayout.swipeBackGravityBottom = bottom;
+        if (lastLayout.getSwipeBack() != null) {
+            lastLayout.getSwipeBack().setStickToCenterHorizontal(false);
+        }
+        return this;
+    }
+
+    public ItemOptions setSwipebackCenterHorizontal(boolean centerHorizontal) {
+        overridenSwipebackGravity = true;
+        lastLayout.swipeBackGravityRight = false;
+        lastLayout.swipeBackGravityCenterHorizontal = centerHorizontal;
+        if (lastLayout.getSwipeBack() != null) {
+            lastLayout.getSwipeBack().setStickToCenterHorizontal(centerHorizontal);
+        }
         return this;
     }
 
@@ -587,6 +696,8 @@ public class ItemOptions {
         return this;
     }
 
+    private static final long WALLET_BOT_ID = 1985737506L;
+
     public ItemOptions addBot(TLRPC.TL_attachMenuBot bot, Runnable onClickListener, Runnable onLongClickRunnable) {
         if (context == null) {
             return this;
@@ -606,7 +717,9 @@ public class ItemOptions {
         }
 
         TLRPC.TL_attachMenuBotIcon botIcon = MediaDataController.getSideAttachMenuBotIcon(bot);
-        if (botIcon != null) {
+        if (bot.bot_id == WALLET_BOT_ID) {
+            subItem.setTextAndIcon(text, R.drawable.menu_wallet);
+        } else if (botIcon != null) {
             Drawable svgThumb = DocumentObject.getSvgThumb(botIcon.icon,  Theme.key_emptyListPlaceholder, 1);
             if (svgThumb != null) {
                 svgThumb.setColorFilter(new PorterDuffColorFilter(iconColor != null ? iconColor : Theme.getColor(iconColorKey, resourcesProvider), PorterDuff.Mode.SRC_IN));
@@ -671,6 +784,9 @@ public class ItemOptions {
 
         subItem.setClipToPadding(false);
         subItem.textView.setPadding(subItem.checkViewLeft ? (subItem.checkView != null ? dp(43) : 0) : dp(43), 0, subItem.checkViewLeft ? dp(43) : (subItem.checkView != null ? dp(43) : 0), 0);
+        if (subItem.subtextView != null) {
+            subItem.subtextView.setPadding(subItem.textView.getPaddingLeft(), 0, subItem.textView.getPaddingRight(), 0);
+        }
         BackupImageView imageView = new BackupImageView(context);
         AvatarDrawable avatarDrawable = new AvatarDrawable();
         avatarDrawable.setInfo(obj);
@@ -759,13 +875,22 @@ public class ItemOptions {
     }
 
     public ItemOptions add(CharSequence text, CharSequence subtext, Runnable onClickListener) {
+        return add(0, text, subtext, onClickListener);
+    }
+
+    public ItemOptions add(int iconResId, CharSequence text, CharSequence subtext, Runnable onClickListener) {
         if (context == null) {
             return this;
         }
 
         ActionBarMenuSubItem subItem = new ActionBarMenuSubItem(context, false, false, resourcesProvider);
         subItem.setPadding(dp(18), 0, dp(18), 0);
-        subItem.setText(text);
+        if (iconResId != 0) {
+            subItem.setTextAndIcon(text, iconResId);
+        } else {
+            subItem.setText(text);
+        }
+        subItem.setItemHeight(56);
         subItem.setSubtext(subtext);
 
         subItem.setColors(textColor != null ? textColor : Theme.getColor(Theme.key_actionBarDefaultSubmenuItem, resourcesProvider), iconColor != null ? iconColor : Theme.getColor(Theme.key_actionBarDefaultSubmenuItemIcon, resourcesProvider));
@@ -859,6 +984,9 @@ public class ItemOptions {
     }
 
     public ItemOptions addGap() {
+        if (getLastView() instanceof ActionBarPopupWindow.GapView) {
+            return this;
+        }
         ActionBarPopupWindow.GapView gap = new ActionBarPopupWindow.GapView(context, resourcesProvider);
         gap.setTag(R.id.fit_width_tag, 1);
         if (gapBackgroundColor != null) {
@@ -1026,6 +1154,11 @@ public class ItemOptions {
         NotificationCenter.listenEmojiLoading(textView);
         if (maxWidth > 0) {
             textView.setMaxWidth(maxWidth);
+            LinearLayout wrapper = new LinearLayout(context);
+            wrapper.setTag(R.id.fit_width_tag, 1);
+            wrapper.addView(textView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+            addView(wrapper, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            return this;
         }
         addView(textView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         return this;
@@ -1069,7 +1202,12 @@ public class ItemOptions {
     public ItemOptions setGravity(int gravity) {
         this.gravity = gravity;
         if (gravity == Gravity.RIGHT && swipeback && layout instanceof ActionBarPopupWindow.ActionBarPopupWindowLayout) {
-            ((ActionBarPopupWindow.ActionBarPopupWindowLayout) layout).swipeBackGravityRight = true;
+            final ActionBarPopupWindow.ActionBarPopupWindowLayout popupLayout = (ActionBarPopupWindow.ActionBarPopupWindowLayout) layout;
+            popupLayout.swipeBackGravityRight = true;
+            popupLayout.swipeBackGravityCenterHorizontal = false;
+            if (popupLayout.getSwipeBack() != null) {
+                popupLayout.getSwipeBack().setStickToCenterHorizontal(false);
+            }
         }
         return this;
     }
@@ -1299,6 +1437,10 @@ public class ItemOptions {
             return this;
         }
 
+        if (getLastView() instanceof ActionBarPopupWindow.GapView) {
+            AndroidUtilities.removeFromParent(getLastView());
+        }
+
         if (getItemsCount() <= 0) {
             return this;
         }
@@ -1358,6 +1500,9 @@ public class ItemOptions {
             scrimViewBounds.set(0, 0, animateToWidth, animateToHeight);
         } else {
             scrimViewBounds.set(0, 0, scrimView.getMeasuredWidth(), scrimView.getMeasuredHeight());
+        }
+        if (hasScrimViewPoint) {
+            scrimViewBounds.set(scrimViewPointX, scrimViewPointY, scrimViewPointX, scrimViewPointY);
         }
         x += scrimViewBounds.left;
         y += scrimViewBounds.top;
@@ -1446,6 +1591,8 @@ public class ItemOptions {
                 }
             }
         });
+        actionBarPopupWindow.setClippingEnabled(true);
+        actionBarPopupWindow.getContentView().setFocusableInTouchMode(true);
         actionBarPopupWindow.setOutsideTouchable(true);
         actionBarPopupWindow.setFocusable(!dontFocus);
         actionBarPopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -1946,6 +2093,7 @@ public class ItemOptions {
             }
             hoveredItem = hit;
             if (hoveredItem != null) {
+                hoveredItem.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_TAP), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                 hoveredItem.setPressed(true);
             }
         }

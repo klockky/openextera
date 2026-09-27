@@ -420,6 +420,10 @@ public abstract class ViewPagerActivity extends BaseFragment {
             super(context);
         }
 
+        public int getTargetPosition() {
+            return viewPages[1] != null && nextPosition >= 0 ? nextPosition : getCurrentPosition();
+        }
+
         private boolean tabletLayout;
         public void setTabletLayout(boolean tabletLayout) {
             if (this.tabletLayout == tabletLayout) return;

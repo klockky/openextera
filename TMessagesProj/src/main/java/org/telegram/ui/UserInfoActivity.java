@@ -26,6 +26,12 @@ import android.widget.TextView;
 
 import androidx.annotation.Keep;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.api.model.NowPlayingServiceType;
+import com.exteragram.messenger.badges.BadgesController;
+import com.exteragram.messenger.nowplaying.NowPlayingController;
+import com.exteragram.messenger.nowplaying.ui.SetupNowPlayingActivity;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BotWebViewVibrationEffect;
@@ -58,6 +64,7 @@ import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.CircularProgressDrawable;
 import org.telegram.ui.Components.CrossfadeDrawable;
 import org.telegram.ui.Components.IconBackgroundColors;
+import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.RecyclerListView;
@@ -100,6 +107,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         getNotificationCenter().addObserver(this, NotificationCenter.privacyRulesUpdated);
         getNotificationCenter().addObserver(this, NotificationCenter.updateInterfaces);
         getNotificationCenter().addObserver(this, NotificationCenter.updatedChatbot);
+        getNotificationCenter().addObserver(this, NotificationCenter.nowPlayingUpdated);
         getContactsController().loadPrivacySettings();
         BusinessChatbotController.getInstance(currentAccount).load(null);
         return super.onFragmentCreate();
@@ -111,6 +119,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         getNotificationCenter().removeObserver(this, NotificationCenter.privacyRulesUpdated);
         getNotificationCenter().removeObserver(this, NotificationCenter.updateInterfaces);
         getNotificationCenter().removeObserver(this, NotificationCenter.updatedChatbot);
+        getNotificationCenter().removeObserver(this, NotificationCenter.nowPlayingUpdated);
         super.onFragmentDestroy();
         if (!wasSaved) {
             processDone(false);
@@ -297,6 +306,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     private static final int INFO_BIRTHDAY = 9;
     private static final int BUTTON_ADD_ACCOUNT = 10;
     private static final int BUTTON_LOGOUT = 11;
+    private static final int BUTTON_SCROBBLING = 12;
 
     private final ArrayList<Integer> accountNumbers = new ArrayList<>();
     private void updateAccounts() {
@@ -392,6 +402,10 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
             }
         }
         items.add(UItem.asShadow(birthdayInfo));
+
+        if (BadgesController.INSTANCE.hasBadge() && nowPlayingService != null) {
+            items.add(SettingsActivity.SettingCell.Factory.of(BUTTON_SCROBBLING, IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom, R.drawable.msg_filled_data_music, getString(R.string.ScrobblingService), null, nowPlayingService.getDisplayName()));
+        }
 
         channelRow = items.size();
         if (channel == null) {
@@ -541,6 +555,8 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
 //            }));
         } else if (item.id == BUTTON_LOCATION) {
             presentFragment(new LocationActivity());
+        } else if (item.id == BUTTON_SCROBBLING) {
+            presentFragment(new SetupNowPlayingActivity());
         } else if (item.id == BUTTON_HOURS) {
             presentFragment(new OpeningHoursActivity());
         } else if (item.id == BUTTON_AI) {
@@ -556,7 +572,29 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
 
     @Override
     protected boolean onLongClick(UItem item, View view, int position, float x, float y) {
-        return false;
+        final TLRPC.User user = getUserConfig().getCurrentUser();
+        final String text;
+        final int copiedText;
+        if (item.id == INFO_PHONE && user != null && !TextUtils.isEmpty(user.phone)) {
+            text = "+" + user.phone;
+            copiedText = R.string.PhoneCopied;
+        } else if (item.id == INFO_USERNAME && !TextUtils.isEmpty(UserObject.getPublicUsername(user))) {
+            text = "@" + UserObject.getPublicUsername(user);
+            copiedText = R.string.UsernameCopied;
+        } else {
+            return false;
+        }
+        ItemOptions.makeOptions(this, view)
+            .setScrimViewBackground(listView.getClipBackground(view))
+            .add(R.drawable.msg_copy, getString(R.string.Copy), () -> {
+                AndroidUtilities.addToClipboard(text);
+                if (AndroidUtilities.shouldShowClipboardToast()) {
+                    BulletinFactory.of(this).createCopyBulletin(getString(copiedText)).show();
+                }
+            })
+            .setGravity(Gravity.LEFT)
+            .show();
+        return true;
     }
 
     @Override
@@ -567,8 +605,14 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
             if (listView != null) {
                 listView.adapter.update(true);
             }
-        } else if (id == NotificationCenter.privacyRulesUpdated) {
-            updateBioInfo();
+        } else if (id == NotificationCenter.privacyRulesUpdated || id == NotificationCenter.nowPlayingUpdated) {
+            if (id == NotificationCenter.nowPlayingUpdated) {
+                if (args[0] instanceof NowPlayingServiceType) {
+                    nowPlayingService = (NowPlayingServiceType) args[0];
+                }
+            } else {
+                updateBioInfo();
+            }
             if (listView != null) {
                 listView.adapter.update(true);
             }
@@ -611,6 +655,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     private AdminedChannelsFetcher channels = new AdminedChannelsFetcher(currentAccount, true);
 
     private boolean valueSet;
+    private NowPlayingServiceType nowPlayingService;
     private void setValue() {
         if (valueSet) return;
 
@@ -644,6 +689,13 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         hadHours = userFull.business_work_hours != null;
         hadLocation = userFull.business_location != null;
         checkDone(true);
+
+        NowPlayingController.getNowPlayingInfo(info -> AndroidUtilities.runOnUIThread(() -> {
+            nowPlayingService = info == null ? null : info.getServiceType();
+            if (listView != null) {
+                listView.adapter.update(true);
+            }
+        }, 100));
 
         if (listView != null && listView.adapter != null) {
             listView.adapter.update(true);
@@ -794,6 +846,9 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
                     wasSaved = true;
                     requestsReceived[0]++;
                     if (requestsReceived[0] == requests.size()) {
+                        if (ExteraConfig.getTitleText() == 2) {
+                            NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.currentUserPremiumStatusChanged);
+                        }
                         finishFragment();
                     }
                 }

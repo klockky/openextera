@@ -65,4 +65,8 @@
 
     <item name="tag_view_on_post_draw_state" type="id" />
     <item name="tag_view_on_post_draw_root_state" type="id" />
+    <item name="menu_bold_italic" type="id"/>
+    <item name="menu_code" type="id"/>
+    <item name="menu_markdown" type="id"/>
+    <item name="round_section_tag" type="id"/>
 </resources>

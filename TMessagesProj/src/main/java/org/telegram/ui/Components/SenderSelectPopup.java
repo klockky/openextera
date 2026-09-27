@@ -1,5 +1,7 @@
 package org.telegram.ui.Components;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.SuppressLint;
@@ -523,6 +525,7 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
             setPadding(padding, padding / 2, padding, padding / 2);
 
             avatar = new SimpleAvatarView(context);
+            avatar.setAvatarCorners(ExteraConfig.getAvatarCorners(40));
             addView(avatar, LayoutHelper.createFrame(AVATAR_SIZE_DP, AVATAR_SIZE_DP));
 
             LinearLayout textRow = new LinearLayout(context);

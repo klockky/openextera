@@ -25,6 +25,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DocumentObject;
 import org.telegram.messenger.FileLoader;
@@ -63,9 +65,12 @@ public class ChatGreetingsView extends LinearLayout {
     public BackupImageView nextStickerToSendView;
     private final Theme.ResourcesProvider resourcesProvider;
     boolean wasDraw;
+    boolean showGreetings;
+    boolean stickerExplicitlyHidden;
 
     public ChatGreetingsView(Context context, TLRPC.User user, int currentAccount, TLRPC.Document sticker, Theme.ResourcesProvider resourcesProvider) {
         super(context);
+        showGreetings = !ExteraConfig.getDisableGreetingSticker();
         setOrientation(VERTICAL);
         this.currentAccount = currentAccount;
         this.resourcesProvider = resourcesProvider;
@@ -224,6 +229,7 @@ public class ChatGreetingsView extends LinearLayout {
 
     private void updateLayout() {
         removeAllViews();
+        setPadding(0, showGreetings || preview ? dp(8) : 0, 0, 0);
         if (premiumLock) {
             addView(premiumIconView, LayoutHelper.createLinear(78, 78, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 20, 9, 20, 9));
             final boolean premiumLocked = MessagesController.getInstance(currentAccount).premiumFeaturesBlocked();
@@ -234,7 +240,8 @@ public class ChatGreetingsView extends LinearLayout {
                 }
             }
         } else {
-            addView(titleView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 20, 6, 20, 6));
+            final boolean full = showGreetings || preview;
+            addView(titleView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, full ? 20 : 9, full ? 6 : 2, full ? 20 : 9, full ? 6 : 3));
             addView(descriptionView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 20, 6, 20, 6));
             addView(stickerContainer, LayoutHelper.createLinear(112, 112, Gravity.CENTER_HORIZONTAL, 16, 10, 16, 16));
         }
@@ -242,8 +249,18 @@ public class ChatGreetingsView extends LinearLayout {
 
     public void setSticker(TLRPC.Document sticker) {
         if (sticker == null) {
+            if (preview) {
+                stickerExplicitlyHidden = true;
+                wasDraw = true;
+                stickerToSendView.clearImage();
+                nextStickerToSendView.clearImage();
+                stickerContainer.setVisibility(View.GONE);
+                stickerToSendView.setOnClickListener(null);
+            }
             return;
         }
+        stickerExplicitlyHidden = false;
+        stickerContainer.setVisibility(View.VISIBLE);
         wasDraw = true;
         nextStickerToSendView.clearImage();
         SvgHelper.SvgDrawable svgThumb = DocumentObject.getSvgThumb(sticker, Theme.key_chat_serviceBackground, 1.0f);
@@ -264,6 +281,8 @@ public class ChatGreetingsView extends LinearLayout {
         if (stickerPath == null) {
             return;
         }
+        stickerExplicitlyHidden = false;
+        stickerContainer.setVisibility(View.VISIBLE);
         wasDraw = true;
         nextStickerToSendView.clearImage();
         stickerToSendView.setImage(ImageLocation.getForPath(stickerPath), "256_256", null, null, 0, null);
@@ -421,19 +440,19 @@ public class ChatGreetingsView extends LinearLayout {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         ignoreLayot = true;
-        if (!preview) {
-            descriptionView.setVisibility(View.VISIBLE);
+        descriptionView.setVisibility(View.VISIBLE);
+        if (!stickerExplicitlyHidden) {
+            stickerContainer.setVisibility(View.VISIBLE);
         }
-        stickerToSendView.setVisibility(View.VISIBLE);
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        if (getMeasuredHeight() > MeasureSpec.getSize(heightMeasureSpec) && !preview) {
+        if ((!showGreetings || getMeasuredHeight() > MeasureSpec.getSize(heightMeasureSpec)) && !preview) {
             descriptionView.setVisibility(View.GONE);
-            stickerToSendView.setVisibility(View.GONE);
+            stickerContainer.setVisibility(View.GONE);
         } else {
-            if (!preview) {
-                descriptionView.setVisibility(View.VISIBLE);
+            descriptionView.setVisibility(View.VISIBLE);
+            if (!stickerExplicitlyHidden) {
+                stickerContainer.setVisibility(View.VISIBLE);
             }
-            stickerToSendView.setVisibility(View.VISIBLE);
         }
         ignoreLayot = false;
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -449,6 +468,7 @@ public class ChatGreetingsView extends LinearLayout {
                 Math.min((int) (AndroidUtilities.displaySize.x * .5f), HintView2.cutInFancyHalf(descriptionView.getText(), descriptionView.getPaint())) :
                 (int) (AndroidUtilities.displaySize.x * .5f)
         );
+        updateLayout();
     }
 
     private float viewTop;
@@ -479,7 +499,9 @@ public class ChatGreetingsView extends LinearLayout {
         }
         if (!wasDraw) {
             wasDraw = true;
-            setSticker(preloadedGreetingsSticker);
+            if (!stickerExplicitlyHidden) {
+                setSticker(preloadedGreetingsSticker);
+            }
         }
         super.dispatchDraw(canvas);
     }
@@ -504,7 +526,7 @@ public class ChatGreetingsView extends LinearLayout {
     }
 
     private void fetchSticker() {
-        if (preloadedGreetingsSticker == null) {
+        if (preloadedGreetingsSticker == null && !stickerExplicitlyHidden) {
             preloadedGreetingsSticker = MediaDataController.getInstance(currentAccount).getGreetingsSticker();
             if (wasDraw) {
                 setSticker(preloadedGreetingsSticker);
@@ -534,7 +556,7 @@ public class ChatGreetingsView extends LinearLayout {
         imageView.setScaleType(ImageView.ScaleType.CENTER);
         imageView.setAnimation(R.raw.large_message_lock, 80, 80);
         imageView.playAnimation();
-        imageView.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
+        imageView.setColorFilter(new PorterDuffColorFilter(Theme.isCurrentThemeMonet() ? Theme.getColor(Theme.key_chats_actionIcon) : Color.WHITE, PorterDuff.Mode.SRC_IN));
         imageView.setBackground(Theme.createCircleDrawable(dp(80), Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider)));
         layout.addView(imageView, LayoutHelper.createLinear(80, 80, Gravity.CENTER_HORIZONTAL, 0, 16, 0, 16));
 

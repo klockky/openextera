@@ -4,6 +4,8 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.find;
 
 import android.text.TextUtils;
+import com.exteragram.messenger.utils.MarkdownUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 
 import org.commonmark.Extension;
@@ -75,8 +77,8 @@ public class MarkdownParser {
     private static final int MAX_FILE_SIZE = 64 * 1024;
 
     public static boolean isMarkdown(MessageObject msg) {
-        if (msg == null) return false;
-        return isExtensionMarkdown(msg.getExtension()) || isMimeMarkdown(msg.getMimeType());
+        if (msg == null || MarkdownUtils.isTheme(msg)) return false;
+        return isExtensionMarkdown(msg.getExtension()) || isMimeMarkdown(msg.getMimeType()) || MarkdownUtils.isExteraMarkdown(msg);
     }
 
     public static boolean isExtensionMarkdown(String ext) {
@@ -118,9 +120,7 @@ public class MarkdownParser {
         if (file == null || !file.exists()) return null;
         if (file.length() > MAX_FILE_SIZE) return null;
 
-        String filename = null;
-        final TLRPC.TL_documentAttributeFilename attr1 = find(document.attributes, TLRPC.TL_documentAttributeFilename.class);
-        if (attr1 != null) filename = attr1.file_name;
+        final String filename = FileLoader.getDocumentFileName(document);
 
         final TLRPC.TL_webPage webpage = new TLRPC.TL_webPage();
 
@@ -143,10 +143,15 @@ public class MarkdownParser {
             }
             if (fileText.length() > MAX_FILE_SIZE) return null;
 
-            final String title = parse(fileText, page.blocks);
-            if (!TextUtils.isEmpty(title)) {
-                webpage.flags |= TLObject.FLAG_2;
-                webpage.title = title;
+            final String preformattedLanguage = MarkdownUtils.getPreformattedLanguage(filename, messageObject.getExtension(), messageObject.getMimeType());
+            if (!TextUtils.isEmpty(preformattedLanguage)) {
+                MarkdownUtils.appendPreformattedBlocks(page.blocks, fileText, preformattedLanguage, MAX_RICH_TEXT_LEN);
+            } else {
+                final String title = parse(fileText, page.blocks);
+                if (!TextUtils.isEmpty(title)) {
+                    webpage.flags |= TLObject.FLAG_2;
+                    webpage.title = title;
+                }
             }
         } catch (Exception e) {
             FileLog.e(e);
@@ -924,7 +929,7 @@ public class MarkdownParser {
         @Override
         public void visit(FencedCodeBlock fencedCodeBlock) {
             final TL_iv.pageBlockPreformatted b = new TL_iv.pageBlockPreformatted();
-            b.text = first(plain(fencedCodeBlock.getLiteral()));
+            b.text = first(plain(trimCodeBlock(fencedCodeBlock.getLiteral())));
             b.language = fencedCodeBlock.getInfo() == null ? "" : fencedCodeBlock.getInfo();
             emit(b);
         }
@@ -932,9 +937,23 @@ public class MarkdownParser {
         @Override
         public void visit(IndentedCodeBlock indentedCodeBlock) {
             final TL_iv.pageBlockPreformatted b = new TL_iv.pageBlockPreformatted();
-            b.text = first(plain(indentedCodeBlock.getLiteral()));
+            b.text = first(plain(trimCodeBlock(indentedCodeBlock.getLiteral())));
             b.language = "";
             emit(b);
+        }
+
+        private static String trimCodeBlock(String literal) {
+            if (literal == null) {
+                return "";
+            }
+            int length = literal.length();
+            if (length > 0 && literal.charAt(length - 1) == '\n') {
+                length--;
+            }
+            if (length > 0 && literal.charAt(length - 1) == '\r') {
+                length--;
+            }
+            return literal.substring(0, length);
         }
 
         @Override

@@ -50,6 +50,8 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.LinearSmoothScroller;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.DialogObject;
@@ -496,7 +498,7 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
 
             @Override
             public boolean onInterceptTouchEvent(MotionEvent ev) {
-                if (ev.getY() > getMeasuredHeight() - clipSize) {
+                if (ev.getY() > getMeasuredHeight() - clipSize && !ExteraConfig.canUseYandexMaps()) {
                     return false;
                 }
                 return super.onInterceptTouchEvent(ev);
@@ -504,7 +506,7 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
 
             @Override
             public boolean dispatchTouchEvent(MotionEvent ev) {
-                if (ev.getY() > getMeasuredHeight() - clipSize) {
+                if (ev.getY() > getMeasuredHeight() - clipSize && !ExteraConfig.canUseYandexMaps()) {
                     return false;
                 }
                 return super.dispatchTouchEvent(ev);
@@ -838,7 +840,9 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
         final IMapsProvider.IMapView map = mapView;
         new Thread(() -> {
             try {
-                map.onCreate(null);
+                if (!ExteraConfig.canUseYandexMaps()) {
+                    map.onCreate(null);
+                }
             } catch (Exception e) {
                 //this will cause exception, but will preload google maps?
             }
@@ -969,6 +973,9 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
         }
         try {
             if (mapView != null) {
+                if (ExteraConfig.canUseYandexMaps() && mapViewClip != null) {
+                    mapViewClip.removeAllViews();
+                }
                 mapView.onDestroy();
                 mapView = null;
             }
@@ -989,6 +996,11 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
     @Override
     public void onHide() {
         searchItem.setVisibility(GONE);
+    }
+
+    @Override
+    public void onHidden() {
+        onPause();
     }
 
     @Override

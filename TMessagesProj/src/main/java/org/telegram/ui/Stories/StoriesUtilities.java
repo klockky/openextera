@@ -10,7 +10,6 @@ import static org.telegram.ui.Stories.StoriesController.STATE_LIVE;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PathMeasure;
@@ -32,6 +31,7 @@ import android.widget.TextView;
 import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.DialogObject;
@@ -118,6 +118,12 @@ public class StoriesUtilities {
     };
 
     public static void drawAvatarWithStory(long dialogId, Canvas canvas, ImageReceiver avatarImage, boolean hasStories, AvatarStoryParams params) {
+        if (ExteraConfig.getHideStories()) {
+            applyAvatarRadius(avatarImage, params, 0);
+            avatarImage.setImageCoords(params.originalAvatarRect);
+            avatarImage.draw(canvas);
+            return;
+        }
         StoriesController storiesController = MessagesController.getInstance(UserConfig.selectedAccount).getStoriesController();
         boolean animated = params.animate;
         if (params.dialogId != dialogId) {
@@ -190,6 +196,7 @@ public class StoriesUtilities {
         }
         params.showProgress = showProgress;
         if (params.currentState == STATE_EMPTY && params.progressToSate == 1f) {
+            applyAvatarRadius(avatarImage, params, 0);
             avatarImage.setImageCoords(params.originalAvatarRect);
             canvas.save();
             canvas.scale(scale, scale, params.originalAvatarRect.centerX(), params.originalAvatarRect.centerY());
@@ -215,6 +222,7 @@ public class StoriesUtilities {
                 getInset(params.currentState, params.animateFromUnreadState),
                 params.progressToSate
         );
+        applyAvatarRadius(avatarImage, params, insetTo);
         if (insetTo == 0) {
             avatarImage.setImageCoords(params.originalAvatarRect);
         } else {
@@ -659,13 +667,14 @@ public class StoriesUtilities {
         }
     }
 
-    private static final RectF forumRect = new RectF();
-
     private static void drawCircleInternal(Canvas canvas, View view, AvatarStoryParams params, Paint paint, boolean isForum) {
-        if (isForum) {
-            forumRect.set(rectTmp);
-            forumRect.inset(dp(0.5f), dp(0.5f));
-            canvas.drawRoundRect(forumRect, dp(18), dp(18), paint);
+        if (isForum || ExteraConfig.getAvatarCorners() < 28) {
+            float radius = getRingCornerRadius(rectTmp, params, isForum);
+            if (params.progressToArc == 0) {
+                canvas.drawRoundRect(rectTmp, radius, radius, paint);
+            } else {
+                drawRoundRectSegmentExcluding(canvas, rectTmp, radius, 0, 360, -params.progressToArc / 2f, params.progressToArc / 2f, paint);
+            }
             return;
         }
         if (params.progressToArc == 0) {
@@ -675,56 +684,187 @@ public class StoriesUtilities {
         }
     }
 
-    private static final Path forumRoundRectPath = new Path();
-    private static final Matrix forumRoundRectMatrix = new Matrix();
-    private static final PathMeasure forumRoundRectPathMeasure = new PathMeasure();
-    private static final Path forumSegmentPath = new Path();
+    private static float getRingCornerRadius(RectF rect, AvatarStoryParams params, boolean isForum) {
+        float avatarSize = params.originalAvatarRect.width();
+        if (avatarSize <= 0) {
+            return ExteraConfig.getAvatarCorners(rect.width(), true, isForum);
+        }
+        float avatarRadius = params.avatarRadius;
+        if (avatarRadius < 0) {
+            avatarRadius = ExteraConfig.getAvatarCorners(avatarSize, true, isForum);
+        }
+        return Math.max(0, avatarRadius + (rect.width() - avatarSize) / 2f);
+    }
 
-    private static void drawSegment(Canvas canvas, RectF rectTmp, Paint paint, float startAngle, float endAngle, AvatarStoryParams params, boolean isForum) {
-        if (isForum) {
-            float r = rectTmp.height() * 0.32f;
-            float rotateAngle = (((int)(startAngle)) / 90) * 90 + 90;
-            float pathAngleStart = -199 + rotateAngle;
-            float percentFrom = (startAngle - pathAngleStart) / 360;
-            float percentTo = (endAngle - pathAngleStart) / 360;
-            forumRoundRectPath.rewind();
-            forumRoundRectPath.addRoundRect(rectTmp, r, r, Path.Direction.CW);
-
-            forumRoundRectMatrix.reset();
-            forumRoundRectMatrix.postRotate(rotateAngle, rectTmp.centerX(), rectTmp.centerY());
-            forumRoundRectPath.transform(forumRoundRectMatrix);
-
-            forumRoundRectPathMeasure.setPath(forumRoundRectPath, false);
-            float length = forumRoundRectPathMeasure.getLength();
-
-            forumSegmentPath.reset();
-            forumRoundRectPathMeasure.getSegment(length * percentFrom, length * percentTo, forumSegmentPath, true);
-            forumSegmentPath.rLineTo(0, 0);
-            canvas.drawPath(forumSegmentPath, paint);
+    private static void applyAvatarRadius(ImageReceiver avatarImage, AvatarStoryParams params, float inset) {
+        if (params.avatarRadius < 0) {
             return;
         }
+        int radius = Math.max(0, Math.round(params.avatarRadius - inset));
+        int[] roundRadius = avatarImage.getRoundRadius();
+        if (roundRadius[0] == radius && roundRadius[3] == radius) {
+            return;
+        }
+        avatarImage.setRoundRadius(radius);
+    }
+
+    private static final Path forumRoundRectPath = new Path();
+    private static final PathMeasure forumRoundRectPathMeasure = new PathMeasure();
+    private static final Path forumSegmentPath = new Path();
+    private static final Path forumWrappedSegmentPath = new Path();
+
+    public static void drawRoundRectSegment(Canvas canvas, RectF rect, float radius, float startAngle, float endAngle, Paint paint) {
+        float fraction = (endAngle - startAngle) / 360f;
+        if (fraction <= 0) {
+            return;
+        }
+        float r = Math.min(radius, Math.min(rect.width(), rect.height()) / 2f);
+        if (fraction >= 1f) {
+            canvas.drawRoundRect(rect, r, r, paint);
+            return;
+        }
+        double start = (startAngle - (float) Math.toDegrees(Math.atan2(rect.height() / 2f - r, -rect.width() / 2f))) / 360f;
+        float from = (float) (start - Math.floor(start));
+        float to = fraction + from;
+        forumRoundRectPath.rewind();
+        forumRoundRectPath.addRoundRect(rect, r, r, Path.Direction.CW);
+        forumRoundRectPathMeasure.setPath(forumRoundRectPath, false);
+        float length = forumRoundRectPathMeasure.getLength();
+        forumSegmentPath.reset();
+        forumRoundRectPathMeasure.getSegment(from * length, Math.min(to, 1f) * length, forumSegmentPath, true);
+        if (to > 1f) {
+            forumWrappedSegmentPath.rewind();
+            forumRoundRectPathMeasure.getSegment(0, length * (to - 1f), forumWrappedSegmentPath, true);
+            forumSegmentPath.addPath(forumWrappedSegmentPath);
+        }
+        canvas.drawPath(forumSegmentPath, paint);
+    }
+
+    private static float ringCornerAngle(double cos, double sin, float cornerX, float cornerY, float radius) {
+        double cx = cornerX;
+        double cy = cornerY;
+        double b = cos * cx + sin * cy;
+        double t = b + Math.sqrt(Math.max(0, b * b - (cx * cx + cy * cy - (double) radius * radius)));
+        double dx = cos * t - cx;
+        double dy = t * sin - cy;
+        if (dx == 0 && dy == 0) {
+            return 0;
+        }
+        return (float) Math.atan2(dy, dx);
+    }
+
+    private static float ringLengthToAngle(float halfWidth, float halfHeight, float radius, float angle) {
+        if (angle <= 0) {
+            return 0;
+        }
+        float straightX = halfWidth - radius;
+        float straightY = halfHeight - radius;
+        float quarterArc = (float) Math.PI * radius / 2f;
+        if (angle >= 180) {
+            return straightY * 2f + straightX * 2f + quarterArc * 2f;
+        }
+        double radians = Math.toRadians(angle);
+        double cos = Math.cos(radians);
+        double sin = Math.sin(radians);
+        if (cos > 0) {
+            double y = (double) halfWidth * sin;
+            if (y <= (double) straightY * cos) {
+                return (float) (y / cos);
+            }
+        }
+        double x = (double) halfHeight * cos;
+        if (x > (double) straightX * sin) {
+            return straightY + ringCornerAngle(cos, sin, straightX, straightY, radius) * radius;
+        }
+        if (x >= (double) -straightX * sin) {
+            return (float) ((straightY + quarterArc + straightX) - x / sin);
+        }
+        if (cos < 0) {
+            double y = (double) halfWidth * sin;
+            if (y <= (double) -straightY * cos) {
+                return (float) ((straightY * 2f + straightX * 2f + quarterArc * 2f) + y / cos);
+            }
+        }
+        return straightY + quarterArc + straightX * 2f + (ringCornerAngle(cos, sin, -straightX, straightY, radius) - (float) (Math.PI / 2)) * radius;
+    }
+
+    private static void drawRoundRectSegmentExcluding(Canvas canvas, RectF rect, float radius, float startAngle, float endAngle, float excludeFrom, float excludeTo, Paint paint) {
+        float halfWidth = rect.width() / 2f;
+        float halfHeight = rect.height() / 2f;
+        float r = Math.min(radius, Math.min(halfWidth, halfHeight));
+        float halfExclude = (excludeTo - excludeFrom) / 2f;
+        float straightY = halfHeight - r;
+        float perimeter = (halfWidth - r) * 4f + 4f * straightY + (float) (2 * Math.PI) * r;
+        float excludeAngle = (halfExclude <= 0 || perimeter <= 0) ? 0 : Math.min(180, ringLengthToAngle(halfWidth, halfHeight, r, halfExclude) * 360f / perimeter);
+        if (excludeAngle <= 0) {
+            drawRoundRectSegment(canvas, rect, radius, startAngle, endAngle, paint);
+            return;
+        }
+        float center = (float) Math.toDegrees(Math.atan2(straightY, -halfWidth)) + (straightY / perimeter + 0.5f) * 360f;
+        if (Math.cos(Math.toRadians((excludeFrom + excludeTo) / 2f)) < 0) {
+            center += 180;
+        }
+        while (center < startAngle - 180) {
+            center += 360;
+        }
+        while (center > endAngle + 180) {
+            center -= 360;
+        }
+        float from = center - excludeAngle;
+        float to = center + excludeAngle;
+        if (endAngle - startAngle >= 360) {
+            drawRoundRectSegment(canvas, rect, radius, to, from + 360, paint);
+            return;
+        }
+        if (to <= startAngle || from >= endAngle) {
+            drawRoundRectSegment(canvas, rect, radius, startAngle, endAngle, paint);
+            return;
+        }
+        if (from > startAngle) {
+            drawRoundRectSegment(canvas, rect, radius, startAngle, from, paint);
+        }
+        if (to < endAngle) {
+            drawRoundRectSegment(canvas, rect, radius, to, endAngle, paint);
+        }
+    }
+
+    private static void drawSegment(Canvas canvas, RectF rectTmp, Paint paint, float startAngle, float endAngle, AvatarStoryParams params, boolean isForum) {
+        float excludeFrom, excludeTo;
         if (params.useArcProgress) {
             if (!params.isFirst && !params.isLast) {
                 if (startAngle < 90) {
-                    drawArcExcludeArc(canvas, rectTmp, paint, startAngle, endAngle, -params.progressToArc / 2, params.progressToArc / 2);
+                    excludeFrom = -params.progressToArc / 2;
+                    excludeTo = params.progressToArc / 2;
                 } else {
-                    drawArcExcludeArc(canvas, rectTmp, paint, startAngle, endAngle, -params.progressToArc / 2 + 180, params.progressToArc / 2 + 180);
+                    excludeFrom = -params.progressToArc / 2 + 180;
+                    excludeTo = params.progressToArc / 2 + 180;
                 }
             } else if (params.isLast) {
-                drawArcExcludeArc(canvas, rectTmp, paint, startAngle, endAngle, -params.progressToArc / 2 + 180, params.progressToArc / 2 + 180);
+                excludeFrom = -params.progressToArc / 2 + 180;
+                excludeTo = params.progressToArc / 2 + 180;
             } else if (params.isFirst) {
-                drawArcExcludeArc(canvas, rectTmp, paint, startAngle, endAngle, -params.progressToArc / 2, params.progressToArc / 2);
+                excludeFrom = -params.progressToArc / 2;
+                excludeTo = params.progressToArc / 2;
             } else {
-                canvas.drawArc(rectTmp, startAngle, endAngle - startAngle, false, paint);
+                excludeFrom = 0;
+                excludeTo = 0;
             }
         } else {
             if (params.isLast) {
-                drawArcExcludeArc(canvas, rectTmp, paint, startAngle, endAngle, -params.progressToArc / 2 + 180, params.progressToArc / 2 + 180);
+                excludeFrom = -params.progressToArc / 2 + 180;
+                excludeTo = params.progressToArc / 2 + 180;
             } else if (startAngle < 90) {
-                drawArcExcludeArc(canvas, rectTmp, paint, startAngle, endAngle, params.rightTopAngleToExclude, params.rightBottomAngleToExclude);
+                excludeFrom = params.rightTopAngleToExclude;
+                excludeTo = params.rightBottomAngleToExclude;
             } else {
-                drawArcExcludeArc(canvas, rectTmp, paint, startAngle, endAngle,  -params.leftTopAngleToExclude, params.leftBottomAngleToExclude);
+                excludeFrom = -params.leftTopAngleToExclude;
+                excludeTo = params.leftBottomAngleToExclude;
             }
+        }
+        if (isForum || ExteraConfig.getAvatarCorners() < 28) {
+            drawRoundRectSegmentExcluding(canvas, rectTmp, getRingCornerRadius(rectTmp, params, isForum), startAngle, endAngle, excludeFrom, excludeTo, paint);
+        } else {
+            drawArcExcludeArc(canvas, rectTmp, paint, startAngle, endAngle, excludeFrom, excludeTo);
         }
     }
 
@@ -1202,6 +1342,7 @@ public class StoriesUtilities {
 
     public static class AvatarStoryParams {
         public boolean drawSegments = true;
+        public float avatarRadius = -1f;
         public boolean animate = true;
         public int storyId;
         public TL_stories.StoryItem storyItem;

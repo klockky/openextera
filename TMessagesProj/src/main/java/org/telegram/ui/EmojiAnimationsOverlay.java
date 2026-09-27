@@ -1,5 +1,7 @@
 package org.telegram.ui;
 
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import android.graphics.Canvas;
 import android.text.TextUtils;
 import android.view.HapticFeedbackConstants;
@@ -754,7 +756,7 @@ public class EmojiAnimationsOverlay implements NotificationCenter.NotificationCe
                         public void onAnimationReady(ImageReceiver imageReceiver) {
                             if (sendTap && messageObject != null && messageObject.isAnimatedAnimatedEmoji() && imageReceiver.getLottieAnimation() != null && !imageReceiver.getLottieAnimation().hasVibrationPattern()) {
                                 try {
-                                    contentLayout.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                                    contentLayout.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_TAP), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                                 } catch (Exception ignored) {}
                             }
                         }

@@ -51,6 +51,10 @@ import androidx.core.app.NotificationManagerCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.util.Consumer;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.network.RemoteUtils;
+import com.exteragram.messenger.utils.ui.MonetUtils;
+
 import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.SQLite.SQLiteDatabase;
 import org.telegram.SQLite.SQLiteException;
@@ -727,6 +731,7 @@ public class MessagesController extends BaseController implements NotificationCe
 
     private final SharedPreferences notificationsPreferences;
     private final SharedPreferences mainPreferences;
+    private final SharedPreferences.OnSharedPreferenceChangeListener hideAdsConfigListener;
     private final SharedPreferences emojiPreferences;
 
     public volatile boolean ignoreSetOnline;
@@ -1612,6 +1617,19 @@ public class MessagesController extends BaseController implements NotificationCe
         promoPsaMessage = mainPreferences.getString("promo_psa_message", null);
         promoPsaType = mainPreferences.getString("promo_psa_type", null);
         proxyDialogAddress = mainPreferences.getString("proxyDialogAddress", null);
+        hideAdsConfigListener = (preferences, key) -> {
+            if ("hide_ads".equals(key) && RemoteUtils.getBooleanConfigValue("hide_ads", false) && promoDialogId != 0 && promoDialogType == PROMO_TYPE_PROXY && getUserConfig().isClientActivated()) {
+                checkPromoInfo(true);
+            }
+        };
+        RemoteUtils.initCached();
+        if (RemoteUtils.sharedPreferences != null) {
+            RemoteUtils.sharedPreferences.registerOnSharedPreferenceChangeListener(hideAdsConfigListener);
+        }
+        if (promoDialogType == PROMO_TYPE_PROXY && RemoteUtils.getBooleanConfigValue("hide_ads", false)) {
+            promoDialogId = 0;
+            proxyDialogAddress = null;
+        }
         venueSearchBot = mainPreferences.getString("venueSearchBot", "foursquare");
         storyVenueSearchBot = mainPreferences.getString("storyVenueSearchBot", "foursquare");
         gifSearchBot = mainPreferences.getString("gifSearchBot", "gif");
@@ -1750,6 +1768,9 @@ public class MessagesController extends BaseController implements NotificationCe
         authorizationAutoconfirmPeriod = mainPreferences.getInt("authorization_autoconfirm_period", 604800);
         quoteLengthMax = mainPreferences.getInt("quoteLengthMax", 1024);
         giveawayGiftsPurchaseAvailable = mainPreferences.getBoolean("giveawayGiftsPurchaseAvailable", false);
+        if (!mainPreferences.getBoolean("peerColorsNotHarmonized", false)) {
+            mainPreferences.edit().remove("peerColors").remove("profilePeerColors").putBoolean("peerColorsNotHarmonized", true).apply();
+        }
         peerColors = PeerColors.fromString(PeerColors.TYPE_NAME, mainPreferences.getString("peerColors", ""));
         profilePeerColors = PeerColors.fromString(PeerColors.TYPE_PROFILE, mainPreferences.getString("profilePeerColors", ""));
         transcribeAudioTrialWeeklyNumber = mainPreferences.getInt("transcribeAudioTrialWeeklyNumber", BuildVars.DEBUG_PRIVATE_VERSION ? 2 : 0);
@@ -5204,6 +5225,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 if (peerColor == null)
                     continue;
                 peerColor.isDefaultName = peerColor.id < 7 && type == TYPE_NAME;
+                peerColor.harmonizable = true;
                 if (!peerColor.hidden)
                     peerColors.colors.add(peerColor);
                 peerColors.colorsById.put(peerColor.id, peerColor);
@@ -5223,6 +5245,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     PeerColor peerColor = PeerColor.fromTL(tl.colors.get(i));
                     if (peerColor == null) continue;
                     peerColor.isDefaultName = peerColor.id < 7 && type == TYPE_NAME;
+                    peerColor.harmonizable = true;
                     if (!peerColor.hidden)
                         peerColors.colors.add(peerColor);
                     peerColors.colorsById.put(peerColor.id, peerColor);
@@ -5315,49 +5338,88 @@ public class MessagesController extends BaseController implements NotificationCe
         public int groupLvl;
         private final int[] colors = new int[6];
         private final int[] darkColors = new int[6];
+        private boolean harmonizable;
+        private volatile HarmonizedColors harmonizedColors;
+
+        public static class HarmonizedColors {
+            final int contextColor;
+            final int[] colors;
+            final int[] darkColors;
+
+            public HarmonizedColors(int contextColor, int[] colors, int[] darkColors) {
+                this.contextColor = contextColor;
+                this.colors = harmonize(colors);
+                this.darkColors = harmonize(darkColors);
+            }
+
+            private static int[] harmonize(int[] colors) {
+                final int[] result = new int[colors.length];
+                for (int i = 0; i < colors.length; ++i) {
+                    result[i] = MonetUtils.harmonize(colors[i]);
+                }
+                return result;
+            }
+        }
+
+        private int[] palette(boolean isDark, Theme.ResourcesProvider resourcesProvider) {
+            final int contextColor;
+            if (!harmonizable || !Theme.isCurrentThemeMonet(resourcesProvider) || (contextColor = MonetUtils.getHarmonizeContextColor()) == 0) {
+                return isDark ? darkColors : colors;
+            }
+            HarmonizedColors harmonized = harmonizedColors;
+            if (harmonized == null || harmonized.contextColor != contextColor) {
+                harmonizedColors = harmonized = new HarmonizedColors(contextColor, colors, darkColors);
+            }
+            return isDark ? harmonized.darkColors : harmonized.colors;
+        }
+
+        private int[] palette(boolean isDark) {
+            return palette(isDark, null);
+        }
+
         public int getColor(int i, Theme.ResourcesProvider resourcesProvider) {
             if (i < 0 || i > 5) return 0;
             if (isDefaultName && id >= 0 && id < 7) {
                 return Theme.getColor(Theme.keys_avatar_nameInMessage[id], resourcesProvider);
             }
             final boolean isDark = resourcesProvider != null ? resourcesProvider.isDark() : Theme.isCurrentThemeDark();
-            return (isDark ? darkColors : colors)[i];
+            return palette(isDark, resourcesProvider)[i];
         }
         public int getLvl(boolean isGroup) {
             return isGroup ? groupLvl : channelLvl;
         }
         public int getColor1(boolean isDark) {
-            return (isDark ? darkColors : colors)[0];
+            return palette(isDark)[0];
         }
         public int getColor2(boolean isDark) {
-            return (isDark ? darkColors : colors)[1];
+            return palette(isDark)[1];
         }
         public int getColor3(boolean isDark) {
-            return (isDark ? darkColors : colors)[2];
+            return palette(isDark)[2];
         }
         public int getColor4(boolean isDark) {
-            return (isDark ? darkColors : colors)[3];
+            return palette(isDark)[3];
         }
         public int getColor5(boolean isDark) {
-            return (isDark ? darkColors : colors)[4];
+            return palette(isDark)[4];
         }
         public int getColor6(boolean isDark) {
-            return (isDark ? darkColors : colors)[5];
+            return palette(isDark)[5];
         }
         public int getColor1() {
-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[0];
+            return palette(Theme.isCurrentThemeDark())[0];
         }
         public int getColor2() {
-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[1];
+            return palette(Theme.isCurrentThemeDark())[1];
         }
         public int getColor3() {
-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[2];
+            return palette(Theme.isCurrentThemeDark())[2];
         }
         public int getColor4() {
-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[3];
+            return palette(Theme.isCurrentThemeDark())[3];
         }
         public int getColor5() {
-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[4];
+            return palette(Theme.isCurrentThemeDark())[4];
         }
         public boolean hasColor2() {
             return getColor2() != getColor1();
@@ -9845,6 +9907,11 @@ public class MessagesController extends BaseController implements NotificationCe
 
 
     public ArrayList<TLRPC.Dialog> getDialogs(int folderId) {
+        if (ExteraConfig.getHideArchiveFolder() && folderId == 0 && dialogs_dict.get(DialogObject.makeFolderDialogId(1)) != null) {
+            removeFolder(1);
+        } else if (!ExteraConfig.getHideArchiveFolder() && folderId == 0 && dialogs_dict.get(DialogObject.makeFolderDialogId(1)) == null && (hasArchivedChats || getStoriesController().hasHiddenStories())) {
+            checkArchiveFolder();
+        }
         ArrayList<TLRPC.Dialog> dialogs = dialogsByFolder.get(folderId);
         if (dialogs == null) {
             return new ArrayList<>();
@@ -10676,6 +10743,7 @@ public class MessagesController extends BaseController implements NotificationCe
                                     minExpireTime = Math.min(minExpireTime, mediaPoll.poll.close_date - currentServerTime);
                                 }
                             }
+                            fetchPollResultsBeforeVotingIfNeeded(messageObject, mediaPoll, time);
                             if (Math.abs(time - messageObject.pollLastCheckTime) < timeout) {
                                 if (!messageObject.pollVisibleOnScreen && !expired) {
                                     array.remove(messageObject.getId());
@@ -10687,7 +10755,8 @@ public class MessagesController extends BaseController implements NotificationCe
                                 TLRPC.TL_messages_getPollResults req = new TLRPC.TL_messages_getPollResults();
                                 req.peer = getInputPeer(messageObject.getDialogId());
                                 req.msg_id = messageObject.getId();
-                                req.poll_hash = messageObject.getPollHash();
+                                final boolean fetchBeforeVoting = shouldFetchPollResultsBeforeVoting(messageObject, mediaPoll);
+                                req.poll_hash = fetchBeforeVoting ? 0 : messageObject.getPollHash();
                                 getConnectionsManager().sendRequest(req, (response, error) -> {
                                     if (error == null) {
                                         TLRPC.Updates updates = (TLRPC.Updates) response;
@@ -10703,6 +10772,17 @@ public class MessagesController extends BaseController implements NotificationCe
                                             }
                                         }
                                         processUpdates(updates, false);
+                                        if (fetchBeforeVoting) {
+                                            for (int i = 0; i < updates.updates.size(); i++) {
+                                                TLRPC.Update update = updates.updates.get(i);
+                                                if (update instanceof TL_update.TL_updateMessagePoll) {
+                                                    TL_update.TL_updateMessagePoll messagePoll = (TL_update.TL_updateMessagePoll) update;
+                                                    if (messagePoll.poll_id == mediaPoll.poll.id && messagePoll.results != null && messagePoll.results.results.isEmpty() && messagePoll.results.total_voters > 0) {
+                                                        AndroidUtilities.runOnUIThread(() -> fetchPollResultsBeforeVotingIfNeeded(messageObject, mediaPoll, SystemClock.elapsedRealtime(), messagePoll.results.total_voters));
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 });
                             }
@@ -12357,6 +12437,13 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void checkArchiveFolder() {
+        if (ExteraConfig.getHideArchiveFolder()) {
+            if (dialogs_dict.get(DialogObject.makeFolderDialogId(1)) != null) {
+                removeFolder(1);
+            }
+            getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, 0);
+            return;
+        }
         if (!hasArchivedChats && !getStoriesController().hasHiddenStories()) {
             removeFolder(1);
         } else {
@@ -14344,9 +14431,12 @@ public class MessagesController extends BaseController implements NotificationCe
 
     public void addToViewsQueue(MessageObject messageObject) {
         if (messageObject == null) return;
+        addToViewsQueue(messageObject.getDialogId(), messageObject.getId());
+    }
+
+    public void addToViewsQueue(long peer, int id) {
+        if (peer == 0 || id <= 0) return;
         Utilities.stageQueue.postRunnable(() -> {
-            long peer = messageObject.getDialogId();
-            int id = messageObject.getId();
             ArrayList<Integer> ids = channelViewsToSend.get(peer);
             if (ids == null) {
                 ids = new ArrayList<>();
@@ -14392,12 +14482,43 @@ public class MessagesController extends BaseController implements NotificationCe
             } else {
                 array.put(id, messageObject);
             }
+            if (shouldFetchPollResultsBeforeVoting(messageObject, mediaPoll) && messageObject.pollLastCheckTime == 0 && !fetchPollResultsBeforeVotingIfNeeded(messageObject, mediaPoll, SystemClock.elapsedRealtime())) {
+                lastViewsCheckTime = 0;
+            }
         }
         if (hasExpiredPolls) {
             lastViewsCheckTime = 0;
         } else if (minExpireTime < 5) {
             lastViewsCheckTime = Math.min(lastViewsCheckTime, System.currentTimeMillis() - (5 - minExpireTime) * 1000);
         }
+    }
+
+    private boolean shouldFetchPollResultsBeforeVoting(MessageObject messageObject, TLRPC.TL_messageMediaPoll mediaPoll) {
+        if (!ExteraConfig.getShowResultsBeforeVoting() || messageObject == null || mediaPoll == null || mediaPoll.results == null || mediaPoll.poll == null || mediaPoll.poll.closed) {
+            return false;
+        }
+        final TLRPC.Poll poll = mediaPoll.poll;
+        return (!poll.hide_results_until_close || poll.creator) && !poll.answers.isEmpty() && !messageObject.isVoted() && mediaPoll.results.results.isEmpty();
+    }
+
+    private boolean canProbePollResults(MessageObject messageObject, TLRPC.TL_messageMediaPoll mediaPoll) {
+        return shouldFetchPollResultsBeforeVoting(messageObject, mediaPoll) && !mediaPoll.poll.revoting_disabled;
+    }
+
+    private boolean fetchPollResultsBeforeVotingIfNeeded(MessageObject messageObject, TLRPC.TL_messageMediaPoll mediaPoll, long time) {
+        return fetchPollResultsBeforeVotingIfNeeded(messageObject, mediaPoll, time, mediaPoll == null || mediaPoll.results == null ? 0 : mediaPoll.results.total_voters);
+    }
+
+    private boolean fetchPollResultsBeforeVotingIfNeeded(MessageObject messageObject, TLRPC.TL_messageMediaPoll mediaPoll, long time, int totalVoters) {
+        if (!canProbePollResults(messageObject, mediaPoll) || totalVoters <= 0) {
+            return false;
+        }
+        messageObject.pollLastCheckTime = time;
+        final ArrayList<TLRPC.PollAnswer> answers = new ArrayList<>();
+        answers.add(mediaPoll.poll.answers.get(0));
+        final SendMessagesHelper sendMessagesHelper = SendMessagesHelper.getInstance(currentAccount);
+        sendMessagesHelper.sendVote(messageObject, answers, () -> sendMessagesHelper.sendVote(messageObject, null, null), false);
+        return true;
     }
 
     public void markMessageContentAsRead(MessageObject messageObject) {
@@ -23680,6 +23801,9 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean storiesEnabled() {
+        if (ExteraConfig.getHideStories()) {
+            return false;
+        }
         switch (storiesPosting) {
             case "premium":
                 return getUserConfig().isPremium();

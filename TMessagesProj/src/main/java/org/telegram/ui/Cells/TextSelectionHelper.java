@@ -45,6 +45,9 @@ import androidx.annotation.NonNull;
 import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
+import com.exteragram.messenger.translator.TranslatorUtils;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.Emoji;
@@ -59,6 +62,7 @@ import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.ActionBarPopupWindow;
 import org.telegram.ui.ActionBar.FloatingActionMode;
 import org.telegram.ui.ActionBar.FloatingToolbar;
+import org.telegram.ui.Components.TranslateAlert2;
 import org.telegram.ui.iv.RichTextCell;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ArticleViewer;
@@ -66,7 +70,6 @@ import org.telegram.ui.Components.AnimatedEmojiSpan;
 import org.telegram.ui.Components.CornerPath;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
-import org.telegram.ui.RestrictedLanguagesSelectActivity;
 
 import java.util.ArrayList;
 
@@ -278,7 +281,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
 
                 selectedView = newView;
                 try {
-                    textSelectionOverlay.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                    textSelectionOverlay.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.LONG_PRESS), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                 } catch (Exception ignored) {}
                 AndroidUtilities.cancelRunOnUIThread(showActionsRunnable);
                 AndroidUtilities.runOnUIThread(showActionsRunnable);
@@ -328,6 +331,14 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
     private OnTranslateListener onTranslateListener = null;
     public void setOnTranslate(OnTranslateListener listener) {
         onTranslateListener = listener;
+    }
+
+    public interface OnAiGenerateListener {
+        void run(CharSequence text);
+    }
+    private OnAiGenerateListener onAiGenerateListener = null;
+    public void setOnAiGenerate(OnAiGenerateListener listener) {
+        onAiGenerateListener = listener;
     }
 
     public void setParentView(ViewGroup view) {
@@ -1539,6 +1550,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
     }
 
     private static final int TRANSLATE = 3;
+    private static final int GENERATE = 4;
     private ActionMode.Callback createActionCallback() {
         final ActionMode.Callback callback = new ActionMode.Callback() {
             @Override
@@ -1549,6 +1561,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                 menu.add(Menu.NONE, android.R.id.cut, 3, android.R.string.cut);
                 menu.add(Menu.NONE, android.R.id.paste, 4, android.R.string.paste);
                 menu.add(Menu.NONE, android.R.id.selectAll, 5, android.R.string.selectAll);
+                menu.add(Menu.NONE, GENERATE, 4, LocaleController.getString(R.string.Generate));
                 return true;
             }
 
@@ -1602,7 +1615,6 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
 
             private String translateFromLanguage = null;
             private void updateTranslateButton(Menu menu) {
-                String translateToLanguage = LocaleController.getInstance().getCurrentLocale().getLanguage();
                 MenuItem translateItem = menu.findItem(TRANSLATE);
                 if (translateItem == null) {
                     return;
@@ -1611,10 +1623,14 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                     onTranslateListener != null && (
                         (
                             translateFromLanguage != null &&
-                            !RestrictedLanguagesSelectActivity.getRestrictedLanguages().contains(translateFromLanguage)
+                            !TranslatorUtils.isRestrictedLanguage(translateFromLanguage)
                         ) || !LanguageDetector.hasSupport()
                     )
                 );
+                MenuItem generateItem = menu.findItem(GENERATE);
+                if (generateItem != null) {
+                    generateItem.setVisible(onAiGenerateListener != null);
+                }
             }
 
             @Override
@@ -1643,13 +1659,18 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                     return true;
                 } else if (itemId == TRANSLATE) {
                     if (onTranslateListener != null) {
-                        String translateToLanguage = LocaleController.getInstance().getCurrentLocale().getLanguage();
-                        onTranslateListener.run(getSelectedText(), translateFromLanguage, translateToLanguage, () -> showActions());
+                        onTranslateListener.run(getSelectedText(), translateFromLanguage, TranslateAlert2.getToLanguage(), () -> showActions());
                     }
                     hideActions();
                     return true;
                 } else if (itemId == R.id.menu_quote) {
                     quoteText();
+                    hideActions();
+                    return true;
+                } else if (itemId == GENERATE) {
+                    if (onAiGenerateListener != null) {
+                        onAiGenerateListener.run(getSelectedText());
+                    }
                     hideActions();
                     return true;
                 } else if (itemId == android.R.id.cut) {

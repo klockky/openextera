@@ -1,5 +1,7 @@
 package org.telegram.ui.Stories.recorder;
 
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -240,7 +242,7 @@ public class DualCameraView extends CameraView {
                     if (tapTime > 0) {
                         this.dualToggleShape();
                         try {
-                            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                            performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.LONG_PRESS), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                         } catch (Exception ignored) {}
                     }
                 }, ViewConfiguration.getLongPressTimeout());

@@ -8,6 +8,11 @@
 
 package org.telegram.ui.Cells;
 
+import com.exteragram.messenger.AvatarCornerType;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.api.dto.BadgeDTO;
+import com.exteragram.messenger.badges.BadgesController;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.getString;
 
@@ -75,6 +80,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
     private Drawable premiumDrawable;
     private final AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable botVerification;
     private final AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable emojiStatus;
+    private final AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable badgeStatus;
     private ImageView closeView;
     protected Theme.ResourcesProvider resourcesProvider;
 
@@ -179,7 +185,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
                 return super.onTouchEvent(event);
             }
         };
-        avatarImageView.setRoundRadius(dp(24));
+        avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(46));
         addView(avatarImageView, LayoutHelper.createFrame(46, 46, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 0 : 7 + padding, 6, LocaleController.isRTL ? 7 + padding : 0, 0));
         setClipChildren(false);
 
@@ -192,6 +198,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
 
         botVerification = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(nameTextView, dp(20));
         emojiStatus = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(nameTextView, dp(20));
+        badgeStatus = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(nameTextView, dp(20));
 
         statusTextView = new SimpleTextView(context);
         statusTextView.setTextSize(15);
@@ -482,7 +489,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
         nameTextView.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 20, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 30 : (66 + padding), 10, LocaleController.isRTL ? (66 + padding) : 30, 0));
         statusTextView.setTextSize(13);
         statusTextView.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 20, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 30 : (66 + padding), 32, LocaleController.isRTL ? (66 + padding) : 30, 0));
-        avatarImageView.setRoundRadius(dp(22));
+        avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(44));
         avatarImageView.setLayoutParams(LayoutHelper.createFrame(44, 44, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 0 : 8 + padding, 6, LocaleController.isRTL ? 8 + padding : 0, 0));
         if (checkBox != null) {
             checkBox.setLayoutParams(LayoutHelper.createFrame(24, 24, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 0 : 37 + padding, 32, LocaleController.isRTL ? 37 + padding : 0, 0));
@@ -671,32 +678,41 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
             botVerification.setColor(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
             nameTextView.setLeftDrawable(botVerification);
         }
-        if (currentUser != null && MessagesController.getInstance(currentAccount).isPremiumUser(currentUser) && !MessagesController.getInstance(currentAccount).premiumFeaturesBlocked()) {
-            if (DialogObject.getEmojiStatusDocumentId(currentUser.emoji_status) != 0) {
-                emojiStatus.set(DialogObject.getEmojiStatusDocumentId(currentUser.emoji_status), false);
-                emojiStatus.setColor(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
-                nameTextView.setRightDrawable(emojiStatus);
-            } else {
-                if (premiumDrawable == null) {
-                    premiumDrawable = getContext().getResources().getDrawable(R.drawable.msg_premium_liststar).mutate();
-                    premiumDrawable = new AnimatedEmojiDrawable.WrapSizeDrawable(premiumDrawable, dp(14), dp(14)) {
-                        @Override
-                        public void draw(@NonNull Canvas canvas) {
-                            canvas.save();
-                            canvas.translate(0, dp(1));
-                            super.draw(canvas);
-                            canvas.restore();
-                        }
-                    };
-                    premiumDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider), PorterDuff.Mode.MULTIPLY));
-                }
-                nameTextView.setRightDrawable(premiumDrawable);
-            }
-            nameTextView.setRightDrawableTopPadding(-dp(0.5f));
-        } else {
-            nameTextView.setRightDrawable(null);
-            nameTextView.setRightDrawableTopPadding(0);
+        Drawable statusDrawable = null;
+        Drawable secondaryStatusDrawable = null;
+        BadgeDTO badge = BadgesController.INSTANCE.getBadge(currentUser);
+        if (badge != null) {
+            badgeStatus.set(badge.getDocumentId(), false);
+            badgeStatus.setParticles(true, false);
+            badgeStatus.setColor(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
+            statusDrawable = badgeStatus;
         }
+        if (currentUser != null && DialogObject.getEmojiStatusDocumentId(currentUser.emoji_status) != 0) {
+            emojiStatus.set(DialogObject.getEmojiStatusDocumentId(currentUser.emoji_status), false);
+            emojiStatus.setColor(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
+            secondaryStatusDrawable = statusDrawable;
+            statusDrawable = emojiStatus;
+        } else if (currentUser != null && statusDrawable == null
+                && MessagesController.getInstance(currentAccount).isPremiumUser(currentUser)
+                && !MessagesController.getInstance(currentAccount).premiumFeaturesBlocked()) {
+            if (premiumDrawable == null) {
+                premiumDrawable = getContext().getResources().getDrawable(R.drawable.msg_premium_liststar).mutate();
+                premiumDrawable = new AnimatedEmojiDrawable.WrapSizeDrawable(premiumDrawable, dp(14), dp(14)) {
+                    @Override
+                    public void draw(@NonNull Canvas canvas) {
+                        canvas.save();
+                        canvas.translate(0, dp(1));
+                        super.draw(canvas);
+                        canvas.restore();
+                    }
+                };
+                premiumDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider), PorterDuff.Mode.MULTIPLY));
+            }
+            statusDrawable = premiumDrawable;
+        }
+        nameTextView.setRightDrawable(statusDrawable);
+        nameTextView.setRightDrawable2(secondaryStatusDrawable);
+        nameTextView.setRightDrawableTopPadding(statusDrawable != null ? -dp(0.5f) : 0);
         if (currentStatus != null) {
             statusTextView.setTextColor(statusColor);
             CharSequence status = currentStatus;
@@ -737,8 +753,9 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
             avatarImageView.setImageDrawable(avatarDrawable);
         }
 
-        avatarImageView.setRoundRadius(isCommunity ? dp(46 * 20 / 72f) :
-                (currentChat != null && currentChat.forum ? dp(14) : dp(24)));
+        avatarImageView.setRoundRadius(isCommunity
+                ? ExteraConfig.getAvatarCorners(callCellStyle ? 44 : 46, false, AvatarCornerType.COMMUNITY)
+                : ExteraConfig.getAvatarCorners(callCellStyle ? 44 : 46, false, currentChat != null && currentChat.forum));
 
         nameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
     }
@@ -824,6 +841,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
         super.onAttachedToWindow();
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
         emojiStatus.attach();
+        badgeStatus.attach();
         botVerification.attach();
     }
 
@@ -832,6 +850,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
         super.onDetachedFromWindow();
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
         emojiStatus.detach();
+        badgeStatus.detach();
         botVerification.detach();
         storyParams.onDetachFromWindow();
     }

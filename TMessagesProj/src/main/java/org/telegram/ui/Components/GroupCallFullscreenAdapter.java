@@ -1,5 +1,7 @@
 package org.telegram.ui.Components;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
@@ -184,7 +186,7 @@ public class GroupCallFullscreenAdapter extends RecyclerListView.SelectionAdapte
             super(context);
             avatarDrawable.setTextSize((int) (AndroidUtilities.dp(18) / 1.15f));
             avatarImageView = new BackupImageView(context);
-            avatarImageView.setRoundRadius(AndroidUtilities.dp(20));
+            avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(40));
             addView(avatarImageView, LayoutHelper.createFrame(40, 40, Gravity.CENTER_HORIZONTAL, 0, 9, 0, 9));
             setWillNotDraw(false);
 

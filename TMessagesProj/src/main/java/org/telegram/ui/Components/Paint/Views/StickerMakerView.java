@@ -35,6 +35,7 @@ import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 
+import com.exteragram.messenger.ExteraConfig;
 import com.google.mlkit.common.MlKitException;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.label.ImageLabeling;
@@ -128,6 +129,43 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
     private float imageReceiverWidth, imageReceiverHeight;
 
     public PaintWeightChooserView weightChooserView;
+
+    private int stickerCornerRoundness = 0;
+
+    public static float getStickerCornerRadius(int roundness, float size) {
+        switch (roundness) {
+            case 1:
+                return size / 16f;
+            case 2:
+                return size / 32f;
+            case 3:
+                return 0;
+            default:
+                return size / 8f;
+        }
+    }
+
+    public float getStickerCornerRadius(float size) {
+        return getStickerCornerRadius(stickerCornerRoundness, size);
+    }
+
+    public int getStickerCornerRoundness() {
+        return stickerCornerRoundness;
+    }
+
+    public void setStickerCornerRoundness(int roundness) {
+        if (stickerCornerRoundness == roundness) {
+            return;
+        }
+        stickerCornerRoundness = roundness;
+        ExteraConfig.getEditor().putInt("stickerCornerRoundness", stickerCornerRoundness).apply();
+        updateStickerAreaPath();
+        updateOutlineBounds(setOutlineBounds);
+        invalidate();
+        if (getParent() instanceof View) {
+            ((View) getParent()).invalidate();
+        }
+    }
 
     public StickerMakerView(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
@@ -521,9 +559,12 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
             }
             if (outlineBoundsInnerPath == null) {
                 outlineBoundsInnerPath = new Path();
-                AndroidUtilities.rectTmp.set(0, 0, 1, 1);
-                outlineBoundsInnerPath.addRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.rectTmp.width() * .12f, AndroidUtilities.rectTmp.height() * .12f, Path.Direction.CW);
+            } else {
+                outlineBoundsInnerPath.rewind();
             }
+            AndroidUtilities.rectTmp.set(0, 0, 1, 1);
+            final float r = getStickerCornerRadius(1f);
+            outlineBoundsInnerPath.addRoundRect(AndroidUtilities.rectTmp, r, r, Path.Direction.CW);
             outlineBoundsPath.addPath(outlineBoundsInnerPath, outlineMatrix);
             outlineBoundsPath.computeBounds(outlineBounds, true);
         }
@@ -755,12 +796,18 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        updateStickerAreaPath();
+    }
 
+    private void updateStickerAreaPath() {
         float inset = dp(10);
         float width = getMeasuredWidth() - inset * 2;
         float height = getMeasuredHeight() - inset * 2;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
 
-        float rx = width / 8f;
+        float rx = getStickerCornerRadius(width);
         AndroidUtilities.rectTmp.set(inset, inset, inset + width, inset + width);
         AndroidUtilities.rectTmp.offset(0, (height - AndroidUtilities.rectTmp.height()) / 2);
         areaPath.rewind();

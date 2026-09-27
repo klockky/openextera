@@ -41,6 +41,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -649,6 +650,34 @@ public class CodeHighlighting {
     }
 
     private static HashMap<String, TokenPattern[]> compiledPatterns;
+
+    public static String normalizeLanguage(String language) {
+        if (TextUtils.isEmpty(language)) {
+            return "";
+        }
+        final String trimmed = language.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        if (compiledPatterns == null) {
+            parse();
+        }
+        if (compiledPatterns == null) {
+            return trimmed.toLowerCase(Locale.ROOT);
+        }
+        if (compiledPatterns.containsKey(trimmed)) {
+            return trimmed;
+        }
+        final String lowerCase = trimmed.toLowerCase(Locale.ROOT);
+        if (!compiledPatterns.containsKey(lowerCase)) {
+            for (String key : compiledPatterns.keySet()) {
+                if (key.equalsIgnoreCase(trimmed)) {
+                    return key;
+                }
+            }
+        }
+        return lowerCase;
+    }
     private static HashSet<String> languages;
     private static void parse() {
         GZIPInputStream zipStream = null;

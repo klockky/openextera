@@ -49,6 +49,8 @@ import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
 
 import com.google.zxing.common.detector.MathUtils;
 
+import com.exteragram.messenger.utils.text.LocaleUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BotWebViewVibrationEffect;
 import org.telegram.messenger.Emoji;
@@ -117,6 +119,7 @@ public class CaptionContainerView extends FrameLayout {
 
     public final KeyboardNotifier keyboardNotifier;
     public MentionsContainerView mentionContainer;
+    private MentionsContainerView.Delegate mentionsDelegate;
 
     private int shiftDp = -4;
     private final BlurringShader.BlurManager blurManager;
@@ -316,6 +319,7 @@ public class CaptionContainerView extends FrameLayout {
         editText.glassDesignForEmojiView = true;
         editText.getEditText().addTextChangedListener(new EditTextSuggestionsFix());
         editText.setFocusable(true);
+        editText.allowEmojisForNonPremium(LocaleUtils.canUseLocalPremiumEmojis(currentAccount) && getEditTextStyle() == EditTextEmoji.STYLE_PHOTOVIEWER);
         editText.setFocusableInTouchMode(true);
         editText.getEditText().hintLayoutYFix = true;
         editText.getEditText().drawHint = this::drawHint;
@@ -570,7 +574,7 @@ public class CaptionContainerView extends FrameLayout {
             }
         };
         mentionBackgroundBlur = new BlurringShader.StoryBlurDrawer(blurManager, mentionContainer, BlurringShader.StoryBlurDrawer.BLUR_TYPE_BACKGROUND);
-        mentionContainer.withDelegate(new MentionsContainerView.Delegate() {
+        mentionContainer.withDelegate(mentionsDelegate = new MentionsContainerView.Delegate() {
             @Override
             public void replaceText(int start, int len, CharSequence replacingString, boolean allowShort) {
                 replaceWithText(start, len, replacingString, allowShort);

@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.collection.LongSparseArray;
 
+import com.exteragram.messenger.ExteraConfig;
 import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.SQLite.SQLiteDatabase;
 import org.telegram.SQLite.SQLitePreparedStatement;
@@ -247,7 +248,7 @@ public class StoriesController {
     }
 
     public boolean hasStories(long dialogId) {
-        if (dialogId == 0) {
+        if (dialogId == 0 || ExteraConfig.getHideStories()) {
             return false;
         }
         if (hasUploadingStories(dialogId)) {
@@ -280,10 +281,21 @@ public class StoriesController {
     }
 
     public boolean hasStories() {
+        if (ExteraConfig.getHideStories()) {
+            return false;
+        }
         return (dialogListStories != null && dialogListStories.size() > 0) || hasSelfStories();
     }
 
     public void loadStories() {
+        if (ExteraConfig.getHideStories()) {
+            dialogListStories.clear();
+            hiddenListStories.clear();
+            allStoriesMap.clear();
+            loadingDialogsStories.clear();
+            NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.storiesUpdated);
+            return;
+        }
         if (firstLoad) {
             loadingFromDatabase = true;
             storiesStorage.getAllStories(allStories -> {
@@ -305,7 +317,9 @@ public class StoriesController {
     }
 
     public void loadHiddenStories() {
-        if (hasMoreHidden) {
+        if (ExteraConfig.getHideStories()) {
+            hiddenListStories.clear();
+        } else if (hasMoreHidden) {
             loadFromServer(true);
         }
     }
@@ -1747,7 +1761,7 @@ public class StoriesController {
     }
 
     public boolean hasHiddenStories() {
-        return !hiddenListStories.isEmpty();
+        return !hiddenListStories.isEmpty() && !ExteraConfig.getHideStories();
     }
 
     public void checkExpiredStories() {
@@ -4276,7 +4290,7 @@ public class StoriesController {
     }
 
     public boolean hasOnlySelfStories() {
-        return hasSelfStories() && (getDialogListStories().isEmpty() || (getDialogListStories().size() == 1 && DialogObject.getPeerDialogId(getDialogListStories().get(0).peer) == UserConfig.getInstance(currentAccount).clientUserId));
+        return !ExteraConfig.getHideStories() && hasSelfStories() && (getDialogListStories().isEmpty() || (getDialogListStories().size() == 1 && DialogObject.getPeerDialogId(getDialogListStories().get(0).peer) == UserConfig.getInstance(currentAccount).clientUserId));
     }
 
     public void sortHiddenStories() {

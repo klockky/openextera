@@ -8,14 +8,15 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import com.exteragram.messenger.appicons.AppIcon;
+import com.exteragram.messenger.appicons.AppIconController;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Cells.AppIconsSelectorCell;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
-import org.telegram.ui.LauncherIconController;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,8 +24,8 @@ import java.util.List;
 public class PremiumAppIconsPreviewView extends FrameLayout implements PagerHeaderView {
 
     private final Theme.ResourcesProvider resourcesProvider;
-    private List<LauncherIconController.LauncherIcon> icons = new ArrayList<>();
-    private AdaptiveIconImageView topIcon, bottomLeftIcon, bottomRightIcon;
+    private List<AppIcon> icons = new ArrayList<>();
+    private StarryIconView topIcon, bottomLeftIcon, bottomRightIcon;
     boolean isEmpty;
 
     public PremiumAppIconsPreviewView(Context context, Theme.ResourcesProvider resourcesProvider) {
@@ -32,10 +33,8 @@ public class PremiumAppIconsPreviewView extends FrameLayout implements PagerHead
 
         this.resourcesProvider = resourcesProvider;
 
-        for (LauncherIconController.LauncherIcon icon : LauncherIconController.LauncherIcon.values()) {
-            if (icon.premium) {
-                icons.add(icon);
-            }
+        for (AppIcon icon : AppIconController.getAllIcons()) {
+            icons.add(icon);
             if (icons.size() == 3) {
                 break;
             }
@@ -53,13 +52,13 @@ public class PremiumAppIconsPreviewView extends FrameLayout implements PagerHead
         setClipChildren(false);
     }
 
-    private AdaptiveIconImageView newIconView(Context ctx, int i) {
-        LauncherIconController.LauncherIcon icon = icons.get(i);
+    private StarryIconView newIconView(Context ctx, int i) {
+        AppIcon icon = icons.get(i);
 
-        AdaptiveIconImageView iconImageView = new AdaptiveIconImageView(ctx, i);
+        StarryIconView iconImageView = new StarryIconView(ctx, i);
         iconImageView.setLayoutParams(LayoutHelper.createFrame(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER, 0, 52, 0, 0));
-        iconImageView.setForeground(icon.foreground);
-        iconImageView.setBackgroundResource(icon.background);
+        iconImageView.setForeground(icon.getForeground());
+        iconImageView.setBackgroundResource(icon.getBackground());
         iconImageView.setPadding(AndroidUtilities.dp(8));
         iconImageView.setBackgroundOuterPadding(AndroidUtilities.dp(32));
         addView(iconImageView);
@@ -125,13 +124,13 @@ public class PremiumAppIconsPreviewView extends FrameLayout implements PagerHead
         bottomLeftIcon.particlesScale = p;
     }
 
-    private class AdaptiveIconImageView extends AppIconsSelectorCell.AdaptiveIconImageView {
+    public class StarryIconView extends AdaptiveIconImageView {
 
         StarParticlesView.Drawable drawable = new StarParticlesView.Drawable(20);
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         float particlesScale;
 
-        public AdaptiveIconImageView(Context ctx, int i) {
+        public StarryIconView(Context ctx, int i) {
             super(ctx);
             drawable.size1 = 12;
             drawable.size2 = 8;
@@ -158,7 +157,7 @@ public class PremiumAppIconsPreviewView extends FrameLayout implements PagerHead
             canvas.restore();
             invalidate();
             AndroidUtilities.rectTmp.set(0, 0, getWidth(), getHeight());
-            canvas.drawRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(AppIconsSelectorCell.ICONS_ROUND_RADIUS), AndroidUtilities.dp(AppIconsSelectorCell.ICONS_ROUND_RADIUS), paint);
+            canvas.drawRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(16), AndroidUtilities.dp(16), paint);
 
             super.draw(canvas);
         }

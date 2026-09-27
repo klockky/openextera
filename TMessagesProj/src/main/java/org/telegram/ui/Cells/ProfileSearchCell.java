@@ -31,6 +31,11 @@ import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.annotation.NonNull;
 
+import com.exteragram.messenger.AvatarCornerType;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.api.dto.BadgeDTO;
+import com.exteragram.messenger.badges.BadgesController;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
@@ -156,7 +161,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
         this.resourcesProvider = resourcesProvider;
 
         avatarImage = new ImageReceiver(this);
-        avatarImage.setRoundRadius(dp(23));
+        setAvatarRadius(ExteraConfig.getAvatarCorners(46));
         avatarDrawable = new AvatarDrawable();
 
         checkBox = new CheckBox2(context, 21, resourcesProvider);
@@ -438,7 +443,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
                 nameLeft = dp(11);
             }
             nameLockTop = dp(22.0f);
-            updateStatus(false, null, null, false);
+            updateStatus(false, null, null, null, false);
         } else if (chat != null) {
             dialog_id = -chat.id;
             drawCheck = chat.verified;
@@ -453,7 +458,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
             } else {
                 nameLeft = dp(11);
             }
-            updateStatus(drawCheck, null, chat, false);
+            updateStatus(drawCheck, BadgesController.INSTANCE.getBadge(chat), null, chat, false);
         } else if (user != null) {
             dialog_id = user.id;
             if (!LocaleController.isRTL) {
@@ -464,7 +469,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
             nameLockTop = dp(21);
             drawCheck = user.verified;
             drawPremium = !savedMessages && MessagesController.getInstance(currentAccount).isPremiumUser(user);
-            updateStatus(drawCheck, user, null, false);
+            updateStatus(drawCheck, BadgesController.INSTANCE.getBadge(user), user, null, false);
         } else if (contact != null) {
             dialog_id = 0;
             if (!LocaleController.isRTL) {
@@ -529,7 +534,9 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
         }
         nameString = AndroidUtilities.replaceNewLines(nameString);
         if (TextUtils.isEmpty(nameString)) {
-            if (user != null && !TextUtils.isEmpty(user.phone)) {
+            if (ExteraConfig.getHidePhoneNumber()) {
+                nameString = getString(R.string.MobileHidden);
+            } else if (user != null && !TextUtils.isEmpty(user.phone)) {
                 nameString = PhoneFormat.getInstance().format("+" + user.phone);
             } else {
                 nameString = getString(R.string.HiddenName);
@@ -785,16 +792,20 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
         }
     }
 
-    public void updateStatus(boolean verified, TLRPC.User user, TLRPC.Chat chat, boolean animated) {
+    public void updateStatus(boolean verified, BadgeDTO badge, TLRPC.User user, TLRPC.Chat chat, boolean animated) {
         statusDrawable.center = LocaleController.isRTL;
-        if (allowEmojiStatus && verified) {
-            statusDrawable.set(new CombinedDrawable(Theme.dialogs_verifiedDrawable, Theme.dialogs_verifiedCheckDrawable, 0, 0), animated);
-            statusDrawable.setColor(null);
-        } else if (allowEmojiStatus && user != null && !savedMessages && DialogObject.getEmojiStatusDocumentId(user.emoji_status) != 0) {
+        if (allowEmojiStatus && user != null && !savedMessages && DialogObject.getEmojiStatusDocumentId(user.emoji_status) != 0) {
             statusDrawable.set(DialogObject.getEmojiStatusDocumentId(user.emoji_status), animated);
             statusDrawable.setColor(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
         } else if (allowEmojiStatus && chat != null && !savedMessages && DialogObject.getEmojiStatusDocumentId(chat.emoji_status) != 0) {
             statusDrawable.set(DialogObject.getEmojiStatusDocumentId(chat.emoji_status), animated);
+            statusDrawable.setColor(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
+        } else if (allowEmojiStatus && verified) {
+            statusDrawable.set(new CombinedDrawable(Theme.dialogs_verifiedDrawable, Theme.dialogs_verifiedCheckDrawable, 0, 0), animated);
+            statusDrawable.setColor(null);
+        } else if (badge != null && !savedMessages) {
+            statusDrawable.set(badge.getDocumentId(), animated);
+            statusDrawable.setParticles(true, false);
             statusDrawable.setColor(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
         } else if (allowEmojiStatus && user != null && !savedMessages && MessagesController.getInstance(currentAccount).isPremiumUser(user)) {
             statusDrawable.set(PremiumGradient.getInstance().premiumStarDrawableMini, animated);
@@ -802,6 +813,9 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
         } else {
             statusDrawable.set((Drawable) null, animated);
             statusDrawable.setColor(Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
+        }
+        if (badge == null || savedMessages) {
+            statusDrawable.setParticles(false, false);
         }
         long botVerificationIcon = 0;
         if (user != null) {
@@ -820,6 +834,11 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
     private boolean rectangularAvatar;
     public void setRectangularAvatar(boolean value) {
         rectangularAvatar = value;
+    }
+
+    private void setAvatarRadius(int radius) {
+        avatarStoryParams.avatarRadius = radius;
+        avatarImage.setRoundRadius(radius);
     }
 
     public void update(int mask) {
@@ -864,7 +883,16 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
             avatarImage.setImage(null, null, avatarDrawable, null, null, 0);
         }
 
-        avatarImage.setRoundRadius(ChatObject.isCommunity(chat) ? DrawableUtils.getCommunityCardDrawableRadius(dp(46)) : chat != null && chat.monoforum ? 0 : rectangularAvatar ? dp(10) : chat != null && chat.forum ? dp(16) : dp(23));
+        final int avatarSize = callCellStyle ? 44 : rectangularAvatar ? 42 : 46;
+        final int avatarRadius;
+        if (ChatObject.isCommunity(chat)) {
+            avatarRadius = ExteraConfig.getAvatarCorners(avatarSize, false, AvatarCornerType.COMMUNITY);
+        } else if (chat != null && chat.monoforum) {
+            avatarRadius = 0;
+        } else {
+            avatarRadius = ExteraConfig.getAvatarCorners(avatarSize, false, chat != null && chat.forum || rectangularAvatar);
+        }
+        setAvatarRadius(avatarRadius);
         if (mask != 0) {
             boolean continueUpdate = false;
             if ((mask & MessagesController.UPDATE_MASK_AVATAR) != 0 && user != null || (mask & MessagesController.UPDATE_MASK_CHAT_AVATAR) != 0 && chat != null) {
@@ -882,7 +910,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
                 }
             }
             if (!continueUpdate && (mask & MessagesController.UPDATE_MASK_EMOJI_STATUS) != 0 && (user != null || chat != null)) {
-                updateStatus(user != null ? user.verified : chat.verified, user, chat, true);
+                updateStatus(user != null ? user.verified : chat.verified, BadgesController.INSTANCE.getBadge(user != null ? user : chat), user, chat, true);
             }
             if (!continueUpdate && ((mask & MessagesController.UPDATE_MASK_NAME) != 0 && user != null) || (mask & MessagesController.UPDATE_MASK_CHAT_NAME) != 0 && chat != null) {
                 String newName;

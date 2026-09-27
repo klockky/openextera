@@ -49,6 +49,11 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.config.BottomNavigationBar;
+import com.exteragram.messenger.utils.ui.FabUiHelper;
+import com.exteragram.messenger.utils.ui.MainTabsUiHelper;
+
 import org.telegram.ui.recyclerview.LinearSmoothScrollerCustom;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -181,6 +186,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
     private int prevPosition;
     private int prevTop;
     private boolean scrollUpdated;
+    private boolean mainTabsHiddenByScroll;
 
     private final static int VIEW_TYPE_TOPIC = 0;
     private final static int VIEW_TYPE_LOADING_CELL = 1;
@@ -400,9 +406,14 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
     }
 
     @Override
+    public int getNavigationBarColor() {
+        return getThemedColor(Theme.key_windowBackgroundWhite);
+    }
+
+    @Override
     public View createView(Context context) {
-        additionNavigationBarHeight = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-        additionFloatingButtonOffset = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+        additionNavigationBarHeight = MainTabsUiHelper.getAdditionalNavigationBarHeight(parentDialogsActivity != null && parentDialogsActivity.hasMainTabs);
+        additionFloatingButtonOffset = MainTabsUiHelper.getTabsFabOffset(parentDialogsActivity != null && parentDialogsActivity.hasMainTabs);
 
         fragmentView = contentView = new SizeNotifierFrameLayout(context) {
             {
@@ -875,7 +886,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
         deleteChatSubmenu = other.addSubItem(delete_chat_id, R.drawable.msg_leave, getString(R.string.LeaveMegaMenu), themeDelegate);
 
         avatarContainer = new ChatAvatarContainer(context, this, false, resourceProvider);
-        avatarContainer.getAvatarImageView().setRoundRadius(AndroidUtilities.dp(16));
+        avatarContainer.getAvatarImageView().setRoundRadius(ExteraConfig.getAvatarCorners(42, false, true));
         avatarContainer.setOccupyStatusBar(!AndroidUtilities.isTablet() && !inPreviewMode);
         avatarContainer.allowDrawStories = getDialogId() < 0;
         avatarContainer.setClipChildren(false);
@@ -1065,6 +1076,9 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
             try {
                 view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             } catch (Exception ignored) {}
+            if (actionBar.isActionModeShowed() && view instanceof TopicDialogCell) {
+                startMultiselect(position);
+            }
             return true;
         });
         recyclerListView.setOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -1278,7 +1292,12 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
                         goingDown = firstVisibleItem > prevPosition;
                     }
 
-                    hideFloatingButton(goingDown || !canShowCreateTopic, true);
+                    final boolean canScrollDown = recyclerView.canScrollVertically(1);
+                    if (changed) {
+                        mainTabsHiddenByScroll = BottomNavigationBar.floating() && goingDown && canScrollDown;
+                        checkUi_mainTabsVisible();
+                    }
+                    hideFloatingButton(goingDown && canScrollDown || !canShowCreateTopic, true);
                 }
             }
         });
@@ -1297,7 +1316,8 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
         floatingButton.setOnClickListener(v -> presentFragment(TopicCreateFragment.create(chatId, 0)));
         floatingButton.imageView.setImageResource(R.drawable.ic_chatlist_add_2);
         floatingButton.imageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        floatingButton.imageView.setPadding(dp(12), dp(12), dp(12), dp(12));
+        final int fabIconPadding = dp((FabUiHelper.getFabSizeDp() - 24) / 2f);
+        floatingButton.imageView.setPadding(fabIconPadding, fabIconPadding, fabIconPadding, fabIconPadding);
         floatingButton.setContentDescription(getString(R.string.CreateTopic));
 
 
@@ -1602,6 +1622,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
         }
 
         final int bottom = navigationBarHeight + additionNavigationBarHeight
+            + MainTabsUiHelper.getFloatingTabsPadding(parentDialogsActivity != null && parentDialogsActivity.hasMainTabs)
             + (bottomPannelVisible ? AndroidUtilities.dp(51) : 0);
 
         recyclerListView.setPadding(0, (int) (top), 0, bottom);
@@ -1616,6 +1637,13 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
 
     public void setParentDialogsActivity(DialogsActivity parentDialogsActivity) {
         this.parentDialogsActivity = parentDialogsActivity;
+        checkUi_mainTabsVisible();
+    }
+
+    private void checkUi_mainTabsVisible() {
+        if (parentDialogsActivity != null) {
+            parentDialogsActivity.setChildMainTabsVisible(BottomNavigationBar.visible() && !mainTabsHiddenByScroll);
+        }
     }
 
     private class TopicsRecyclerView extends BlurredRecyclerView {
@@ -2249,16 +2277,18 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
     }
 
     private void toggleSelection(View view) {
-        if (view instanceof TopicDialogCell) {
-            TopicDialogCell cell = (TopicDialogCell) view;
-            if (cell.forumTopic == null) {
-                return;
-            }
-            int id = cell.forumTopic.id;
+        toggleSelection(view instanceof TopicDialogCell ? ((TopicDialogCell) view).forumTopic : null, view);
+    }
+
+    private void toggleSelection(TLRPC.TL_forumTopic forumTopic, View view) {
+        if (forumTopic != null) {
+            int id = forumTopic.id;
             if (!selectedTopics.remove(id)) {
                 selectedTopics.add(id);
             }
-            cell.setChecked(selectedTopics.contains(id), true);
+            if (view instanceof TopicDialogCell) {
+                ((TopicDialogCell) view).setChecked(selectedTopics.contains(id), true);
+            }
 
             TLRPC.Chat currentChat = getMessagesController().getChat(chatId);
 
@@ -2365,6 +2395,79 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
 
             updateReordering();
         }
+    }
+
+    private void startMultiselect(int position) {
+        final TLRPC.TL_forumTopic startTopic = getTopicForMultiselect(position);
+        if (startTopic == null) {
+            return;
+        }
+        final boolean deselect = !selectedTopics.contains(startTopic.id);
+        final HashSet<Integer> initialSelection = new HashSet<>(selectedTopics);
+        recyclerListView.startMultiselect(position, false, new RecyclerListView.onMultiSelectionChanged() {
+            @Override
+            public void onSelectionChanged(int position, boolean selected, float x, float y) {
+                final TLRPC.TL_forumTopic topic = getTopicForMultiselect(position);
+                if (topic == null) {
+                    return;
+                }
+                if (deselect) {
+                    selected = !selected;
+                }
+                if (selected == selectedTopics.contains(topic.id)) {
+                    return;
+                }
+                final RecyclerView.ViewHolder holder = recyclerListView.findViewHolderForAdapterPosition(position);
+                toggleSelection(topic, holder != null ? holder.itemView : null);
+            }
+
+            @Override
+            public boolean canSelect(int position) {
+                final TLRPC.TL_forumTopic topic = getTopicForMultiselect(position);
+                if (topic == null) {
+                    return false;
+                }
+                return deselect ? initialSelection.contains(topic.id) : !initialSelection.contains(topic.id);
+            }
+
+            @Override
+            public int checkPosition(int position, boolean selectionFromTop) {
+                return position;
+            }
+
+            @Override
+            public boolean limitReached() {
+                return false;
+            }
+
+            @Override
+            public void getPaddings(int[] paddings) {
+                paddings[0] = recyclerListView.getPaddingTop();
+                paddings[1] = recyclerListView.getPaddingBottom();
+            }
+
+            @Override
+            public void scrollBy(int dy) {
+                recyclerListView.scrollBy(0, dy);
+            }
+
+            @Override
+            public int getStartDragDistance() {
+                return dp(24);
+            }
+        });
+    }
+
+    private TLRPC.TL_forumTopic getTopicForMultiselect(int position) {
+        final ArrayList<Item> items = adapter.getArray();
+        if (position < 0 || position >= items.size()) {
+            return null;
+        }
+        final Item item = items.get(position);
+        if (item == null || item.viewType != VIEW_TYPE_TOPIC) {
+            return null;
+        }
+        return item.topic;
     }
 
     public void updateReordering() {
@@ -3283,8 +3386,11 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
         }
     }
 
-    private void hideFloatingButton(boolean hide, boolean animated) {
+    public void hideFloatingButton(boolean hide, boolean animated) {
         floatingButton.setButtonVisible(!hide, fragmentBeginToShow && animated);
+        if (!BottomNavigationBar.floating()) {
+            checkUi_mainTabsVisible();
+        }
     }
 
     private void updateFloatingButtonOffset() {
@@ -3895,6 +4001,8 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
     @Override
     public void onResume() {
         super.onResume();
+        mainTabsHiddenByScroll = false;
+        checkUi_mainTabsVisible();
         getMessagesController().getTopicsController().onTopicFragmentResume(chatId);
         animatedUpdateEnabled = false;
         AndroidUtilities.updateVisibleRows(recyclerListView);
@@ -4237,11 +4345,8 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
         final View actionBar = parentDialogsActivity != null ? parentDialogsActivity.getActionBar() : this.actionBar;
 
 
-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
-
         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList + additionalSearch );
-        iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
+        MainTabsUiHelper.setBlurBounds(iBlur3PositionMainTabs, fragmentView, navigationBarHeight);
         iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
 
         scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, parentDialogsActivity != null ? 2 : 1);

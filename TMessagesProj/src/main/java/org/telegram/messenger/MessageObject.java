@@ -8,6 +8,8 @@
 
 package org.telegram.messenger;
 
+import com.exteragram.messenger.utils.text.LocaleUtils;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.find;
 import static org.telegram.messenger.AndroidUtilities.replaceTags;
@@ -3672,6 +3674,9 @@ public class MessageObject {
     public boolean translated = false;
     public boolean summarized = false;
     public boolean updateTranslation(boolean force) {
+        if (messageOwner != null && LocaleUtils.parseCustomEmojis(messageOwner.message, messageOwner.entities) && !force) {
+            force = true;
+        }
         boolean replyUpdated = replyMessageObject != null && replyMessageObject != this && replyMessageObject.updateTranslation(force);
         TranslateController translateController = MessagesController.getInstance(currentAccount).getTranslateController();
         final TLRPC.TL_textWithEntities translatedText = messageOwner != null ? (messageOwner.voiceTranscriptionOpen ? messageOwner.translatedVoiceTranscription : messageOwner.translatedText) : null;
@@ -8584,6 +8589,7 @@ public class MessageObject {
     }
 
     public static StaticLayout makeStaticLayout(CharSequence text_, TextPaint paint, int width, float lineSpacingMult, float lineSpacingAdd, boolean dontIncludePad, Layout.Alignment alignment) {
+        text_ = LocaleUtils.insertHexColorsPreview(text_);
         if (width <= 0) width = 1;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             final CharSequence text = /* Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ?

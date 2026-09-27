@@ -50,6 +50,9 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.pillstack.core.PillStackConfig;
+import com.exteragram.messenger.pillstack.core.PillType;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BotWebViewVibrationEffect;
@@ -1085,6 +1088,9 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
         totalSize = lastTotalSizeCalculated = cacheSize + cacheTempSize + logsSize + videoSize + audioSize + photoSize + documentsSize + musicSize + stickersCacheSize + storiesSize;
         lastTotalSizeCalculatedTime = System.currentTimeMillis();
         Arrays.fill(selected, true);
+        if (BuildVars.LOGS_ENABLED) {
+            FileLog.cleanupLogs();
+        }
 
         File path = Environment.getDataDirectory();
         StatFs stat = new StatFs(path.getPath());
@@ -1123,6 +1129,7 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
             MediaDataController.getInstance(currentAccount).checkAllMedia(true);
 
             loadDialogEntities();
+            PillStackConfig.notifySettingsChanged(PillType.CACHE.getId());
 
             if (onDone != null) {
                 onDone.run();
@@ -1545,6 +1552,7 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
                 } catch (Exception e) {
                     FileLog.e(e);
                 }
+                PillStackConfig.notifySettingsChanged(PillType.CACHE.getId());
             });
         });
     }
@@ -1802,7 +1810,7 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
             loadingDrawable.setAlpha((int) (0xFF * barAlpha * loading));
             loadingDrawable.draw(canvas);
 
-            usedPercentPaint.setColor(ColorUtils.blendARGB(Theme.getColor(Theme.key_radioBackgroundChecked), Theme.getColor(Theme.key_actionBarActionModeDefaultSelector), .75f));
+            usedPercentPaint.setColor(Theme.isCurrentThemeMonet() ? Theme.getColor(Theme.key_statisticChartLine_red) : ColorUtils.blendARGB(Theme.getColor(Theme.key_radioBackgroundChecked), Theme.getColor(Theme.key_actionBarActionModeDefaultSelector), .75f));
             usedPercentPaint.setAlpha((int) (usedPercentPaint.getAlpha() * barAlpha));
             AndroidUtilities.rectTmp.set(
                 progressRect.left + (1f - loading) * Math.max(AndroidUtilities.dp(4), percent * progressRect.width()) + AndroidUtilities.dp(1),

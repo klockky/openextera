@@ -4,6 +4,8 @@ import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
 
+import java.lang.ref.WeakReference;
+
 import androidx.annotation.Nullable;
 
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
@@ -53,6 +55,11 @@ public class BlurredBackgroundDrawableViewFactory {
     private @Nullable ViewPositionWatcher viewPositionWatcher;
     private @Nullable ViewGroup parent;
     private @Nullable GlassEngine engine;
+    private boolean trackReattach;
+
+    public void setTrackReattach(boolean trackReattach) {
+        this.trackReattach = trackReattach;
+    }
 
     public void setLinkedViewsRef(@Nullable ReferenceList<View> linkedViews) {
         this.linkedViews = linkedViews;
@@ -113,10 +120,15 @@ public class BlurredBackgroundDrawableViewFactory {
         }
 
         if (viewPositionWatcher != null && parent != null && view != null) {
+            final WeakReference<BlurredBackgroundDrawable> drawableRef = new WeakReference<>(drawable);
             viewPositionWatcher.subscribe(view, parent, (v, pos) -> {
-                drawable.setSourceOffset(pos.left, pos.top);
-                view.invalidate();
-            }, multiwindow);
+                final BlurredBackgroundDrawable d = drawableRef.get();
+                if (d == null) {
+                    return;
+                }
+                d.setSourceOffset(pos.left, pos.top);
+                v.invalidate();
+            }, multiwindow, trackReattach);
         }
 
         if (linkedDrawables != null) {

@@ -1,5 +1,8 @@
 package org.telegram.ui.community;
 
+import com.exteragram.messenger.AvatarCornerType;
+import com.exteragram.messenger.ExteraConfig;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 import static org.telegram.messenger.LocaleController.getString;
@@ -664,7 +667,7 @@ public class CommunityEditActivity extends BaseFragment implements ImageUpdater.
             super(context);
             this.resourcesProvider = resourcesProvider;
             avatarView = new BackupImageView(context);
-            avatarView.setRoundRadius(dp(20));
+            avatarView.setRoundRadius(ExteraConfig.getAvatarCorners(72, false, AvatarCornerType.COMMUNITY));
             addView(avatarView, LayoutHelper.createFrame(AVATAR_SIZE, AVATAR_SIZE,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
                 0, 0, 0, 28));

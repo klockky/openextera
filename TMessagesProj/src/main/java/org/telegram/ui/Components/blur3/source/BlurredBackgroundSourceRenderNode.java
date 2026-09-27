@@ -42,6 +42,12 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         }
     }
 
+    public void invalidateDisplayList() {
+        if (renderNodeWithHash != null) {
+            renderNodeWithHash.invalidate();
+        }
+    }
+
     public void updateDisplayListIfNeeded() {
         renderNodeWithHash.updateDisplayListIfNeeded();
     }

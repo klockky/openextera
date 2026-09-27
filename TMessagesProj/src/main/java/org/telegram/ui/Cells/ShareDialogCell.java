@@ -38,6 +38,8 @@ import androidx.dynamicanimation.animation.FloatValueHolder;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
@@ -122,10 +124,11 @@ public class ShareDialogCell extends FrameLayout implements NotificationCenter.N
         currentType = type;
 
         imageView = new BackupImageView(context);
-        imageView.setRoundRadius(dp(28));
         if (type == TYPE_CREATE) {
+            imageView.setRoundRadius(ExteraConfig.getAvatarCorners(48));
             addView(imageView, LayoutHelper.createFrame(48, 48, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, 7, 0, 0));
         } else {
+            imageView.setRoundRadius(ExteraConfig.getAvatarCorners(56));
             addView(imageView, LayoutHelper.createFrame(56, 56, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, 7, 0, 0));
         }
 
@@ -239,7 +242,7 @@ public class ShareDialogCell extends FrameLayout implements NotificationCenter.N
                 }
                 imageView.setForUserOrChat(user, avatarDrawable);
             }
-            imageView.setRoundRadius(dp(28));
+            imageView.setRoundRadius(ExteraConfig.getAvatarCorners(56));
         } else {
             user = null;
             premiumBlocked = false;
@@ -264,7 +267,7 @@ public class ShareDialogCell extends FrameLayout implements NotificationCenter.N
                 avatarDrawable.setInfo(currentAccount, chat);
                 imageView.setForUserOrChat(chat, avatarDrawable);
             }
-            imageView.setRoundRadius(chat != null && (chat.forum || chat.monoforum)? dp(16) : dp(28));
+            imageView.setRoundRadius(ExteraConfig.getAvatarCorners(56, false, chat != null && (chat.forum || chat.monoforum)));
         }
         currentDialog = uid;
         checkBox.setChecked(checked, false);
@@ -411,12 +414,20 @@ public class ShareDialogCell extends FrameLayout implements NotificationCenter.N
 
                 boolean isOnline = !premiumBlocked && !user.self && !user.bot && (user.status != null && user.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime() || MessagesController.getInstance(currentAccount).onlinePrivacy.containsKey(user.id));
                 if (isOnline || onlineProgress != 0) {
-                    int top = imageView.getBottom() - dp(6);
-                    int left = imageView.getRight() - dp(10);
+                    final float halfSize = imageView.getWidth() / 2.0f * imageView.getScaleX();
+                    final float centerX = imageView.getX() + imageView.getWidth() / 2.0f;
+                    final float bottom = imageView.getY() + imageView.getHeight() / 2.0f + halfSize;
+                    final float outerRadius = ExteraConfig.getOnlineDotOuterRadius();
+                    final float innerRadius = ExteraConfig.getOnlineDotInnerRadius();
+                    final float offsetX = ExteraConfig.getOnlineDotOffset(dp(10), outerRadius);
+                    final float offsetY = ExteraConfig.getOnlineDotOffset(dp(6), outerRadius);
+                    final float left = LocaleController.isRTL ? centerX - halfSize + offsetX : centerX + halfSize - offsetX;
+                    final float top = bottom - offsetY;
+                    final float progress = onlineProgress * (1.0f - lockT) * (1.0f - priceT);
                     Theme.dialogs_onlineCirclePaint.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
-                    canvas.drawCircle(left, top, dp(7) * onlineProgress * (1.0f - lockT) * (1.0f - priceT), Theme.dialogs_onlineCirclePaint);
+                    canvas.drawCircle(left, top, outerRadius * progress, Theme.dialogs_onlineCirclePaint);
                     Theme.dialogs_onlineCirclePaint.setColor(getThemedColor(Theme.key_chats_onlineCircle));
-                    canvas.drawCircle(left, top, dp(5) * onlineProgress * (1.0f - lockT) * (1.0f - priceT), Theme.dialogs_onlineCirclePaint);
+                    canvas.drawCircle(left, top, innerRadius * progress, Theme.dialogs_onlineCirclePaint);
                     if (isOnline) {
                         if (onlineProgress < 1.0f) {
                             onlineProgress += dt / 150.0f;
@@ -450,7 +461,7 @@ public class ShareDialogCell extends FrameLayout implements NotificationCenter.N
         Theme.checkboxSquare_checkPaint.setAlpha((int) (checkBox.getProgress() * 255));
         int radius = dp(currentType == TYPE_CREATE ? 24 : 28);
         AndroidUtilities.rectTmp.set(cx - radius, cy - radius, cx + radius, cy + radius);
-        canvas.drawRoundRect(AndroidUtilities.rectTmp, imageView.getRoundRadius()[0], imageView.getRoundRadius()[0], Theme.checkboxSquare_checkPaint);
+        canvas.drawRoundRect(AndroidUtilities.rectTmp, imageView.getRoundRadius()[0] + dp(2), imageView.getRoundRadius()[0] + dp(2), Theme.checkboxSquare_checkPaint);
         super.onDraw(canvas);
     }
 
@@ -508,7 +519,7 @@ public class ShareDialogCell extends FrameLayout implements NotificationCenter.N
             canvas.translate(getBounds().left, getBounds().top);
             AndroidUtilities.rectTmp.set(0, 0, getBounds().width(), getBounds().height());
             paint.setAlpha(alpha);
-            float r2 = Math.min(getBounds().width(), getBounds().height()) / 2f * ((float) alpha / 0xFF);
+            float r2 = ExteraConfig.getAvatarCorners(getBounds().width(), true);
             canvas.drawRoundRect(AndroidUtilities.rectTmp, r2, r2, paint);
             canvas.restore();
 

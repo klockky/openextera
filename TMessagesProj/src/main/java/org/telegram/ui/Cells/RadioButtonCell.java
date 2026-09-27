@@ -44,7 +44,7 @@ public class RadioButtonCell extends FrameLayout {
         } else {
             radioButton.setColor(Theme.getColor(Theme.key_radioBackground), Theme.getColor(Theme.key_radioBackgroundChecked));
         }
-        addView(radioButton, LayoutHelper.createFrame(22, 22, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, (LocaleController.isRTL ? 0 : 20), 10, (LocaleController.isRTL ? 20 : 0), 0));
+        addView(radioButton, LayoutHelper.createFrame(22, 22, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL, (LocaleController.isRTL ? 0 : 20), 0, (LocaleController.isRTL ? 20 : 0), 0));
 
         textView = new TextView(context);
         if (dialog) {
@@ -81,7 +81,7 @@ public class RadioButtonCell extends FrameLayout {
 
     public int itemId;
 
-    public void setTextAndValue(String text, String value, boolean divider, boolean checked) {
+    public void setTextAndValue(CharSequence text, CharSequence value, boolean divider, boolean checked) {
         textView.setText(text);
         valueTextView.setText(value);
         radioButton.setChecked(checked, false);

@@ -65,6 +65,8 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
@@ -1292,7 +1294,9 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
         IMapsProvider.IMapView map = mapView;
         new Thread(() -> {
             try {
-                map.onCreate(null);
+                if (!ExteraConfig.canUseYandexMaps()) {
+                    map.onCreate(null);
+                }
             } catch (Exception e) {
                 //this will cause exception, but will preload google maps?
             }
@@ -1595,6 +1599,20 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
         } else {
             daddrLat = chatLocation.geo_point.lat;
             daddrLong = chatLocation.geo_point._long;
+        }
+        if (ExteraConfig.canUseYandexMaps()) {
+            try {
+                final String url;
+                if (myLocation != null) {
+                    url = String.format(Locale.US, "http://maps.yandex.ru/?rtext=%f,%f~%f,%f", myLocation.getLatitude(), myLocation.getLongitude(), daddrLat, daddrLong);
+                } else {
+                    url = String.format(Locale.US, "http://maps.yandex.ru/?rtext=%f,%f", daddrLat, daddrLong);
+                }
+                getParentActivity().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+            return;
         }
         String domain;
         if (BuildVars.isHuaweiStoreApp()) {

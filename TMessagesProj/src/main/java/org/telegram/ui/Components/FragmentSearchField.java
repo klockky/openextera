@@ -8,7 +8,9 @@ import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Path;
 import android.graphics.PorterDuff;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.text.Editable;
@@ -33,9 +35,15 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 
+import com.exteragram.messenger.pillstack.core.PillRegistry;
+import com.exteragram.messenger.pillstack.core.PillStackConfig;
+import com.exteragram.messenger.pillstack.ui.PillStackView;
+import com.exteragram.messenger.pillstack.ui.pills.BasePill;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.Theme;
@@ -49,7 +57,7 @@ import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
 
 @SuppressLint("ViewConstructor")
-public class FragmentSearchField extends FrameLayout implements FactorAnimator.Target, Theme.Colorable {
+public class FragmentSearchField extends FrameLayout implements FactorAnimator.Target, Theme.Colorable, NotificationCenter.NotificationCenterDelegate {
     private static final int ANIMATOR_ID_CLOSE_BUTTON_VISIBLE = 0;
     private static final int ANIMATOR_ID_SEARCH_ICON_VISIBLE = 1;
     private static final int ANIMATOR_ID_SEARCH_FILTERS_WIDTH = 2;
@@ -66,6 +74,31 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
     private boolean closeButtonForcedVisible;
     public final EditTextBoldCursor editText;
     private BlurredBackgroundDrawable blurredBackgroundDrawable;
+    private final Path contentClipPath = new Path();
+    private final RectF contentClipRect = new RectF();
+    private final float contentClipRadius = dp(20);
+    private PillStackView pillStackView;
+    private boolean showPillStack;
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.pillStackLayoutChanged);
+        updatePillStack(false);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.pillStackLayoutChanged);
+    }
+
+    @Override
+    public void didReceivedNotification(int id, int account, Object... args) {
+        if (id == NotificationCenter.pillStackLayoutChanged) {
+            updatePillStack(true);
+        }
+    }
 
     public FragmentSearchField(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
@@ -95,6 +128,7 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
             }
         };
         editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+        editText.setTypeface(AndroidUtilities.regular());
         editText.setCursorWidth(1.5f);
         editText.setInputType(editText.getInputType() | InputType.TYPE_TEXT_VARIATION_FILTER);
         editText.setSingleLine(true);
@@ -203,6 +237,11 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
                     getWidth() - getPaddingRight() + dp(4),
                     (getHeight() - getPaddingBottom()) + dp(4));
             blurredBackgroundDrawable.draw(canvas);
+        } else {
+            contentClipRect.set(getPaddingLeft(), getPaddingTop(), getWidth() - getPaddingRight(), getHeight() - getPaddingBottom());
+            contentClipPath.reset();
+            contentClipPath.addRoundRect(contentClipRect, contentClipRadius, contentClipRadius, Path.Direction.CW);
+            canvas.clipPath(contentClipPath);
         }
         super.dispatchDraw(canvas);
         canvas.restore();
@@ -304,6 +343,10 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
             }
         }
 
+        if (pillStackView != null) {
+            pillStackView.updateColors();
+        }
+
         invalidate();
     }
 
@@ -330,11 +373,86 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
         animatorCloseIconVisible.setValue(closeButtonForcedVisible || editText.length() > 0, true);
     }
 
+    public void showPillStack() {
+        showPillStack = true;
+        updatePillStack(true);
+    }
+
+    private void updatePillStack(boolean animated) {
+        if (showPillStack && !PillStackConfig.getActivePills().isEmpty()) {
+            boolean created = false;
+            if (pillStackView == null) {
+                pillStackView = new PillStackView(getContext());
+                addView(pillStackView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT, 6, 0, 6, 0));
+                created = true;
+            }
+            final PillStackView stackView = pillStackView;
+            if (created) {
+                if (animated) {
+                    stackView.setAlpha(0f);
+                    stackView.setScaleX(0.6f);
+                    stackView.setScaleY(0.6f);
+                    stackView.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(250).setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT).withEndAction(() -> {
+                        if (pillStackView == stackView) {
+                            stackView.setVisibilityFactor(1f - animatorCloseIconVisible.getFloatValue());
+                        }
+                    }).start();
+                } else {
+                    stackView.setVisibilityFactor(1f - animatorCloseIconVisible.getFloatValue());
+                }
+            }
+            stackView.clearPills();
+            int currentIndex = 0;
+            final ArrayList<Integer> activePills = new ArrayList<>(PillStackConfig.getActivePills());
+            for (int i = 0; i < activePills.size(); i++) {
+                final Integer id = activePills.get(i);
+                final BasePill pill = getPill(id);
+                if (pill != null) {
+                    stackView.addPill(pill);
+                    if (id == PillStackConfig.getLastActivePillId()) {
+                        currentIndex = stackView.getPillsCount() - 1;
+                    }
+                }
+            }
+            if (stackView.getPillsCount() == 0) {
+                if (pillStackView == stackView) {
+                    pillStackView = null;
+                }
+                if (animated && stackView.getVisibility() == View.VISIBLE && stackView.getAlpha() > 0f) {
+                    stackView.animate().alpha(0f).scaleX(0.6f).scaleY(0.6f).setDuration(250).setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT).withEndAction(() -> removeView(stackView)).start();
+                } else {
+                    removeView(stackView);
+                }
+                return;
+            }
+            stackView.setCurrentIndex(currentIndex);
+        } else if (pillStackView != null) {
+            final PillStackView stackView = pillStackView;
+            pillStackView = null;
+            if (animated && stackView.getVisibility() == View.VISIBLE && stackView.getAlpha() > 0f) {
+                stackView.animate().alpha(0f).scaleX(0.6f).scaleY(0.6f).setDuration(250).setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT).withEndAction(() -> removeView(stackView)).start();
+            } else {
+                removeView(stackView);
+            }
+        }
+    }
+
+    private BasePill getPill(Integer id) {
+        final PillRegistry.PillInfo pillInfo = PillRegistry.getPillInfo(id);
+        if (pillInfo == null || pillInfo.creator() == null) {
+            return null;
+        }
+        return pillInfo.creator().create(getContext(), resourcesProvider);
+    }
+
     @Override
     public void onFactorChanged(int id, float factor, float fraction, FactorAnimator callee) {
         if (id == ANIMATOR_ID_CLOSE_BUTTON_VISIBLE) {
             FragmentFloatingButton.setAnimatedVisibility(closeIcon, factor);
             closeIcon.setRotation((1 - factor) * 90);
+            if (pillStackView != null) {
+                pillStackView.setVisibilityFactor(1f - factor);
+            }
         } else if (id == ANIMATOR_ID_SEARCH_ICON_VISIBLE) {
             FragmentFloatingButton.setAnimatedVisibility(searchIcon, factor);
         } else if (id == ANIMATOR_ID_SEARCH_FILTERS_WIDTH) {

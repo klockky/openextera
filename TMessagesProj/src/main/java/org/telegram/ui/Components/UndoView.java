@@ -412,7 +412,7 @@ public class UndoView extends FrameLayout {
         if (animated != 0) {
             AnimatorSet animatorSet = new AnimatorSet();
             if (animated == 1) {
-                animatorSet.playTogether(ObjectAnimator.ofFloat(this, "enterOffset", (fromTop ? -1.0f : 1.0f) * (enterOffsetMargin + undoViewHeight)));
+                animatorSet.playTogether(ObjectAnimator.ofFloat(this, "enterOffset", (fromTop ? -1.0f : 1.0f) * (enterOffsetMargin + undoViewHeight + bottomInset)));
                 animatorSet.setDuration(250);
             } else {
                 animatorSet.playTogether(
@@ -433,7 +433,7 @@ public class UndoView extends FrameLayout {
             });
             animatorSet.start();
         } else {
-            setEnterOffset((fromTop ? -1.0f : 1.0f) * (enterOffsetMargin + undoViewHeight));
+            setEnterOffset((fromTop ? -1.0f : 1.0f) * (enterOffsetMargin + undoViewHeight + bottomInset));
             setVisibility(INVISIBLE);
         }
     }
@@ -1581,9 +1581,9 @@ public class UndoView extends FrameLayout {
 
         if (getVisibility() != VISIBLE) {
             setVisibility(VISIBLE);
-            setEnterOffset((fromTop ? -1.0f : 1.0f) * (enterOffsetMargin + undoViewHeight));
+            setEnterOffset((fromTop ? -1.0f : 1.0f) * (enterOffsetMargin + undoViewHeight + bottomInset));
             AnimatorSet animatorSet = new AnimatorSet();
-            animatorSet.playTogether(ObjectAnimator.ofFloat(this, "enterOffset", (fromTop ? -1.0f : 1.0f) * (enterOffsetMargin + undoViewHeight), (fromTop ? 1.0f : -1.0f)));
+            animatorSet.playTogether(ObjectAnimator.ofFloat(this, "enterOffset", (fromTop ? -1.0f : 1.0f) * (enterOffsetMargin + undoViewHeight + bottomInset), (fromTop ? 1.0f : -1.0f)));
             animatorSet.setInterpolator(new DecelerateInterpolator());
             animatorSet.setDuration(180);
             animatorSet.start();
@@ -1591,6 +1591,11 @@ public class UndoView extends FrameLayout {
     }
 
     private int enterOffsetMargin = AndroidUtilities.dp(8);
+    private int bottomInset = 0;
+
+    public void setBottomInset(int bottomInset) {
+        this.bottomInset = bottomInset;
+    }
 
     public void setEnterOffsetMargin(int enterOffsetMargin) {
         this.enterOffsetMargin = enterOffsetMargin;

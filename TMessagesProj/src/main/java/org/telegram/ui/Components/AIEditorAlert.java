@@ -49,6 +49,10 @@ import androidx.core.math.MathUtils;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ai.AiController;
+import com.exteragram.messenger.ai.TelegramAiReplacement;
+import com.exteragram.messenger.translator.TranslatorUtils;
+
 import org.telegram.messenger.AiTonesController;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.CodeHighlighting;
@@ -152,6 +156,7 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
 
     public AIEditorAlert(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context, null, true, false, false, false, ActionBarType.SLIDING, resourcesProvider);
+        fixNavigationBar(getThemedColor(Theme.key_windowBackgroundGray));
 
         tonesController = MessagesController.getInstance(currentAccount).getTonesController();
         tonesController.load();
@@ -171,10 +176,10 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
         tabs.setPadding(dp(4), dp(4), dp(4), dp(4));
         tabs.setBackground(Theme.createRoundRectDrawable(dp(28), Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider)));
         tabs.setRoundRadius(28);
-        tabs.addTab(R.drawable.outline_ai_translate2, getString(R.string.AIEditorTabTranslate), this::selectTab);
-        tabs.addTab(R.drawable.menu_rewrite, getString(R.string.AIEditorTabStyle), this::selectTab);
-        tabs.addTab(R.drawable.menu_proofread, getString(R.string.AIEditorTabFix), this::selectTab);
-        tabs.selectTab(TAB_STYLE);
+        addMainTab(R.drawable.outline_ai_translate2, getString(R.string.AIEditorTabTranslate), TAB_TRANSLATE);
+        addMainTab(R.drawable.menu_rewrite, getString(R.string.AIEditorTabStyle), TAB_STYLE);
+        addMainTab(R.drawable.menu_proofread, getString(R.string.AIEditorTabFix), 2);
+        tabs.selectTab(getDefaultTab());
         tabsContainer.addView(tabs, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, 12, 0, 12, 0));
 
         promptBox = new FrameLayout(context);
@@ -279,7 +284,7 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
         updateStyles();
         styleTabs.selectTab(-1);
 
-        to_lang = TranslateAlert2.getToLanguage();
+        to_lang = TranslatorUtils.getResolvedSendTargetLanguageCode();
         if (to_lang == null) {
             to_lang = TranslateController.currentLanguage();
         }
@@ -361,6 +366,7 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
 
         recyclerListView.setPadding(backgroundPaddingLeft, 0, backgroundPaddingLeft, dp(6 + 48 + 12));
         recyclerListView.setClipToPadding(false);
+        recyclerListView.setSegmentedSectionsEnabled(false);
         recyclerListView.setSections();
         recyclerListView.setOnItemClickListener((view, position) -> {
             final UItem item = adapter.getItem(position - 1);
@@ -399,6 +405,10 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
 
     @Override
     public void dismiss() {
+        if (aiFallbackCancel != null) {
+            aiFallbackCancel.run();
+            aiFallbackCancel = null;
+        }
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.loadedAiComposeTones);
         if (tonesController != null) {
             tonesController.open = false;
@@ -431,8 +441,7 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
     private void updateSendButtonIcon() {
         sendButton.setVisibility(editing || !hasSend() ? View.GONE : View.VISIBLE);
         final SpannableStringBuilder sendButtonText = new SpannableStringBuilder(getString(R.string.Send));
-        final ColoredImageSpan sendIconSpan = new ColoredImageSpan(editing ? R.drawable.filled_profile_edit_24 : R.drawable.send_plane_24);
-        sendIconSpan.setTranslateY(dp(1));
+        final ColoredImageSpan sendIconSpan = new ColoredImageSpan(editing ? R.drawable.filled_profile_edit_24 : R.drawable.send_extera_24);
         sendButtonText.setSpan(sendIconSpan, 0, sendButtonText.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         sendButton.setText(sendButtonText);
     }
@@ -450,10 +459,20 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
 
     private String promptText;
     private boolean errored;
+    private Runnable aiFallbackCancel;
+    private boolean aiFallbackFailed;
     private boolean showLimit;
     private boolean buttonShowLimit;
     private void updateButton(boolean animated) {
-        if (errored) {
+        if (errored && aiFallbackFailed) {
+            button.setText(getString(R.string.TryAgain));
+            button.setOnClickListener(v -> {
+                aiFallbackFailed = false;
+                errored = false;
+                updateButton();
+                request();
+            });
+        } else if (errored) {
             button.setText(getString(R.string.OK));
             button.setOnClickListener(v -> dismiss());
         } else {
@@ -517,6 +536,9 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
     }
 
     private void showStyleHint() {
+        if (tabs == null || tabs.getSelectedTab() != TAB_STYLE || MessagesController.getGlobalMainSettings().getBoolean("aiEditorStyleHintShown", false)) {
+            return;
+        }
         if (styleHint != null) {
             styleHint.hide();
             styleHint = null;
@@ -531,6 +553,7 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
         styleHint.setJoint(0.5f, 0);
         styleHint.setDuration(8000L);
         containerView.addView(styleHint, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 200, Gravity.TOP | Gravity.FILL_HORIZONTAL, 0, 0, 0, 0));
+        MessagesController.getGlobalMainSettings().edit().putBoolean("aiEditorStyleHintShown", true).apply();
         styleHint.show();
 
         updateStyleHintY();
@@ -559,13 +582,50 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
     }
 
     private void selectTab(int tab) {
+        selectTab(tab, true);
+    }
+
+    private void selectTab(int tab, boolean animated) {
         if (tabs.getSelectedTab() == tab) return;
         if (styleHint != null) {
             styleHint.hide();
         }
-        tabs.selectTab(tab);
+        tabs.selectTab(tab, animated);
+        if (tab == TAB_STYLE) {
+            AndroidUtilities.runOnUIThread(this::showStyleHint);
+        }
         request();
-        adapter.update(true);
+        adapter.update(animated);
+    }
+
+    private void addMainTab(int iconResId, CharSequence text, int tab) {
+        tabs.addTab(iconResId, text, this::selectTab).setOnLongClickListener(v -> onTabLongClick(tab, v));
+    }
+
+    private boolean onTabLongClick(int tab, View view) {
+        if (getDefaultTab() == tab) {
+            return false;
+        }
+        ItemOptions.makeOptions(container, resourcesProvider, view)
+            .setGravity(Gravity.CENTER_HORIZONTAL)
+            .add(R.drawable.tabs_reorder, getString(R.string.ProfileTabSetAsMain), () -> setDefaultTab(tab))
+            .show();
+        return true;
+    }
+
+    private int getDefaultTab() {
+        final int tab = MessagesController.getGlobalMainSettings().getInt("aiEditorDefaultTab", TAB_STYLE);
+        if (tab < 0 || tab > 2) {
+            return TAB_STYLE;
+        }
+        return tab;
+    }
+
+    private void setDefaultTab(int tab) {
+        if (tab < 0 || tab > 2) {
+            return;
+        }
+        MessagesController.getGlobalMainSettings().edit().putInt("aiEditorDefaultTab", tab).apply();
     }
 
     public static void showStylesLimitToast(BulletinFactory bulletinFactory, int currentAccount) {
@@ -1112,6 +1172,13 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
         updateButton();
     }
 
+    private void setSendTargetLanguage(String code) {
+        cancelRequest();
+        TranslatorUtils.setSendTargetLanguage(code);
+        to_lang = TranslatorUtils.getResolvedSendTargetLanguageCode();
+        request();
+    }
+
     private void onToLangMenu(View btn) {
         final ItemOptions o = ItemOptions.makeOptions(container, resourcesProvider, btn);
         o.setMaxHeight(dp(450));
@@ -1125,34 +1192,28 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
         scrollView.addView(list);
         o.addView(scrollView);
 
-        final ArrayList<TranslateController.Language> suggestedLanguages = TranslateController.getSuggestedLanguages(null);
+        final boolean followApp = TranslatorUtils.isSendTargetLanguageFollowApp();
+        final ArrayList<String> recentLanguages = TranslatorUtils.getRecentSendTargetLanguages();
         final ArrayList<TranslateController.Language> allLanguages = TranslateController.getLanguages();
 
-        if (!TextUtils.isEmpty(to_lang)) {
+        if (!followApp && !TextUtils.isEmpty(to_lang)) {
             addChecked(o, list, true, TranslateAlert2.capitalFirst(TranslateAlert2.languageName(to_lang)), null);
         }
-        for (final TranslateController.Language lng : suggestedLanguages) {
-            if (!TextUtils.equals(lng.code, to_lang)) {
-                addChecked(o, list, false, lng.displayName, () -> {
-                    cancelRequest();
-                    to_lang = lng.code;
-                    TranslateAlert2.setToLanguage(to_lang);
-                    request();
-                });
+        int recentLeft = followApp ? 2 : 1;
+        for (final String code : recentLanguages) {
+            if (recentLeft > 0 && (followApp || !TextUtils.equals(code, to_lang))) {
+                addChecked(o, list, false, TranslateAlert2.capitalFirst(TranslateAlert2.languageName(code)), () -> setSendTargetLanguage(code));
+                recentLeft--;
             }
         }
+        addChecked(o, list, followApp, getString(R.string.TranslationTargetApp), followApp ? null : () -> setSendTargetLanguage(TranslatorUtils.TARGET_LANG_APP));
 
         ActionBarPopupWindow.GapView gap = new ActionBarPopupWindow.GapView(getContext(), resourcesProvider);
         gap.setTag(R.id.fit_width_tag, 1);
         list.addView(gap, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
 
         for (final TranslateController.Language lng : allLanguages) {
-            addChecked(o, list, TextUtils.equals(lng.code, to_lang), lng.displayName, () -> {
-                cancelRequest();
-                to_lang = lng.code;
-                TranslateAlert2.setToLanguage(to_lang);
-                request();
-            });
+            addChecked(o, list, !followApp && TextUtils.equals(lng.code, to_lang), lng.displayName, () -> setSendTargetLanguage(lng.code));
         }
 
 //        o.addSpaceGap(false);
@@ -1311,8 +1372,9 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
             fixedText = loadingText;
         }
 
-        requestId = ConnectionsManager.getInstance(currentAccount).sendRequestTyped(req, AndroidUtilities::runOnUIThread, (res, err) -> {
+        final Utilities.Callback2<TLRPC.TL_composedMessageWithAI, TLRPC.TL_error> onResult = (res, err) -> {
             requestId = -1;
+            aiFallbackCancel = null;
 
             loading = false;
             if (err != null && ("SUMMARY_FLOOD_PREMIUM".equalsIgnoreCase(err.text) || "AICOMPOSE_FLOOD_PREMIUM".equalsIgnoreCase(err.text))) {
@@ -1362,7 +1424,19 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
             }
 
             adapter.update(true);
-        });
+        };
+        if (TelegramAiReplacement.replacesEditor(currentAccount)) {
+            if (aiFallbackCancel != null) {
+                aiFallbackCancel.run();
+            }
+            aiFallbackCancel = TelegramAiReplacement.compose(req, styleTabs.getSelectedTone(), from_lang, res -> onResult.run(res, null), (code, errorMessage) -> {
+                AiController.showErrorBulletin(bulletinContainer, resourcesProvider, code, errorMessage, null);
+                aiFallbackFailed = true;
+                onResult.run(null, null);
+            });
+        } else {
+            requestId = ConnectionsManager.getInstance(currentAccount).sendRequestTyped(req, AndroidUtilities::runOnUIThread, onResult);
+        }
 
         adapter.update(true);
     }
@@ -1479,6 +1553,10 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
         if (requestId >= 0) {
             ConnectionsManager.getInstance(currentAccount).cancelRequest(requestId, true);
             requestId = -1;
+        }
+        if (aiFallbackCancel != null) {
+            aiFallbackCancel.run();
+            aiFallbackCancel = null;
         }
         loading = false;
         final SimpleTextView actionBarTitleTextView = actionBar.getTitleTextView();
@@ -2023,6 +2101,7 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
             setBackgroundColor(getThemedColor(Theme.key_windowBackgroundGray));
             recyclerListView.setPadding(backgroundPaddingLeft, 0, backgroundPaddingLeft, dp(6 + 48 + 12));
             recyclerListView.setClipToPadding(false);
+            recyclerListView.setSegmentedSectionsEnabled(false);
             recyclerListView.setSections();
             recyclerListView.setOnItemClickListener((view, position) -> {
                 final UItem item = adapter.getItem(position - 1);
@@ -2413,6 +2492,7 @@ public class AIEditorAlert extends BottomSheetWithRecyclerListView implements No
             setBackgroundColor(getThemedColor(Theme.key_windowBackgroundGray));
             recyclerListView.setPadding(backgroundPaddingLeft, 0, backgroundPaddingLeft, dp(6 + 48 + 12));
             recyclerListView.setClipToPadding(false);
+            recyclerListView.setSegmentedSectionsEnabled(false);
             recyclerListView.setSections();
             recyclerListView.setOnItemClickListener((view, position) -> {
                 final UItem item = adapter.getItem(position - 1);

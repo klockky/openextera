@@ -58,6 +58,18 @@ public class MediaActionDrawable extends Drawable {
 
     private float overrideAlpha = 1.0f;
 
+    /** When false, the progress circle is drawn by the owner (e.g. Material 3 indicator in RadialProgress2). */
+    public boolean drawProgressCircle = true;
+    private float downloadIconScale = 1.0f;
+
+    public void setDownloadIconScale(float downloadIconScale) {
+        this.downloadIconScale = downloadIconScale;
+    }
+
+    public float getDownloadIconScale() {
+        return downloadIconScale;
+    }
+
     private int currentIcon;
     private int nextIcon;
     private float transitionProgress = 1.0f;
@@ -89,6 +101,13 @@ public class MediaActionDrawable extends Drawable {
 
     public interface MediaActionDrawableDelegate {
         void invalidate();
+    }
+
+    private void drawDownloadArrow(Canvas canvas, float cx, float cy, float arrowSize, float lineHalf) {
+        final float bottom = cy + lineHalf;
+        canvas.drawLine(cx, cy - lineHalf, cx, bottom, paint);
+        canvas.drawLine(cx - arrowSize, bottom - arrowSize, cx, bottom, paint);
+        canvas.drawLine(cx + arrowSize, bottom - arrowSize, cx, bottom, paint);
     }
 
     public MediaActionDrawable() {
@@ -165,7 +184,7 @@ public class MediaActionDrawable extends Drawable {
             if (currentIcon == ICON_PLAY && icon == ICON_PAUSE || currentIcon == ICON_PAUSE && icon == ICON_PLAY) {
                 transitionAnimationTime = 300.0f;
             } else if (currentIcon == ICON_DOWNLOAD && (icon == ICON_CANCEL || icon == ICON_CANCEL_FILL)) {
-                transitionAnimationTime = 400.0f;
+                transitionAnimationTime = drawProgressCircle ? 400.0f : 250.0f;
             } else if (currentIcon != ICON_NONE && icon == ICON_CHECK) {
                 transitionAnimationTime = 360.0f;
             } else if (currentIcon == ICON_NONE && icon == ICON_CANCEL_FILL || currentIcon == ICON_CANCEL_FILL && icon == ICON_NONE) {
@@ -331,123 +350,180 @@ public class MediaActionDrawable extends Drawable {
         int width = AndroidUtilities.dp(3);
         if (currentIcon == ICON_DOWNLOAD || nextIcon == ICON_DOWNLOAD) {
             applyShaderMatrix(false);
-            float yStart = cy - AndroidUtilities.dp(9) * scale;
-            float yEnd = cy + AndroidUtilities.dp(9) * scale;
-            float yStart2;
-            float yEnd2 = cy + AndroidUtilities.dp(12) * scale;
+            if (drawProgressCircle) {
+                float yStart = cy - AndroidUtilities.dp(9) * scale;
+                float yEnd = cy + AndroidUtilities.dp(9) * scale;
+                float yStart2;
+                float yEnd2 = cy + AndroidUtilities.dp(12) * scale;
 
-            float transition;
-            if ((currentIcon == ICON_CANCEL || currentIcon == ICON_CANCEL_FILL) && nextIcon == ICON_DOWNLOAD) {
-                paint.setAlpha((int) (255 * Math.min(1.0f, transitionProgress / 0.5f)));
-                transition = transitionProgress;
-                yStart2 = cy + AndroidUtilities.dp(12) * scale;
-            } else {
-                if (nextIcon != ICON_CANCEL && nextIcon != ICON_CANCEL_FILL && nextIcon != ICON_DOWNLOAD) {
-                    paint.setAlpha((int) (255 * Math.min(1.0f, savedTransitionProgress / 0.5f) * (1.0f - transitionProgress)));
-                    transition = savedTransitionProgress;
-                } else {
-                    paint.setAlpha(255);
+                float transition;
+                if ((currentIcon == ICON_CANCEL || currentIcon == ICON_CANCEL_FILL) && nextIcon == ICON_DOWNLOAD) {
+                    paint.setAlpha((int) (255 * Math.min(1.0f, transitionProgress / 0.5f)));
                     transition = transitionProgress;
-                }
-                yStart2 = cy + AndroidUtilities.dp(1) * scale;
-            }
-
-            float y1, y2, x1, x2, y3;
-            if (animatingTransition) {
-                float progress = transition;
-                if (nextIcon == ICON_DOWNLOAD || progress <= DOWNLOAD_TO_CANCEL_STAGE1) {
-                    float currentProgress;
-                    float currentBackProgress;
-                    if (nextIcon == ICON_DOWNLOAD) {
-                        currentBackProgress = transition;
-                        currentProgress = 1.0f - currentBackProgress;
-                    } else {
-                        currentProgress = transition / DOWNLOAD_TO_CANCEL_STAGE1;
-                        currentBackProgress = 1.0f - currentProgress;
-                    }
-                    y1 = yStart + (yStart2 - yStart) * currentProgress;
-                    y2 = yEnd + (yEnd2 - yEnd) * currentProgress;
-                    x1 = cx - AndroidUtilities.dp(8) * currentBackProgress * scale;
-                    x2 = cx + AndroidUtilities.dp(8) * currentBackProgress * scale;
-                    y3 = y2 - AndroidUtilities.dp(8) * currentBackProgress * scale;
+                    yStart2 = cy + AndroidUtilities.dp(12) * scale;
                 } else {
-                    float currentProgress;
-                    float currentProgress2;
-                    float currentProgress3;
-                    float d = AndroidUtilities.dp(13) * scale * scale + (isMini ? AndroidUtilities.dp(2) : 0);
-
-                    progress -= DOWNLOAD_TO_CANCEL_STAGE1;
-                    currentProgress3 = progress / (DOWNLOAD_TO_CANCEL_STAGE2 + DOWNLOAD_TO_CANCEL_STAGE3);
-                    if (progress > DOWNLOAD_TO_CANCEL_STAGE2) {
-                        progress -= DOWNLOAD_TO_CANCEL_STAGE2;
-                        currentProgress = 1.0f;
-                        currentProgress2 = progress / DOWNLOAD_TO_CANCEL_STAGE3;
+                    if (nextIcon != ICON_CANCEL && nextIcon != ICON_CANCEL_FILL && nextIcon != ICON_DOWNLOAD) {
+                        paint.setAlpha((int) (255 * Math.min(1.0f, savedTransitionProgress / 0.5f) * (1.0f - transitionProgress)));
+                        transition = savedTransitionProgress;
                     } else {
-                        currentProgress = progress / DOWNLOAD_TO_CANCEL_STAGE2;
-                        currentProgress2 = 0.0f;
+                        paint.setAlpha(255);
+                        transition = transitionProgress;
                     }
-                    rect.set(cx - d, yEnd2 - d / 2, cx, yEnd2 + d / 2);
-                    float start = 100 * currentProgress2;
-                    canvas.drawArc(rect, start, 104 * currentProgress3 - start, false, paint);
+                    yStart2 = cy + AndroidUtilities.dp(1) * scale;
+                }
 
-                    y1 = yStart2 + (yEnd2 - yStart2) * currentProgress;
-                    y2 = y3 = yEnd2;
-                    x1 = x2 = cx;
-
-                    if (currentProgress2 > 0) {
-                        float rotation;
-                        if (nextIcon == ICON_CANCEL_FILL) {
-                            rotation = 0;
+                float y1, y2, x1, x2, y3;
+                if (animatingTransition) {
+                    float progress = transition;
+                    if (nextIcon == ICON_DOWNLOAD || progress <= DOWNLOAD_TO_CANCEL_STAGE1) {
+                        float currentProgress;
+                        float currentBackProgress;
+                        if (nextIcon == ICON_DOWNLOAD) {
+                            currentBackProgress = transition;
+                            currentProgress = 1.0f - currentBackProgress;
                         } else {
-                            rotation = -45 * (1.0f - currentProgress2);
+                            currentProgress = transition / DOWNLOAD_TO_CANCEL_STAGE1;
+                            currentBackProgress = 1.0f - currentProgress;
                         }
-                        d = AndroidUtilities.dp(7) * currentProgress2 * scale;
-                        int alpha = (int) (255 * currentProgress2);
-                        if (nextIcon != ICON_CANCEL && nextIcon != ICON_CANCEL_FILL && nextIcon != ICON_DOWNLOAD) {
-                            float backProgress = (1.0f - Math.min(1.0f, transitionProgress / 0.5f));
-                            //d *= backProgress;
-                            alpha *= backProgress;
-                        }
+                        y1 = yStart + (yStart2 - yStart) * currentProgress;
+                        y2 = yEnd + (yEnd2 - yEnd) * currentProgress;
+                        x1 = cx - AndroidUtilities.dp(8) * currentBackProgress * scale;
+                        x2 = cx + AndroidUtilities.dp(8) * currentBackProgress * scale;
+                        y3 = y2 - AndroidUtilities.dp(8) * currentBackProgress * scale;
+                    } else {
+                        float currentProgress;
+                        float currentProgress2;
+                        float currentProgress3;
+                        float d = AndroidUtilities.dp(13) * scale * scale + (isMini ? AndroidUtilities.dp(2) : 0);
 
-                        if (rotation != 0) {
-                            canvas.save();
-                            canvas.rotate(rotation, cx, cy);
+                        progress -= DOWNLOAD_TO_CANCEL_STAGE1;
+                        currentProgress3 = progress / (DOWNLOAD_TO_CANCEL_STAGE2 + DOWNLOAD_TO_CANCEL_STAGE3);
+                        if (progress > DOWNLOAD_TO_CANCEL_STAGE2) {
+                            progress -= DOWNLOAD_TO_CANCEL_STAGE2;
+                            currentProgress = 1.0f;
+                            currentProgress2 = progress / DOWNLOAD_TO_CANCEL_STAGE3;
+                        } else {
+                            currentProgress = progress / DOWNLOAD_TO_CANCEL_STAGE2;
+                            currentProgress2 = 0.0f;
                         }
-                        if (alpha != 0) {
-                            paint.setAlpha(alpha);
+                        rect.set(cx - d, yEnd2 - d / 2, cx, yEnd2 + d / 2);
+                        float start = 100 * currentProgress2;
+                        canvas.drawArc(rect, start, 104 * currentProgress3 - start, false, paint);
+
+                        y1 = yStart2 + (yEnd2 - yStart2) * currentProgress;
+                        y2 = y3 = yEnd2;
+                        x1 = x2 = cx;
+
+                        if (currentProgress2 > 0) {
+                            float rotation;
                             if (nextIcon == ICON_CANCEL_FILL) {
-                                paint3.setAlpha(alpha);
-                                rect.set(cx - AndroidUtilities.dp(3.5f), cy - AndroidUtilities.dp(3.5f), cx + AndroidUtilities.dp(3.5f), cy + AndroidUtilities.dp(3.5f));
-                                canvas.drawRoundRect(rect, AndroidUtilities.dp(2), AndroidUtilities.dp(2), paint3);
-
-                                paint.setAlpha((int) (alpha * 0.15f));
-                                int diff = AndroidUtilities.dp(isMini ? 2 : 4);
-                                rect.set(bounds.left + diff, bounds.top + diff, bounds.right - diff, bounds.bottom - diff);
-                                canvas.drawArc(rect, 0, 360, false, paint);
-                                paint.setAlpha(alpha);
+                                rotation = 0;
                             } else {
-                                canvas.drawLine(cx - d, cy - d, cx + d, cy + d, paint);
-                                canvas.drawLine(cx + d, cy - d, cx - d, cy + d, paint);
+                                rotation = -45 * (1.0f - currentProgress2);
+                            }
+                            d = AndroidUtilities.dp(7) * currentProgress2 * scale;
+                            int alpha = (int) (255 * currentProgress2);
+                            if (nextIcon != ICON_CANCEL && nextIcon != ICON_CANCEL_FILL && nextIcon != ICON_DOWNLOAD) {
+                                float backProgress = (1.0f - Math.min(1.0f, transitionProgress / 0.5f));
+                                //d *= backProgress;
+                                alpha *= backProgress;
+                            }
+
+                            if (rotation != 0) {
+                                canvas.save();
+                                canvas.rotate(rotation, cx, cy);
+                            }
+                            if (alpha != 0) {
+                                paint.setAlpha(alpha);
+                                if (nextIcon == ICON_CANCEL_FILL) {
+                                    paint3.setAlpha(alpha);
+                                    rect.set(cx - AndroidUtilities.dp(3.5f), cy - AndroidUtilities.dp(3.5f), cx + AndroidUtilities.dp(3.5f), cy + AndroidUtilities.dp(3.5f));
+                                    canvas.drawRoundRect(rect, AndroidUtilities.dp(2), AndroidUtilities.dp(2), paint3);
+
+                                    paint.setAlpha((int) (alpha * 0.15f));
+                                    int diff = AndroidUtilities.dp(isMini ? 2 : 4);
+                                    rect.set(bounds.left + diff, bounds.top + diff, bounds.right - diff, bounds.bottom - diff);
+                                    canvas.drawArc(rect, 0, 360, false, paint);
+                                    paint.setAlpha(alpha);
+                                } else {
+                                    canvas.drawLine(cx - d, cy - d, cx + d, cy + d, paint);
+                                    canvas.drawLine(cx + d, cy - d, cx - d, cy + d, paint);
+                                }
+                            }
+                            if (rotation != 0) {
+                                canvas.restore();
                             }
                         }
-                        if (rotation != 0) {
-                            canvas.restore();
-                        }
                     }
+                } else {
+                    y1 = yStart;
+                    y2 = yEnd;
+                    x1 = cx - AndroidUtilities.dp(8) * scale;
+                    x2 = cx + AndroidUtilities.dp(8) * scale;
+                    y3 = y2 - AndroidUtilities.dp(8) * scale;
+                }
+                if (y1 != y2) {
+                    canvas.drawLine(cx, y1, cx, y2, paint);
+                }
+                if (x1 != cx) {
+                    canvas.drawLine(x1, y3, cx, y2, paint);
+                    canvas.drawLine(x2, y3, cx, y2, paint);
                 }
             } else {
-                y1 = yStart;
-                y2 = yEnd;
-                x1 = cx - AndroidUtilities.dp(8) * scale;
-                x2 = cx + AndroidUtilities.dp(8) * scale;
-                y3 = y2 - AndroidUtilities.dp(8) * scale;
-            }
-            if (y1 != y2) {
-                canvas.drawLine(cx, y1, cx, y2, paint);
-            }
-            if (x1 != cx) {
-                canvas.drawLine(x1, y3, cx, y2, paint);
-                canvas.drawLine(x2, y3, cx, y2, paint);
+                final boolean withStop = currentIcon == ICON_CANCEL_FILL || nextIcon == ICON_CANCEL_FILL;
+                final float progress = nextIcon == ICON_DOWNLOAD ? 1f - transitionProgress : transitionProgress;
+                final float iconScale = scale * downloadIconScale;
+                final float arrowSize = AndroidUtilities.dp(8) * iconScale;
+                final float arrowOffset = AndroidUtilities.dp(1) * iconScale;
+                final float crossSize = AndroidUtilities.dp(7) * iconScale;
+                final float lineHalf = AndroidUtilities.dp(9) * iconScale;
+                final float arrowShift = AndroidUtilities.dp(2) * iconScale;
+                final float stopHalf = AndroidUtilities.dp(3.5f);
+                if (withStop) {
+                    final float arrowScale = 1f - progress;
+                    if (arrowScale > 0) {
+                        canvas.save();
+                        canvas.scale(arrowScale, arrowScale, cx, cy);
+                        paint.setAlpha((int) (255 * arrowScale * overrideAlpha));
+                        drawDownloadArrow(canvas, cx, cy, arrowSize, lineHalf);
+                        canvas.restore();
+                    }
+                    if (progress > 0) {
+                        canvas.save();
+                        canvas.scale(progress, progress, cx, cy);
+                        paint3.setAlpha((int) (255 * progress * overrideAlpha));
+                        rect.set(cx - stopHalf, cy - stopHalf, cx + stopHalf, cy + stopHalf);
+                        canvas.drawRoundRect(rect, AndroidUtilities.dp(2), AndroidUtilities.dp(2), paint3);
+                        canvas.restore();
+                    }
+                } else if ((currentIcon == ICON_CANCEL || nextIcon == ICON_CANCEL) && animatingTransition) {
+                    canvas.save();
+                    canvas.rotate(90 * progress, cx, cy);
+                    final float lineProgress = 1f - progress;
+                    if (lineProgress > 0) {
+                        paint.setAlpha((int) (255 * lineProgress));
+                        canvas.drawLine(cx, cy - lineHalf * lineProgress, cx, cy + lineHalf * lineProgress, paint);
+                    }
+                    paint.setAlpha(255);
+                    final float startY = cy + arrowOffset - arrowSize * progress;
+                    final float endY = cy + lineHalf - arrowShift * progress;
+                    final float startDx = arrowOffset * progress;
+                    final float endDx = crossSize * progress;
+                    canvas.drawLine(cx - arrowSize + startDx, startY, cx + endDx, endY, paint);
+                    canvas.drawLine(cx + arrowSize - startDx, startY, cx - endDx, endY, paint);
+                    canvas.restore();
+                } else {
+                    final float hideProgress = animatingTransition ? progress : (currentIcon == ICON_DOWNLOAD ? 0f : 1f);
+                    final float arrowScale = 1f - hideProgress;
+                    final int alpha = (int) (255 * arrowScale);
+                    if (alpha > 0) {
+                        canvas.save();
+                        canvas.scale(arrowScale, arrowScale, cx, cy);
+                        paint.setAlpha(alpha);
+                        drawDownloadArrow(canvas, cx, cy, arrowSize, lineHalf);
+                        canvas.restore();
+                    }
+                }
             }
         }
 
@@ -460,7 +536,7 @@ public class MediaActionDrawable extends Drawable {
             float iconScaleY = 0, progressScaleY = 0;
             int alpha;
             if (nextIcon == ICON_DOWNLOAD) {
-                if (transitionProgress <= DOWNLOAD_TO_CANCEL_STAGE3 + DOWNLOAD_TO_CANCEL_STAGE2) {
+                if (drawProgressCircle && transitionProgress <= DOWNLOAD_TO_CANCEL_STAGE3 + DOWNLOAD_TO_CANCEL_STAGE2) {
                     float progress = transitionProgress / (DOWNLOAD_TO_CANCEL_STAGE3 + DOWNLOAD_TO_CANCEL_STAGE2);
                     float backProgress = 1.0f - progress;
                     d = AndroidUtilities.dp(7) * backProgress * scale;
@@ -555,7 +631,7 @@ public class MediaActionDrawable extends Drawable {
                 canvas.save();
                 canvas.scale(progressScale, progressScale, progressScaleX, progressScaleY);
             }
-            if ((currentIcon == ICON_CANCEL || currentIcon == ICON_CANCEL_FILL || currentIcon == ICON_NONE && (nextIcon == ICON_CANCEL_FILL || nextIcon == ICON_CANCEL)) && alpha != 0) {
+            if ((currentIcon == ICON_CANCEL || currentIcon == ICON_CANCEL_FILL || currentIcon == ICON_NONE && (nextIcon == ICON_CANCEL_FILL || nextIcon == ICON_CANCEL)) && alpha != 0 && drawProgressCircle) {
                 float rad = Math.max(4, 360 * animatedDownloadProgress);
                 int diff = AndroidUtilities.dp(isMini ? 2 : 4);
                 rect.set(bounds.left + diff, bounds.top + diff, bounds.right - diff, bounds.bottom - diff);
@@ -583,6 +659,8 @@ public class MediaActionDrawable extends Drawable {
             if (alpha != 0) {
                 applyShaderMatrix(false);
                 paint.setAlpha((int) (alpha * overrideAlpha));
+            }
+            if (alpha != 0 && drawProgressCircle) {
                 float rad = Math.max(4, 360 * animatedDownloadProgress);
                 int diff = AndroidUtilities.dp(isMini ? 2 : 4);
                 rect.set(bounds.left + diff, bounds.top + diff, bounds.right - diff, bounds.bottom - diff);

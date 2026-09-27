@@ -43,6 +43,7 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -61,6 +62,11 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.exteragram.messenger.AvatarCornerType;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.components.ActionRow;
+import com.exteragram.messenger.utils.chats.GlassMenuHelper;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
 import org.telegram.messenger.ChatObject;
@@ -77,7 +83,6 @@ import org.telegram.ui.Components.CloseProgressDrawable2;
 import org.telegram.ui.Components.CombinedDrawable;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.EditTextBoldCursor;
-import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.LinkSpanDrawable;
 import org.telegram.ui.Components.RLottieDrawable;
@@ -286,6 +291,44 @@ public class ActionBarMenuItem extends FrameLayout {
         longClickEnabled = value;
     }
 
+    private boolean centerTitleVisibleForPartialAlpha = true;
+
+    @Override
+    public void setAlpha(float alpha) {
+        final boolean wasVisibleForCenterTitle = isVisibleForCenterTitle();
+        final float oldAlpha = getAlpha();
+        super.setAlpha(alpha);
+        if (alpha > oldAlpha) {
+            centerTitleVisibleForPartialAlpha = true;
+        } else if (alpha < oldAlpha) {
+            centerTitleVisibleForPartialAlpha = false;
+        }
+        if (!ExteraConfig.getCenterTitle() || wasVisibleForCenterTitle == isVisibleForCenterTitle()) {
+            return;
+        }
+        final ViewParent parent = getParent();
+        if (parent instanceof ActionBarMenu) {
+            final ViewParent actionBar = parent.getParent();
+            if (actionBar instanceof View) {
+                ((View) actionBar).requestLayout();
+            }
+        }
+    }
+
+    public boolean isVisibleForCenterTitle() {
+        if (getVisibility() != VISIBLE) {
+            return false;
+        }
+        final float alpha = getAlpha();
+        if (alpha >= 1f) {
+            return true;
+        }
+        if (alpha <= 0f) {
+            return false;
+        }
+        return centerTitleVisibleForPartialAlpha;
+    }
+
     public void setFixBackground(boolean fixBackground) {
         this.fixBackground = fixBackground;
         invalidate();
@@ -333,7 +376,7 @@ public class ActionBarMenuItem extends FrameLayout {
                     View child = popupLayout.getItemAt(a);
                     child.getHitRect(rect);
                     Object tag = child.getTag();
-                    if (tag instanceof Integer && (Integer) tag < 100) {
+                    if (tag instanceof Integer && (Integer) tag < 100 || child instanceof ActionBarMenuSubItem && ((ActionBarMenuSubItem) child).openSwipeBackLayout != null) {
                         if (!rect.contains((int) x, (int) y)) {
                             child.setPressed(false);
                             child.setSelected(false);
@@ -349,18 +392,63 @@ public class ActionBarMenuItem extends FrameLayout {
                             child.drawableHotspotChanged(x, y - child.getTop());
                             selectedMenuView = child;
                         }
+                    } else if (child instanceof ActionRow) {
+                        final ActionRow actionRow = (ActionRow) child;
+                        final ViewGroup row = (ViewGroup) actionRow.getChildAt(0);
+                        if (rect.contains((int) x, (int) y)) {
+                            if (row != null) {
+                                final float rowX = x - child.getLeft() - row.getLeft();
+                                final float rowY = y - child.getTop() - row.getTop();
+                                for (int i = 0; i < row.getChildCount(); i++) {
+                                    final View button = row.getChildAt(i);
+                                    button.getHitRect(rect);
+                                    if (rect.contains((int) rowX, (int) rowY)) {
+                                        button.setPressed(true);
+                                        button.setSelected(true);
+                                        button.drawableHotspotChanged(rowX, rowY - button.getTop());
+                                        selectedMenuView = button;
+                                    } else {
+                                        button.setPressed(false);
+                                        button.setSelected(false);
+                                    }
+                                }
+                            }
+                        } else if (row != null) {
+                            for (int i = 0; i < row.getChildCount(); i++) {
+                                final View button = row.getChildAt(i);
+                                button.setPressed(false);
+                                button.setSelected(false);
+                            }
+                        }
                     }
                 }
             }
         } else if (popupWindow != null && popupWindow.isShowing() && event.getActionMasked() == MotionEvent.ACTION_UP) {
             if (selectedMenuView != null) {
                 selectedMenuView.setSelected(false);
-                if (parentMenu != null) {
-                    parentMenu.onItemClick((Integer) selectedMenuView.getTag());
-                } else if (delegate != null) {
-                    delegate.onItemClick((Integer) selectedMenuView.getTag());
+                if (selectedMenuView instanceof ActionBarMenuSubItem && ((ActionBarMenuSubItem) selectedMenuView).openSwipeBackLayout != null) {
+                    selectedMenuView.performClick();
+                } else if (selectedMenuView.getTag() instanceof ActionRow.ActionItem) {
+                    final ActionRow.ActionItem actionItem = (ActionRow.ActionItem) selectedMenuView.getTag();
+                    if (processedPopupClick) {
+                        return super.onTouchEvent(event);
+                    }
+                    processedPopupClick = true;
+                    if (actionItem.enabled && actionItem.action != null) {
+                        final View view = selectedMenuView;
+                        AndroidUtilities.runOnUIThread(() -> actionItem.action.onClick(view));
+                    }
+                    if (popupWindow != null) {
+                        popupWindow.dismiss(allowCloseAnimation);
+                    }
+                } else {
+                    if (parentMenu != null) {
+                        parentMenu.onItemClick((Integer) selectedMenuView.getTag());
+                    } else if (delegate != null) {
+                        delegate.onItemClick((Integer) selectedMenuView.getTag());
+                    }
+                    popupWindow.dismiss(allowCloseAnimation);
                 }
-                popupWindow.dismiss(allowCloseAnimation);
             } else if (showSubmenuByMove) {
                 popupWindow.dismiss();
             }
@@ -416,13 +504,7 @@ public class ActionBarMenuItem extends FrameLayout {
         rect = new Rect();
         location = new int[2];
         popupLayout = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getContext(), R.drawable.popup_fixed_alert4, resourcesProvider, ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK);
-
-        if (subMenuFactory != null) {
-            popupLayout.setBackground(subMenuFactory.create(popupLayout, true)
-                    .setColorProvider(subMenuProvider)
-                    .setRadius(dp(12))
-                    .setPadding(dp(8)));
-        }
+        updateSubMenuGlass();
 
         popupLayout.setOnTouchListener((v, event) -> {
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -752,17 +834,17 @@ public class ActionBarMenuItem extends FrameLayout {
     }
 
     private BlurredBackgroundDrawableViewFactory subMenuFactory;
-    private BlurredBackgroundProvider subMenuProvider;
 
     public void setBlurredBackgroundFactory(BlurredBackgroundDrawableViewFactory subMenuFactory, BlurredBackgroundProvider subMenuProvider) {
         this.subMenuFactory = subMenuFactory;
-        this.subMenuProvider = subMenuProvider;
-        if (popupLayout != null && subMenuFactory != null) {
-            popupLayout.setBackground(subMenuFactory.create(popupLayout, true)
-                    .setColorProvider(subMenuProvider)
-                    .setRadius(dp(12))
-                    .setPadding(dp(8)));
+        updateSubMenuGlass();
+    }
+
+    private void updateSubMenuGlass() {
+        if (popupLayout == null || subMenuFactory == null) {
+            return;
         }
+        GlassMenuHelper.applyToReusedMenu(subMenuFactory, resourcesProvider, popupLayout, GlassMenuHelper.isEnabled(resourcesProvider));
     }
 
     public void toggleSubMenu(View topView, View fromView) {
@@ -813,12 +895,8 @@ public class ActionBarMenuItem extends FrameLayout {
                 ((ViewGroup) topView.getParent()).removeView(topView);
             }
             if (topView instanceof ActionBarMenuSubItem || topView instanceof LinearLayout) {
-                if (subMenuFactory != null) {
-                    frameLayout.setBackground(subMenuFactory.create(popupLayout, true)
-                        .setColorProvider(subMenuProvider)
-                        .setRadius(dp(12))
-                        .setPadding(dp(8))
-                        .setHasPadding(true));
+                if (popupLayout.getGlassBackgroundFactory() != null) {
+                    frameLayout.setBackground(GlassMenuHelper.createPanelBackground(popupLayout.getGlassBackgroundFactory(), resourcesProvider, frameLayout));
                 } else {
                     Drawable drawable = ContextCompat.getDrawable(getContext(), R.drawable.popup_fixed_alert2).mutate();
                     drawable.setColorFilter(new PorterDuffColorFilter(popupLayout.getBackgroundColor(), PorterDuff.Mode.MULTIPLY));
@@ -834,9 +912,7 @@ public class ActionBarMenuItem extends FrameLayout {
             popupLayout.setTopView(null);
         }
 
-        if (subMenuFactory != null) {
-            ItemOptions.setGapBackgroundColor(popupLayout, Theme.multAlpha(getThemedColor(Theme.key_actionBarDefaultSubmenuItem), 0.06f));
-        }
+        updateSubMenuGlass();
 
         popupWindow = new ActionBarPopupWindow(container, LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT);
         if (animationEnabled) {
@@ -2325,13 +2401,13 @@ public class ActionBarMenuItem extends FrameLayout {
                         Theme.setCombinedDrawableColor(combinedDrawable, getThemedColor(Theme.key_featuredStickers_buttonText), true);
                         avatarImageView.setImageDrawable(combinedDrawable);
                     } else {
-                        avatarImageView.getImageReceiver().setRoundRadius(AndroidUtilities.dp(16));
+                        avatarImageView.getImageReceiver().setRoundRadius(ExteraConfig.getAvatarCorners(32));
                         avatarImageView.getImageReceiver().setForUserOrChat(user, thumbDrawable);
                     }
                 } else if (data.chat instanceof TLRPC.Chat) {
                     TLRPC.Chat chat = (TLRPC.Chat) data.chat;
                     isCommunity = ChatObject.isCommunity(chat);
-                    avatarImageView.getImageReceiver().setRoundRadius(mBackgroundRadius = AndroidUtilities.dp(isCommunity ? 10 : 16));
+                    avatarImageView.getImageReceiver().setRoundRadius(mBackgroundRadius = ExteraConfig.getAvatarCorners(32, false, isCommunity ? AvatarCornerType.COMMUNITY : AvatarCornerType.DEFAULT));
                     avatarImageView.getImageReceiver().setForUserOrChat(chat, thumbDrawable);
                 }
             } else if (data.filterType == FiltersView.FILTER_TYPE_ARCHIVE) {
@@ -2402,7 +2478,8 @@ public class ActionBarMenuItem extends FrameLayout {
     public static final int VIEW_TYPE_SUBITEM = 0;
     public static final int VIEW_TYPE_COLORED_GAP = 1;
     public static final int VIEW_TYPE_SWIPEBACKITEM = 2;
-    public static final int VIEW_TYPE_TEXT = 3;
+    public static final int VIEW_TYPE_CUSTOM = 3;
+    public static final int VIEW_TYPE_TEXT = 4;
 
     private ArrayList<Item> lazyList;
     private HashMap<Integer, Item> lazyMap;
@@ -2417,9 +2494,12 @@ public class ActionBarMenuItem extends FrameLayout {
         public boolean dismiss, needCheck;
         public View viewToSwipeBack;
         public int textSizeDp;
+        public View customView;
+        public LinearLayout.LayoutParams customLayoutParams;
 
         private View view;
         private View.OnClickListener overrideClickListener;
+        private View.OnLongClickListener overrideLongClickListener;
         private int visibility = VISIBLE, rightIconVisibility = VISIBLE;
 
         private Integer textColor, iconColor;
@@ -2447,6 +2527,12 @@ public class ActionBarMenuItem extends FrameLayout {
             item.iconDrawable = iconDrawable;
             item.text = text;
             item.viewToSwipeBack = viewToSwipeBack;
+            return item;
+        }
+        public static Item asCustom(View view, LinearLayout.LayoutParams layoutParams) {
+            Item item = new Item(VIEW_TYPE_CUSTOM);
+            item.customView = view;
+            item.customLayoutParams = layoutParams;
             return item;
         }
         private static Item asText(CharSequence text, int textSizeDp) {
@@ -2498,6 +2584,9 @@ public class ActionBarMenuItem extends FrameLayout {
                 gap.setTag(R.id.fit_width_tag, 1);
                 parent.popupLayout.addView(gap, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
                 view = gap;
+            } else if (viewType == VIEW_TYPE_CUSTOM) {
+                parent.popupLayout.addView(customView, customLayoutParams);
+                view = customView;
             } else if (viewType == VIEW_TYPE_SWIPEBACKITEM) {
                 ActionBarMenuSubItem cell = new ActionBarMenuSubItem(parent.getContext(), false, false, false, parent.resourcesProvider);
                 cell.setTextAndIcon(text, icon, iconDrawable);
@@ -2544,6 +2633,9 @@ public class ActionBarMenuItem extends FrameLayout {
                 if (overrideClickListener != null) {
                     view.setOnClickListener(overrideClickListener);
                 }
+                if (overrideLongClickListener != null) {
+                    view.setOnLongClickListener(overrideLongClickListener);
+                }
             }
             return view;
         }
@@ -2559,6 +2651,13 @@ public class ActionBarMenuItem extends FrameLayout {
             overrideClickListener = onClickListener;
             if (view != null) {
                 view.setOnClickListener(overrideClickListener);
+            }
+        }
+
+        public void setOnLongClickListener(View.OnLongClickListener onLongClickListener) {
+            overrideLongClickListener = onLongClickListener;
+            if (view != null) {
+                view.setOnLongClickListener(overrideLongClickListener);
             }
         }
 
@@ -2622,6 +2721,9 @@ public class ActionBarMenuItem extends FrameLayout {
     }
     public Item lazilyAddText(CharSequence text, int textSizeDp) {
         return putLazyItem(Item.asText(text, textSizeDp));
+    }
+    public Item lazilyAddView(View view, LinearLayout.LayoutParams layoutParams) {
+        return putLazyItem(Item.asCustom(view, layoutParams));
     }
 
     private Item putLazyItem(Item item) {

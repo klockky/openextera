@@ -256,6 +256,7 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
     
     private @Nullable WindowAnimatedInsetsProvider animatedInsetsProvider;
     private @Nullable View animatedInsetsProviderTarget;
+    public boolean settleViaTreeDispatch;
     private int animatedImeInset;
 
     public void setupAnimatedInsetsProvider(WindowAnimatedInsetsProvider provider, View target) {
@@ -288,7 +289,11 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
             animatedInsetsProviderTarget.postOnAnimation(() -> {
                 activeAnimations--;
                 if (activeAnimations == 0) {
-                    setInsets(WindowAnimatedInsetsProvider.calculateWindowInsets(animatedInsetsProviderTarget), false);
+                    if (settleViaTreeDispatch) {
+                        ViewCompat.requestApplyInsets(animatedInsetsProviderTarget);
+                    } else {
+                        setInsets(WindowAnimatedInsetsProvider.calculateWindowInsets(animatedInsetsProviderTarget), false);
+                    }
                 }
             });
         }

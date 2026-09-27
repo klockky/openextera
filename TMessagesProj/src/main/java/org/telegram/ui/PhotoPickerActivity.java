@@ -97,6 +97,7 @@ import org.telegram.ui.Components.CombinedDrawable;
 import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.EditTextEmoji;
 import org.telegram.ui.Components.FlickerLoadingView;
+import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RadialProgressView;
 import org.telegram.ui.Components.RecyclerListView;
@@ -1080,6 +1081,16 @@ public class PhotoPickerActivity extends BaseFragment implements NotificationCen
                 } else {
                     sendSelectedPhotos(true, 0, 0);
                 }
+            });
+            writeButton.setOnTouchListener((v, event) -> {
+                if (sendPopupWindow == null || !sendPopupWindow.isShowing() || sendPopupLayout == null) {
+                    return false;
+                }
+                if (v.getParent() != null) {
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                }
+                ItemOptions.dispatchCapturedTouchEvent(sendPopupLayout, event);
+                return false;
             });
             writeButton.setOnLongClickListener(view -> {
                 if (chatActivity == null || maxSelectedPhotos == 1) {

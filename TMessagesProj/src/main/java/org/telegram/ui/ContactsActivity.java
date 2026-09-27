@@ -57,6 +57,9 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.config.BottomNavigationBar;
+import com.exteragram.messenger.utils.ui.MainTabsUiHelper;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
@@ -100,6 +103,7 @@ import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.FragmentFloatingButton;
 import org.telegram.ui.Components.FragmentSearchField;
+import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.NumberTextView;
 import org.telegram.ui.Components.RecyclerAnimationScrollHelper;
@@ -142,7 +146,9 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
     private SearchAdapter searchListViewAdapter;
 
     private ActionBarMenuItem sortItem;
+    private ActionBarMenuItem otherItem;
     private boolean sortByName;
+    private MainTabsActivityController mainTabsActivityController;
 
     private FragmentFloatingButton floatingButton;
     private boolean floatingButtonVisibleByScroll = true;
@@ -252,8 +258,8 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
         getContactsController().checkInviteText();
         getContactsController().reloadContactsStatusesMaybe(false);
 
-        additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+        additionNavigationBarHeight = MainTabsUiHelper.getAdditionalNavigationBarHeight(hasMainTabs);
+        additionFloatingButtonOffset = MainTabsUiHelper.getTabsFabOffset(hasMainTabs);
 
         return true;
     }
@@ -266,6 +272,15 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.encryptedChatCreated);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.closeChats);
         delegate = null;
+        if (listView != null) {
+            listView.setAdapter(null);
+            listView = null;
+        }
+        Bulletin.removeDelegate(this);
+    }
+
+    public void setMainTabsActivityController(MainTabsActivityController mainTabsActivityController) {
+        this.mainTabsActivityController = mainTabsActivityController;
     }
 
     @Override
@@ -278,6 +293,8 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
 
     @Override
     public View createView(Context context) {
+        additionNavigationBarHeight = MainTabsUiHelper.getAdditionalNavigationBarHeight(hasMainTabs);
+        additionFloatingButtonOffset = MainTabsUiHelper.getTabsFabOffset(hasMainTabs);
         searching = false;
         searchWas = false;
 
@@ -406,6 +423,9 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
         if (!createSecretChat && !returnAsResult) {
             sortItem = menu.addItem(sort_button, sortByName ? R.drawable.msg_contacts_time : R.drawable.msg_contacts_name);
             sortItem.setContentDescription(getString(R.string.AccDescrContactSorting));
+            otherItem = menu.addItem(-1, R.drawable.ic_ab_other);
+            otherItem.setContentDescription(getString(R.string.AccDescrMoreOptions));
+            otherItem.setOnClickListener(v -> showItemOptions());
         }
 
         listView = new RecyclerListView(context);
@@ -417,6 +437,7 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
                 }
             }
         };
+        searchListViewAdapter.setUseUserCell(true);
         searchListViewAdapter.includeSearch = false;
         int inviteViaLink;
         if (chatId != 0) {
@@ -900,8 +921,9 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
 
                 if (floatingButton != null && !searching) {
                     boolean goingDown = dy > 0;
+                    final boolean canScrollDown = recyclerView.canScrollVertically(1);
                     if (dy != 0 && scrollUpdated && (goingDown || scrollingManually)) {
-                        floatingButtonVisibleByScroll = !goingDown;
+                        floatingButtonVisibleByScroll = !(goingDown && canScrollDown);
                         checkUi_floatingButtonVisible();
                     }
                     scrollUpdated = true;
@@ -1236,6 +1258,8 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
     @Override
     public void onResume() {
         super.onResume();
+        floatingButtonVisibleByScroll = true;
+        checkUi_floatingButtonVisible();
         if (listViewAdapter != null) {
             listViewAdapter.notifyDataSetChanged();
         }
@@ -1611,7 +1635,7 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
             0,
             dp(ADDITIONAL_LIST_HEIGHT_DP + 44) + actionBar.getMeasuredHeight(),
             0,
-            dp(ADDITIONAL_LIST_HEIGHT_DP) + navigationBarHeight + additionNavigationBarHeight
+            dp(ADDITIONAL_LIST_HEIGHT_DP) + navigationBarHeight + additionNavigationBarHeight + MainTabsUiHelper.getFloatingTabsPadding(hasMainTabs)
         );
     }
 
@@ -1670,6 +1694,24 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
         if (floatingButton != null && listViewAdapter != null) {
             floatingButton.setButtonVisible(floatingButtonVisibleByScroll && !searching && !listViewAdapter.isEmpty(), true);
         }
+        if (mainTabsActivityController != null) {
+            mainTabsActivityController.setTabsVisible(BottomNavigationBar.visible() && (!BottomNavigationBar.floating() || floatingButtonVisibleByScroll) && !searching);
+        }
+    }
+
+    @Override
+    public void updateMainTabsVisibility() {
+        checkUi_floatingButtonVisible();
+    }
+
+    private void showItemOptions() {
+        final ContactsActivity fragment = hasMainTabs ? null : this;
+        ItemOptions.makeOptions(this, otherItem)
+            .setDimAlpha(0x08)
+            .addIf(getUserConfig().showContactsTab, R.drawable.msg_archive_hide, getString(R.string.HideContactsTab), () -> getUserConfig().setShowContactsTab(fragment, false))
+            .addIf(!getUserConfig().showContactsTab, R.drawable.menu_add_tab_24, getString(R.string.ShowContactsTab), () -> getUserConfig().setShowContactsTab(fragment, true))
+            .translate(0, -dp(64))
+            .show();
     }
 
 
@@ -1698,14 +1740,11 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
         final int additionalList = dp(48);
         final int additionalSearch = dp(DialogsActivity.SEARCH_FIELD_HEIGHT);
 
-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
-
         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList + additionalSearch );
-        iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
+        MainTabsUiHelper.setBlurBounds(iBlur3PositionMainTabs, fragmentView, navigationBarHeight);
         iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
 
-        scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, hasMainTabs ? 2 : 1);
+        scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, hasMainTabs && BottomNavigationBar.visible() ? 2 : 1);
         scrollableViewNoiseSuppressor.invalidateResultRenderNodes(iBlur3Capture, fragmentView.getMeasuredWidth(), fragmentView.getMeasuredHeight());
     }
 

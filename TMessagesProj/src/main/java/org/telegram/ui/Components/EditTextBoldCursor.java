@@ -29,7 +29,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.Rect;
 import android.graphics.drawable.ShapeDrawable;
-import android.graphics.drawable.shapes.RectShape;
+import android.graphics.drawable.shapes.RoundRectShape;
 import android.os.Build;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -52,10 +52,16 @@ import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.OverScroller;
 import android.widget.TextView;
+
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.math.inline.InlineMathController;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
@@ -124,6 +130,15 @@ public class EditTextBoldCursor extends EditTextEffects {
     private boolean forceCursorEnd = false;
     private float cursorWidth = 2.0f;
     private boolean supportRtlHint;
+    private boolean showDisableMarkdown;
+
+    private OverScroller flingScroller;
+    private VelocityTracker flingVelocityTracker;
+    private boolean flinging;
+    private boolean flingBlocked;
+    private int flingDownScrollY;
+    private int flingDownSelectionStart;
+    private int flingDownSelectionEnd;
 
     public boolean ignoreClipTop;
     private boolean cursorDrawn;
@@ -312,7 +327,7 @@ public class EditTextBoldCursor extends EditTextEffects {
         if (cursorDrawable != null) {
             return super.getTextCursorDrawable();
         }
-        ShapeDrawable shapeDrawable = new ShapeDrawable(new RectShape()) {
+        ShapeDrawable shapeDrawable = new ShapeDrawable(new RoundRectShape(new float[]{dp(10), dp(10), dp(10), dp(10), dp(10), dp(10), dp(10), dp(10)}, null, null)) {
             @Override
             public void draw(Canvas canvas) {
                 super.draw(canvas);
@@ -361,8 +376,9 @@ public class EditTextBoldCursor extends EditTextEffects {
                     return dp(cursorWidth);
                 }
             };
-            cursorDrawable.setShape(new RectShape());
+            cursorDrawable.setShape(new RoundRectShape(new float[]{dp(10), dp(10), dp(10), dp(10), dp(10), dp(10), dp(10), dp(10)}, null, null));
             gradientDrawable = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{0xff54a1db, 0xff54a1db});
+            gradientDrawable.setCornerRadius(dp(10));
 
             setTextCursorDrawable(cursorDrawable);
         }
@@ -399,6 +415,7 @@ public class EditTextBoldCursor extends EditTextEffects {
         if (cursorDrawable == null) {
             try {
                 gradientDrawable = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{0xff54a1db, 0xff54a1db});
+                gradientDrawable.setCornerRadius(dp(10));
                 if (Build.VERSION.SDK_INT >= 29) {
                     setTextCursorDrawable(gradientDrawable);
                 }
@@ -700,6 +717,7 @@ public class EditTextBoldCursor extends EditTextEffects {
     @Override
     protected void onTextChanged(CharSequence text, int start, int lengthBefore, int lengthAfter) {
         super.onTextChanged(text, start, lengthBefore, lengthAfter);
+        stopFling();
         if (transformHintToHeader && !transformHintToHeaderOnFocus) {
             checkHeaderVisibility(true);
         }
@@ -740,13 +758,105 @@ public class EditTextBoldCursor extends EditTextEffects {
         return super.getExtendedPaddingBottom();
     }
 
+    @Override
+    public int getDrawScrollY() {
+        if (drawInMaim && mScrollYField != null && scrollY != Integer.MAX_VALUE) {
+            return scrollY;
+        }
+        return super.getDrawScrollY();
+    }
+
     private int lastTouchX = -1;
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+        final int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
             lastTouchX = (int) event.getX();
+            stopFling();
+            flingBlocked = false;
+            flingDownScrollY = getScrollY();
+            flingDownSelectionStart = getSelectionStart();
+            flingDownSelectionEnd = getSelectionEnd();
+            if (flingVelocityTracker == null) {
+                flingVelocityTracker = VelocityTracker.obtain();
+            } else {
+                flingVelocityTracker.clear();
+            }
+        } else if (action == MotionEvent.ACTION_POINTER_DOWN) {
+            flingBlocked = true;
         }
-        return super.onTouchEvent(event);
+        if (flingVelocityTracker != null) {
+            flingVelocityTracker.addMovement(event);
+        }
+        float velocityY = 0;
+        if (action == MotionEvent.ACTION_UP && flingVelocityTracker != null && !flingBlocked && getScrollY() != flingDownScrollY && getSelectionStart() == flingDownSelectionStart && getSelectionEnd() == flingDownSelectionEnd) {
+            final ViewConfiguration configuration = ViewConfiguration.get(getContext());
+            flingVelocityTracker.computeCurrentVelocity(1000, configuration.getScaledMaximumFlingVelocity());
+            velocityY = -flingVelocityTracker.getYVelocity();
+            if (Math.abs(velocityY) < configuration.getScaledMinimumFlingVelocity()) {
+                velocityY = 0;
+            }
+        }
+        final boolean result = super.onTouchEvent(event);
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            if (flingVelocityTracker != null) {
+                flingVelocityTracker.recycle();
+                flingVelocityTracker = null;
+            }
+            if (velocityY != 0) {
+                if (flingScroller == null) {
+                    flingScroller = new OverScroller(getContext());
+                }
+                flingScroller.fling(0, getScrollY(), 0, (int) velocityY, 0, 0, 0, getMaxFlingScrollY());
+                flinging = true;
+                postInvalidateOnAnimation();
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public boolean performLongClick() {
+        flingBlocked = true;
+        return super.performLongClick();
+    }
+
+    @Override
+    public void computeScroll() {
+        super.computeScroll();
+        if (flinging) {
+            if (flingScroller.computeScrollOffset()) {
+                final int y = Math.max(0, Math.min(flingScroller.getCurrY(), getMaxFlingScrollY()));
+                if (y != getScrollY()) {
+                    scrollTo(getScrollX(), y);
+                }
+                postInvalidateOnAnimation();
+                return;
+            }
+            flinging = false;
+            moveCursorToVisibleOffset();
+        }
+    }
+
+    private int getMaxFlingScrollY() {
+        final Layout layout = getLayout();
+        if (layout == null) {
+            return 0;
+        }
+        return Math.max(0, layout.getHeight() - (getHeight() - super.getExtendedPaddingTop() - super.getExtendedPaddingBottom()));
+    }
+
+    private void stopFling() {
+        if (flinging) {
+            flinging = false;
+            flingScroller.abortAnimation();
+        }
+    }
+
+    @Override
+    protected void onSelectionChanged(int selStart, int selEnd) {
+        super.onSelectionChanged(selStart, selEnd);
+        stopFling();
     }
 
     public void invalidateForce() {
@@ -858,6 +968,7 @@ public class EditTextBoldCursor extends EditTextEffects {
                     hintLayout.draw(canvas);
                 }
             }
+            getPaint().setTypeface(AndroidUtilities.regular());
             getPaint().setColor(oldColor);
             canvas.restore();
         }
@@ -872,6 +983,11 @@ public class EditTextBoldCursor extends EditTextEffects {
         }
 
         int topPadding = getExtendedPaddingTop();
+        final InlineMathController inlineMath = getInlineMath();
+        final int inlineMathOffsetX = inlineMath == null ? 0 : getTotalPaddingLeft();
+        final int inlineMathOffsetY = inlineMath == null ? 0 : getTotalPaddingTop();
+        final float cursorShiftX = inlineMath == null ? 0 : inlineMath.getCursorShiftX();
+        final float cursorShiftY = inlineMath == null ? 0 : inlineMath.getCursorShiftY();
         scrollY = Integer.MAX_VALUE;
         try {
             if (mScrollYField != null) {
@@ -888,6 +1004,9 @@ public class EditTextBoldCursor extends EditTextEffects {
         ignoreTopCount = 1;
         ignoreBottomCount = 1;
         canvas.save();
+        if (inlineMath != null) {
+            inlineMath.clipReplacedParagraph(canvas, inlineMathOffsetY);
+        }
         canvas.translate(0, topPadding);
         try {
             drawInMaim = true;
@@ -930,7 +1049,7 @@ public class EditTextBoldCursor extends EditTextEffects {
                             voffsetCursor = getTotalPaddingTop() - getExtendedPaddingTop();
                         }
                     }
-                    canvas.translate(getPaddingLeft(), getExtendedPaddingTop() + voffsetCursor);
+                    canvas.translate(getPaddingLeft() + cursorShiftX, getExtendedPaddingTop() + voffsetCursor + cursorShiftY);
                     Layout layout = getLayout();
                     int line = layout.getLineForOffset(getSelectionStart());
                     int lineCount = layout.getLineCount();
@@ -968,7 +1087,7 @@ public class EditTextBoldCursor extends EditTextEffects {
                             voffsetCursor = getTotalPaddingTop() - getExtendedPaddingTop();
                         }
                     }
-                    canvas.translate(getPaddingLeft(), getExtendedPaddingTop() + voffsetCursor);
+                    canvas.translate(getPaddingLeft() + cursorShiftX, getExtendedPaddingTop() + voffsetCursor + cursorShiftY);
                     Layout layout = getLayout();
                     int line = layout.getLineForOffset(getSelectionStart());
                     int lineCount = layout.getLineCount();
@@ -993,6 +1112,9 @@ public class EditTextBoldCursor extends EditTextEffects {
                     }
                 }
             }
+        }
+        if (inlineMath != null) {
+            inlineMath.draw(canvas, inlineMathOffsetX, inlineMathOffsetY, getScrollY() - offsetY, getScrollY() + getMeasuredHeight() - offsetY);
         }
         if (lineVisible && lineColor != 0) {
             int lineWidth = dp(1);
@@ -1084,7 +1206,7 @@ public class EditTextBoldCursor extends EditTextEffects {
 
     private Rect mTempRect;
 
-    private int clampHorizontalPosition(final Drawable drawable, float horizontal) {
+    private int clampHorizontalPosition(final Drawable drawable, float horizontal, boolean clampToBounds) {
         horizontal = Math.max(0.5f, horizontal - 0.5f);
         if (mTempRect == null) {
             mTempRect = new Rect();
@@ -1100,9 +1222,9 @@ public class EditTextBoldCursor extends EditTextEffects {
         float horizontalDiff = horizontal - scrollX;
         int viewClippedWidth = getWidth() - getCompoundPaddingLeft() - getCompoundPaddingRight();
         final int left;
-        if (horizontalDiff >= (viewClippedWidth - 1f)) {
+        if (clampToBounds && horizontalDiff >= (viewClippedWidth - 1f)) {
             left = viewClippedWidth + scrollX - (drawableWidth - mTempRect.right);
-        } else if (Math.abs(horizontalDiff) <= 1f || (TextUtils.isEmpty(getText()) && (1024 * 1024 - scrollX) <= (viewClippedWidth + 1f) && horizontal <= 1f)) {
+        } else if (clampToBounds && Math.abs(horizontalDiff) <= 1f || (TextUtils.isEmpty(getText()) && (1024 * 1024 - scrollX) <= (viewClippedWidth + 1f) && horizontal <= 1f)) {
             left = scrollX - mTempRect.left;
         } else {
             left = (int) horizontal - mTempRect.left;
@@ -1111,7 +1233,8 @@ public class EditTextBoldCursor extends EditTextEffects {
     }
 
     private void updateCursorPosition(int top, int bottom, float horizontal) {
-        final int left = clampHorizontalPosition(gradientDrawable, horizontal);
+        final InlineMathController inlineMath = getInlineMath();
+        final int left = clampHorizontalPosition(gradientDrawable, horizontal, inlineMath == null || !inlineMath.hasCursorShift());
         final int width = dp(cursorWidth);
         gradientDrawable.setBounds(left, top - mTempRect.top, left + width, bottom + mTempRect.bottom);
     }
@@ -1149,6 +1272,7 @@ public class EditTextBoldCursor extends EditTextEffects {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         attachedToWindow = null;
+        stopFling();
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             Choreographer60FpsContent.getInstance().removeFrameCallback(invalidateCallback);
         }
@@ -1201,6 +1325,7 @@ public class EditTextBoldCursor extends EditTextEffects {
             };
             callback.onCreateActionMode(floatingActionMode, floatingActionMode.getMenu());
             extendActionMode(floatingActionMode, floatingActionMode.getMenu());
+            addMarkdownToggle(floatingActionMode.getMenu());
             floatingActionMode.invalidate();
             getViewTreeObserver().addOnPreDrawListener(floatingToolbarPreDrawListener);
             invalidate();
@@ -1233,6 +1358,28 @@ public class EditTextBoldCursor extends EditTextEffects {
 
     protected void extendActionMode(ActionMode actionMode, Menu menu) {
 
+    }
+
+    public void setShowDisableMarkdown(boolean show) {
+        showDisableMarkdown = show;
+    }
+
+    private void addMarkdownToggle(Menu menu) {
+        if (showDisableMarkdown) {
+            menu.add(R.id.menu_groupbolditalic, R.id.menu_markdown, 20, LocaleController.getString(ExteraConfig.getDisableMarkdown() ? R.string.EnableMarkdown : R.string.DisableMarkdown));
+        }
+    }
+
+    @Override
+    public boolean onTextContextMenuItem(int id) {
+        if (id == R.id.menu_markdown) {
+            ExteraConfig.setDisableMarkdown(!ExteraConfig.getDisableMarkdown());
+            if (floatingActionMode != null) {
+                floatingActionMode.finish();
+            }
+            return true;
+        }
+        return super.onTextContextMenuItem(id);
     }
 
     protected int getActionModeStyle() {

@@ -16,6 +16,8 @@ import android.view.animation.Interpolator;
 
 import androidx.core.graphics.ColorUtils;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DialogObject;
@@ -271,14 +273,14 @@ public class AvatarsDrawable {
             currentStates[a] = new DrawingState();
             currentStates[a].imageReceiver = new ImageReceiver(parent);
             currentStates[a].imageReceiver.setInvalidateAll(true);
-            currentStates[a].imageReceiver.setRoundRadius(dp(12));
+            currentStates[a].imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(24));
             currentStates[a].avatarDrawable = new AvatarDrawable();
             currentStates[a].avatarDrawable.setTextSize(dp(12));
 
             animatingStates[a] = new DrawingState();
             animatingStates[a].imageReceiver = new ImageReceiver(parent);
             animatingStates[a].imageReceiver.setInvalidateAll(true);
-            animatingStates[a].imageReceiver.setRoundRadius(dp(12));
+            animatingStates[a].imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(24));
             animatingStates[a].avatarDrawable = new AvatarDrawable();
             animatingStates[a].avatarDrawable.setTextSize(dp(12));
         }
@@ -383,7 +385,7 @@ public class AvatarsDrawable {
         } else {
             animatingStates[index].imageReceiver.setForUserOrChat(currentChat, animatingStates[index].avatarDrawable);
         }
-        animatingStates[index].imageReceiver.setRoundRadius(size / 2);
+        animatingStates[index].imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(size, true));
         animatingStates[index].imageReceiver.setImageCoords(0, 0, size, size);
         invalidate();
     }
@@ -575,7 +577,7 @@ public class AvatarsDrawable {
                 float avatarScale = 1f;
                 if (a != states.length - 1 || drawStoriesCircle) {
                     if (currentStyle == 1 || currentStyle == 3 || currentStyle == 5) {
-                        canvas.drawCircle(imageReceiver.getCenterX(), imageReceiver.getCenterY(), dp(13), xRefP);
+                        canvas.drawRoundRect(imageReceiver.getCenterX() - dp(13), imageReceiver.getCenterY() - dp(13), imageReceiver.getCenterX() + dp(13), imageReceiver.getCenterY() + dp(13), ExteraConfig.getAvatarCorners(26), ExteraConfig.getAvatarCorners(26), xRefP);
                         if (states[a].wavesDrawable == null) {
                             if (currentStyle == 5) {
                                 states[a].wavesDrawable = new GroupCallUserCell.AvatarWavesDrawable(dp(14), dp(16));
@@ -603,7 +605,7 @@ public class AvatarsDrawable {
                         }
                         avatarScale = states[a].wavesDrawable.getAvatarScale();
                     } else if (currentStyle == 4 || currentStyle == STYLE_GROUP_CALL_TOOLTIP) {
-                        canvas.drawCircle(imageReceiver.getCenterX(), imageReceiver.getCenterY(), dp(17), xRefP);
+                        canvas.drawRoundRect(imageReceiver.getCenterX() - dp(17), imageReceiver.getCenterY() - dp(17), imageReceiver.getCenterX() + dp(17), imageReceiver.getCenterY() + dp(17), ExteraConfig.getAvatarCorners(34), ExteraConfig.getAvatarCorners(34), xRefP);
                         if (states[a].wavesDrawable == null) {
                             states[a].wavesDrawable = new GroupCallUserCell.AvatarWavesDrawable(dp(17), dp(21));
                         }
@@ -638,14 +640,15 @@ public class AvatarsDrawable {
                         avatarScale = states[a].wavesDrawable.getAvatarScale();
                     } else {
                         float rad = getSize() / 2f + strokeWidth;
+                        float cornerRadius = imageReceiver.getRoundRadius()[0] + strokeWidth;
                         if (useAlphaLayer) {
-                            canvas.drawCircle(imageReceiver.getCenterX(), imageReceiver.getCenterY(), rad, xRefP);
+                            canvas.drawRoundRect(imageReceiver.getCenterX() - rad, imageReceiver.getCenterY() - rad, imageReceiver.getCenterX() + rad, imageReceiver.getCenterY() + rad, cornerRadius, cornerRadius, xRefP);
                         } else {
                             int paintAlpha = paint.getAlpha();
                             if (alpha != 1f) {
                                 paint.setAlpha((int) (paintAlpha * alpha));
                             }
-                            canvas.drawCircle(imageReceiver.getCenterX(), imageReceiver.getCenterY(), rad, paint);
+                            canvas.drawRoundRect(imageReceiver.getCenterX() - rad, imageReceiver.getCenterY() - rad, imageReceiver.getCenterX() + rad, imageReceiver.getCenterY() + rad, cornerRadius, cornerRadius, paint);
                             if (alpha != 1f) {
                                 paint.setAlpha(paintAlpha);
                             }

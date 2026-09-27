@@ -39,6 +39,12 @@ import androidx.annotation.StringRes;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 
+import com.exteragram.messenger.DividerStyle;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.IconPackType;
+import com.exteragram.messenger.icons.IconManager;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildConfig;
 import org.telegram.messenger.R;
@@ -66,6 +72,8 @@ public class ProfileActionsView extends View {
     public float clipHeight = -1;
     private final Path clipAvatarPath = new Path();
     private final Path clipPath = new Path();
+    private final Path pathTmp = new Path();
+    private final float[] radii = new float[8];
     private ProfileActivity.AvatarImageView avatarView;
     private float renderNodeScale;
     private float renderNodeTranslateY;
@@ -107,6 +115,7 @@ public class ProfileActionsView extends View {
     public static final int KEY_EDIT_USERNAME = 15;
     public static final int KEY_EDIT_INFO = 16;
     public static final int KEY_SETTINGS = 17;
+    public static final int KEY_OPEN_CHANNEL = 18;
 
     private boolean isApplying;
     private boolean isNotificationsEnabled;
@@ -119,6 +128,7 @@ public class ProfileActionsView extends View {
     final float textPadding;
 
     private int color = 0;
+    private int textColor = Color.WHITE;
     private boolean hasColorById;
     private RadialGradient radialGradient;
     private final Matrix matrix = new Matrix();
@@ -131,7 +141,7 @@ public class ProfileActionsView extends View {
         paint.setColor(Color.BLACK);
         paint.setAlpha(40);
 
-        xpadding = dpf2(14);
+        xpadding = dpf2(12);
         ypadding = dpf2(12);
         top = dpf2(8);
         textPadding = dpf2(4);
@@ -173,9 +183,39 @@ public class ProfileActionsView extends View {
         }
     }
 
-    public void setActionsColor(int color, boolean hasColorById) {
-        if (radialGradient == null || this.color != color || this.hasColorById != hasColorById) {
+    public boolean isSegmentedMode() {
+        return ExteraConfig.getDividerStyle() == DividerStyle.SEGMENTS;
+    }
+
+    private void setRadii(boolean first, boolean last, float outer, float inner) {
+        radii[0] = radii[1] = first ? outer : inner;
+        radii[2] = radii[3] = last ? outer : inner;
+        radii[4] = radii[5] = last ? outer : inner;
+        radii[6] = radii[7] = first ? outer : inner;
+    }
+
+    private void updateClipPath(Action action, float r, float inset, Path path) {
+        path.rewind();
+        AndroidUtilities.rectTmp.set(action.rect);
+        AndroidUtilities.rectTmp.inset(
+            action.rect.width() / 2.0f * (1.0f - action.getScale()),
+            action.rect.height() / 2.0f * (1.0f - action.getScale())
+        );
+        AndroidUtilities.rectTmp.inset(-inset, -inset);
+        if (isSegmentedMode()) {
+            final boolean first = action.isDeleting ? action.wasFirst : action == firstAction;
+            final boolean last = action.isDeleting ? action.wasLast : action == lastAction;
+            setRadii(first, last, r, getInnerRoundRadius());
+            path.addRoundRect(AndroidUtilities.rectTmp, radii, Path.Direction.CCW);
+            return;
+        }
+        path.addRoundRect(AndroidUtilities.rectTmp, r, r, Path.Direction.CCW);
+    }
+
+    public void setActionsColor(int color, int textColor, boolean hasColorById) {
+        if (radialGradient == null || this.color != color || this.textColor != textColor || this.hasColorById != hasColorById) {
             this.color = color;
+            this.textColor = textColor;
             this.hasColorById = hasColorById;
             createColorShader();
             checkPaints();
@@ -200,7 +240,7 @@ public class ProfileActionsView extends View {
         int w = getMeasuredWidth();
         if (w <= 0) return;
 
-        float betweenPadding = xpadding / 2f;
+        float betweenPadding = getGap();
         float width = (w - betweenPadding * Math.max(0, activeCount - 1) - xpadding * 2f) / Math.max(1, activeCount);
 
         this.radialGradient = new RadialGradient(
@@ -220,6 +260,25 @@ public class ProfileActionsView extends View {
                 MeasureSpec.getSize(widthMeasureSpec),
                 MeasureSpec.makeMeasureSpec((int) (targetHeight + top + ypadding), MeasureSpec.EXACTLY)
         );
+        measureActions();
+    }
+
+    private void measureActions() {
+        if (getMeasuredWidth() <= 0 || activeCount <= 0) {
+            return;
+        }
+        final float width = getItemWidth();
+        for (int i = 0; i < actions.size(); i++) {
+            final Action action = actions.get(i);
+            if (action.text != null) {
+                action.text.setMaxWidth(width - dp(2));
+                action.textScale = action.text.getLineCount() >= 3 ? 0.75f : action.text.getLineCount() >= 2 ? 0.85f : 1.0f;
+            }
+        }
+    }
+
+    private float getGap() {
+        return isSegmentedMode() ? dp(2) : xpadding / 2f;
     }
 
     public void updatePosition(float y, float newHeight) {
@@ -230,7 +289,7 @@ public class ProfileActionsView extends View {
 
     private float getItemWidth() {
         int w = getMeasuredWidth();
-        float betweenPadding = xpadding / 2f;
+        float betweenPadding = getGap();
         return (w - betweenPadding * (activeCount - 1) - xpadding * 2f) / activeCount;
     }
 
@@ -250,7 +309,7 @@ public class ProfileActionsView extends View {
             return;
         }
 
-        final float betweenPadding = xpadding / 2f;
+        final float betweenPadding = getGap();
         final float width = getItemWidth();
         float left = xpadding;
         float r = getRoundRadius();
@@ -276,18 +335,19 @@ public class ProfileActionsView extends View {
             }
 
             action.updatePosition();
-            if (renderNode != null) {
-                AndroidUtilities.rectTmp.set(action.rect);
-                AndroidUtilities.rectTmp.inset(
-                    action.rect.width() / 2.0f * (1.0f - action.getScale()),
-                    action.rect.height() / 2.0f * (1.0f - action.getScale())
-                );
-                AndroidUtilities.rectTmp.inset(-1, -1);
-                clipPath.addRoundRect(AndroidUtilities.rectTmp, r, r, Path.Direction.CCW);
-            }
         }
         firstAction = newFirstAction;
         lastAction = newLastAction;
+
+        if (renderNode != null) {
+            for (int i = 0; i < c; i++) {
+                Action action = actions.get(i);
+                if (!action.isDeleted) {
+                    updateClipPath(action, r, 1, pathTmp);
+                    clipPath.addPath(pathTmp);
+                }
+            }
+        }
 
         float fraction = Utilities.clamp01(height / targetHeight);
         float alphaFraction1 = Utilities.clamp01((fraction - 0.2f) / 0.8f);
@@ -299,31 +359,28 @@ public class ProfileActionsView extends View {
             for (int i = 0; i < c; i++) {
                 Action action = actions.get(i);
                 if (!action.isDeleted) {
-                    AndroidUtilities.rectTmp.set(action.rect);
-                    AndroidUtilities.rectTmp.inset(
-                        action.rect.width() / 2.0f * (1.0f - action.getScale()),
-                        action.rect.height() / 2.0f * (1.0f - action.getScale())
-                    );
                     int wasAlpha = paint.getAlpha();
                     int newAlpha = (int) (action.getAlpha() * alphaFraction1 * wasAlpha);
                     paint.setAlpha((int) (newAlpha * (radialGradient != null ? 0.1f : 1f)));
-
-                    if (SharedConfig.shadowsInSections && isButtonColorLight() && parentExpanded < 0.5f) {
-                        paint.setShadowLayer(dpf2(1.5f), 0, 0, Theme.multAlpha(Color.BLACK & 0x20FFFFFF, (newAlpha / 255f * (radialGradient != null ? 0.1f : 1f))));
+                    updateClipPath(action, r, 0, pathTmp);
+                    if (isSegmentedMode()) {
+                        canvas.save();
+                        canvas.clipPath(pathTmp);
+                        canvas.drawRect(AndroidUtilities.rectTmp, paint);
+                        drawGradient(canvas, action, alphaFraction1);
+                        paint.setAlpha(wasAlpha);
+                        action.rippleDrawable.setBounds((int) AndroidUtilities.rectTmp.left, (int) AndroidUtilities.rectTmp.top, (int) AndroidUtilities.rectTmp.right, (int) AndroidUtilities.rectTmp.bottom);
+                        action.rippleDrawable.draw(canvas);
+                        canvas.restore();
                     } else {
-                        paint.setShadowLayer(0, 0, 0, 0);
+                        canvas.drawRoundRect(AndroidUtilities.rectTmp, r, r, paint);
+                        if (radialGradient != null) {
+                            drawGradient(canvas, action, alphaFraction1);
+                        }
+                        paint.setAlpha(wasAlpha);
+                        action.rippleDrawable.setBounds((int) AndroidUtilities.rectTmp.left, (int) AndroidUtilities.rectTmp.top, (int) AndroidUtilities.rectTmp.right, (int) AndroidUtilities.rectTmp.bottom);
+                        action.rippleDrawable.draw(canvas);
                     }
-
-                    canvas.drawRoundRect(AndroidUtilities.rectTmp, r, r, paint);
-                    if (radialGradient != null) {
-                        int wasAlpha2 = shaderPaint.getAlpha();
-                        shaderPaint.setAlpha((int) (action.getAlpha() * alphaFraction1 * wasAlpha2));
-                        matrix.setTranslate(AndroidUtilities.rectTmp.left, AndroidUtilities.rectTmp.top);
-                        radialGradient.setLocalMatrix(matrix);
-                        canvas.drawRoundRect(AndroidUtilities.rectTmp, r, r, shaderPaint);
-                        shaderPaint.setAlpha(wasAlpha2);
-                    }
-                    paint.setAlpha(wasAlpha);
                 }
             }
         }
@@ -336,6 +393,23 @@ public class ProfileActionsView extends View {
                 drawAction(canvas, actions.get(i), fraction, alphaFraction2);
             }
         }
+    }
+
+    private void drawGradient(Canvas canvas, Action action, float alphaFraction) {
+        if (radialGradient == null) {
+            return;
+        }
+        int wasAlpha = shaderPaint.getAlpha();
+        shaderPaint.setAlpha((int) (action.getAlpha() * alphaFraction * wasAlpha));
+        matrix.setTranslate(AndroidUtilities.rectTmp.left, AndroidUtilities.rectTmp.top);
+        radialGradient.setLocalMatrix(matrix);
+        if (isSegmentedMode()) {
+            canvas.drawRect(AndroidUtilities.rectTmp, shaderPaint);
+        } else {
+            final float r = getRoundRadius();
+            canvas.drawRoundRect(AndroidUtilities.rectTmp, r, r, shaderPaint);
+        }
+        shaderPaint.setAlpha(wasAlpha);
     }
 
     private void drawRenderNode(Canvas canvas) {
@@ -390,9 +464,7 @@ public class ProfileActionsView extends View {
         final int drawableSize = dp(24);
         final float drawableR = drawableSize * 0.5f;
 
-        action.text.setMaxWidth(action.rect.width() - dp(2));
-        action.textScale = action.text.getLineCount() >= 3 ? 0.75f : action.text.getLineCount() >= 2 ? 0.85f : 1.0f;
-        final float drawableTop = Math.max(0, (targetHeight - action.text.getHeight() * action.textScale) / 3f + dpf2(1.33f));
+        final float drawableTop = Math.max(0, (targetHeight - action.text.getHeight() * action.textScale) / 3f + dpf2(2));
         action.setBounds(
             (int) (cx - drawableR),
             (int) (drawableTop),
@@ -415,7 +487,7 @@ public class ProfileActionsView extends View {
             useFilledWhiteIcon = 0f;
         }
 
-        final int textColor = ColorUtils.blendARGB(Color.BLACK, Color.WHITE, useFilledWhiteIcon);
+        final int textColor = ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText), Color.WHITE, useFilledWhiteIcon);
         if (lastColorFilter == null || lastColorFilterColor != textColor) {
             lastColorFilterColor = textColor;
             lastColorFilter = new PorterDuffColorFilter(textColor, PorterDuff.Mode.SRC_IN);
@@ -431,7 +503,7 @@ public class ProfileActionsView extends View {
 
         updateBounds(action);
 
-        final float textY = action.bounds.bottom + action.bounds.top - action.text.getHeight() * action.textScale / 2.0f - dp(4.66f);
+        final float textY = action.bounds.bottom + action.bounds.top - action.text.getHeight() * action.textScale / 2.0f - dp(6);
         canvas.save();
         canvas.scale(action.textScale, action.textScale, cx, textY + action.text.getHeight() * action.textScale / 2.0f);
         action.text.draw(canvas, cx - action.text.getWidth() / 2f, textY, textColor, alpha);
@@ -445,8 +517,9 @@ public class ProfileActionsView extends View {
             canvas.scale(action.iconScale, action.iconScale, action.bounds.centerX(), action.bounds.centerY());
         }
         if (!isAnimatingCallAction || action.key != KEY_CALL) {
-            final float outlineAlpha = (1f - useFilledWhiteIcon) * alpha;
-            final float filledAlpha = useFilledWhiteIcon * alpha;
+            final boolean basePackOnly = IconManager.INSTANCE.isBasePackOnly(IconPackType.DEFAULT);
+            final float outlineAlpha = basePackOnly ? (1f - useFilledWhiteIcon) * alpha : 0f;
+            final float filledAlpha = basePackOnly ? useFilledWhiteIcon * alpha : alpha;
             if (action.drawableAnimated != null) {
                 if (action.key == KEY_NOTIFICATION) {
                     drawActionDrawable(canvas, action.drawableOutline, outlineAlpha);
@@ -503,14 +576,26 @@ public class ProfileActionsView extends View {
 
         if (action.loadingDrawable != null) {
             action.loadingDrawable.setBounds(action.rect);
-            action.loadingDrawable.setRadii(getRoundRadius());
+            if (isSegmentedMode()) {
+                final float outer = getRoundRadius();
+                final float inner = getInnerRoundRadius();
+                final boolean first = action.isDeleting ? action.wasFirst : action == firstAction;
+                final boolean last = action.isDeleting ? action.wasLast : action == lastAction;
+                action.loadingDrawable.setRadii(first ? outer : inner, last ? outer : inner, last ? outer : inner, first ? outer : inner);
+            } else {
+                action.loadingDrawable.setRadii(getRoundRadius());
+            }
             action.loadingDrawable.setAlpha((int) (0xFF * alpha));
             action.loadingDrawable.draw(canvas);
         }
     }
 
     public float getRoundRadius() {
-        return dp(16);
+        return dp(ExteraConfig.getSectionRadiusDp());
+    }
+
+    public float getInnerRoundRadius() {
+        return Math.min(dp(4), ExteraConfig.getSectionRadiusDp());
     }
 
     private Action hit = null;
@@ -538,6 +623,8 @@ public class ProfileActionsView extends View {
                     downY = y;
                     downTime = System.currentTimeMillis();
                     hit.bounce.setPressed(true);
+                    hit.rippleDrawable.setHotspot(x, y);
+                    hit.rippleDrawable.setState(new int[]{android.R.attr.state_pressed, android.R.attr.state_enabled});
 //                    try {
 //                        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
 //                    } catch (Exception ignore) {}
@@ -548,16 +635,18 @@ public class ProfileActionsView extends View {
             if (hit != null) {
                 if (Math.abs(x - downX) > 20 || Math.abs(y - downY) > 20) {
                     hit.bounce.setPressed(false);
+                    hit.rippleDrawable.setState(new int[0]);
                     hit = null;
                 }
             }
         } else if (eventAction == MotionEvent.ACTION_UP || eventAction == MotionEvent.ACTION_CANCEL) {
             if (hit != null) {
                 hit.bounce.setPressed(false);
+                hit.rippleDrawable.setState(new int[0]);
                 if (eventAction == MotionEvent.ACTION_UP && hit.rect.contains(x, y)) {
                     if (System.currentTimeMillis() - downTime > 250) {
                         try {
-                            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                            performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.LONG_PRESS), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                         } catch (Exception ignore) {
                         }
                     }
@@ -565,7 +654,7 @@ public class ProfileActionsView extends View {
                         hit.isLoading = true;
                         invalidate();
                     }
-                    if (hit.supportsAnimate != 0) {
+                    if (hit.supportsAnimate != 0 && IconManager.INSTANCE.isBasePackOnly(IconPackType.DEFAULT)) {
                         hit.updateDrawable(true, hit.supportsAnimate);
                     }
                     hit.startTime = System.currentTimeMillis();
@@ -589,6 +678,11 @@ public class ProfileActionsView extends View {
 
     @Override
     protected boolean verifyDrawable(@NonNull Drawable who) {
+        for (int i = 0; i < actions.size(); i++) {
+            if (actions.get(i).rippleDrawable == who) {
+                return true;
+            }
+        }
         return super.verifyDrawable(who) || who instanceof LoadingDrawable;
     }
 
@@ -679,7 +773,7 @@ public class ProfileActionsView extends View {
     }
 
     private void updateNotification(Action notificationAction, boolean animated) {
-        if (animated) {
+        if (animated && IconManager.INSTANCE.isBasePackOnly(IconPackType.DEFAULT)) {
             if (isNotificationsEnabled) {
                 notificationAction.setText(getString(ActionButton.NOTIFICATION_MUTE.title));
                 notificationAction.updateDrawable(
@@ -714,9 +808,9 @@ public class ProfileActionsView extends View {
         switch (mode) {
             case MODE_USER:
                 insertIfAvailable(out, KEY_MESSAGE);
-                insertIfAvailable(out, KEY_NOTIFICATION);
                 insertIfAvailable(out, KEY_CALL);
                 insertIfAvailable(out, KEY_VIDEO);
+                insertIfAvailable(out, KEY_NOTIFICATION);
                 insertIfNotAvailable(out, KEY_GIFT, KEY_VIDEO);
                 break;
             case MODE_TOPIC:
@@ -754,10 +848,11 @@ public class ProfileActionsView extends View {
                 if (join) {
                     out.add(getOrCreate(KEY_REPORT));
                 } else {
+                    insertIfAvailable(out, KEY_OPEN_CHANNEL);
                     insertIfAvailable(out, KEY_VOICE_CHAT);
                     insertIfNotAvailable(out, KEY_STREAM, KEY_VOICE_CHAT);
                     insertIfAvailable(out, KEY_STORY);
-                    insertIfAvailable(out, KEY_LEAVE);
+                    insertIfNotAvailable(out, KEY_LEAVE, KEY_STORY);
                 }
                 break;
             case MODE_BOT:
@@ -884,6 +979,9 @@ public class ProfileActionsView extends View {
                 break;
             case KEY_STORY:
                 newAction = new Action(ActionButton.STORY);
+                break;
+            case KEY_OPEN_CHANNEL:
+                newAction = new Action(ActionButton.OPEN_CHANNEL);
                 break;
             case KEY_STOP:
                 newAction = new Action(ActionButton.STOP);
@@ -1035,6 +1133,16 @@ public class ProfileActionsView extends View {
         boolean isOpening = false;
         boolean isDeleting = false;
         boolean isDeleted = false;
+        boolean wasFirst;
+        boolean wasLast;
+        private final Drawable rippleDrawable = createRippleDrawable();
+
+        private Drawable createRippleDrawable() {
+            final int radius = isSegmentedMode() ? 0 : ExteraConfig.getSectionRadiusDp();
+            final Drawable drawable = Theme.createRadSelectorDrawable(0, 0x10ffffff, radius, radius);
+            drawable.setCallback(ProfileActionsView.this);
+            return drawable;
+        }
 
         int iconTranslationY = 0;
         float iconScale = 1f;
@@ -1072,6 +1180,8 @@ public class ProfileActionsView extends View {
                 isLoading = false;
             }
             isDeleting = true;
+            wasFirst = this == firstAction;
+            wasLast = this == lastAction;
 
             boolean isFirstItem = prevRect.left - 1 <= xpadding;
             boolean isLastItem = prevRect.right + 1 >= getMeasuredWidth() - xpadding;
@@ -1226,7 +1336,8 @@ public class ProfileActionsView extends View {
         LEAVE(R.string.ProfileActionsLeave, R.drawable.leave, R.drawable.leave),
         VOICE_CHAT(R.string.ProfileActionsVoiceChat, R.drawable.live_stream, R.drawable.live_stream),
         STREAM(R.string.ProfileActionsLiveStream, R.drawable.live_stream, R.drawable.live_stream),
-        STORY(R.string.ProfileActionsAddStory, R.drawable.filled_profile_story, R.drawable.outline_profile_story),
+        STORY(R.string.Story, R.drawable.filled_profile_story, R.drawable.outline_profile_story),
+        OPEN_CHANNEL(R.string.ProfileChannel, R.drawable.msg_channel_filled, R.drawable.msg_channel),
         STOP(R.string.ProfileActionsStop, R.drawable.filled_profile_stop_24, R.drawable.outline_profile_stop_24),
         SET_PHOTO(R.string.ProfileActionsEditPhoto2, R.drawable.filled_profile_photo, R.drawable.outline_profile_photo),
         EDIT_USERNAME(R.string.ProfileActionsEditUsername, R.drawable.filled_profile_edit_24, R.drawable.outline_profile_edit_24),

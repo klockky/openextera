@@ -36,7 +36,6 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.DialogsActivity;
 
 import java.util.ArrayList;
 
@@ -60,9 +59,9 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
     }
 
     private final ArrayList<Long> selectedDialogs;
-    private final DialogsActivity fragment;
+    private final BaseFragment fragment;
 
-    public FiltersListBottomSheet(DialogsActivity baseFragment, ArrayList<Long> selectedDialogs) {
+    public FiltersListBottomSheet(BaseFragment baseFragment, ArrayList<Long> selectedDialogs) {
         super(baseFragment.getParentActivity(), false);
         fixNavigationBar();
         this.selectedDialogs = selectedDialogs;
@@ -326,6 +325,22 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
         delegate = filtersListBottomSheetDelegate;
     }
 
+    public static boolean hasCustomDialogFilters(BaseFragment fragment) {
+        ArrayList<MessagesController.DialogFilter> filters = fragment.getMessagesController().getDialogFilters();
+        for (int a = 0, N = filters.size(); a < N; a++) {
+            if (!filters.get(a).isDefault()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static ArrayList<MessagesController.DialogFilter> getCanAddDialogFilters(BaseFragment fragment, Long dialogId) {
+        ArrayList<Long> dialogs = new ArrayList<>(1);
+        dialogs.add(dialogId);
+        return getCanAddDialogFilters(fragment, dialogs);
+    }
+
     public static ArrayList<MessagesController.DialogFilter> getCanAddDialogFilters(BaseFragment fragment, ArrayList<Long> selectedDialogs) {
         ArrayList<MessagesController.DialogFilter> result = new ArrayList<>();
         ArrayList<MessagesController.DialogFilter> filters = fragment.getMessagesController().dialogFilters;
@@ -443,6 +458,7 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
                 }
                 cell.setChecked(isChecked);
             } else {
+                cell.setChecked(false);
                 cell.getImageView().setColorFilter(null);
                 Drawable drawable1 = context.getResources().getDrawable(R.drawable.poll_add_circle);
                 Drawable drawable2 = context.getResources().getDrawable(R.drawable.poll_add_plus);

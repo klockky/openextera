@@ -29,6 +29,9 @@ import android.util.SparseIntArray;
 import androidx.annotation.UiThread;
 import androidx.collection.LongSparseArray;
 
+import com.exteragram.messenger.feed.FeedController;
+import com.exteragram.messenger.utils.text.LocaleUtils;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.SQLite.SQLiteDatabase;
@@ -77,6 +80,17 @@ import java.util.function.Consumer;
 import me.vkryl.core.BitwiseUtils;
 
 public class MessagesStorage extends BaseController {
+
+    private static NativeByteBuffer serializeMessageForStorage(TLRPC.Message message) throws Exception {
+        ArrayList<TLRPC.MessageEntity> originalEntities = LocaleUtils.swapLocalCustomEmojis(message);
+        try {
+            NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
+            message.serializeToStream(data);
+            return data;
+        } finally {
+            LocaleUtils.restoreLocalCustomEmojis(message, originalEntities);
+        }
+    }
 
     private DispatchQueue storageQueue;
     private SQLiteDatabase database;
@@ -129,6 +143,11 @@ public class MessagesStorage extends BaseController {
 
     private final LongSparseIntArray dialogIsForumTyped = new LongSparseIntArray();
 
+
+    private int resolveFeedMessageId(long dialogId, int messageId) {
+        final FeedController feedController = FeedController.peekInstance(currentAccount);
+        return feedController == null ? messageId : feedController.resolveRealMessageId(dialogId, messageId);
+    }
 
     public static MessagesStorage getInstance(int num) {
         MessagesStorage localInstance = Instance[num];
@@ -1584,9 +1603,8 @@ public class MessagesStorage extends BaseController {
                     final TLRPC.Message message = messagesToUpdate.get(i).second;
                     state = database.executeFast("UPDATE messages_v2 SET data = ? WHERE mid = ? AND uid = ?");
                     state.requery();
-                    NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
                     MessageObject.normalizeFlags(message);
-                    message.serializeToStream(data);
+                    NativeByteBuffer data = serializeMessageForStorage(message);
                     state.bindByteBuffer(1, data);
                     state.bindInteger(2, messageId);
                     state.bindLong(3, dialogId);
@@ -4231,8 +4249,7 @@ public class MessagesStorage extends BaseController {
                             }
 
                             MessageObject.normalizeFlags(message);
-                            NativeByteBuffer data2 = new NativeByteBuffer(message.getObjectSize());
-                            message.serializeToStream(data2);
+                            NativeByteBuffer data2 = serializeMessageForStorage(message);
 
                             state.requery();
                             state.bindByteBuffer(1, data2);
@@ -4785,8 +4802,7 @@ public class MessagesStorage extends BaseController {
                         TLRPC.Message message = messages.get(a);
 
                         MessageObject.normalizeFlags(message);
-                        NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                        message.serializeToStream(data);
+                        NativeByteBuffer data = serializeMessageForStorage(message);
 
                         state.requery();
                         state.bindInteger(1, message.id);
@@ -4895,13 +4911,14 @@ public class MessagesStorage extends BaseController {
     }
 
     public void toggleTodo(long dialogId, int messageId, int taskId, boolean enable, long send_as) {
+        final int realMessageId = resolveFeedMessageId(dialogId, messageId);
         final long myself = getUserConfig().getClientUserId();
         final int date = getConnectionsManager().getCurrentTime();
         storageQueue.postRunnable(() -> {
             SQLiteCursor cursor = null;
             SQLitePreparedStatement state = null;
             try {
-                cursor = database.queryFinalized("SELECT data FROM messages_v2 WHERE uid = " + dialogId + " AND mid = " + messageId);
+                cursor = database.queryFinalized("SELECT data FROM messages_v2 WHERE uid = " + dialogId + " AND mid = " + realMessageId);
                 if (cursor.next()) {
                     NativeByteBuffer data = cursor.byteBufferValue(0);
                     if (data != null) {
@@ -4917,11 +4934,10 @@ public class MessagesStorage extends BaseController {
 
                             state = database.executeFast("UPDATE messages_v2 SET data = ? WHERE mid = ? AND uid = ?");
                             state.requery();
-                            data = new NativeByteBuffer(message.getObjectSize());
                             MessageObject.normalizeFlags(message);
-                            message.serializeToStream(data);
+                            data = serializeMessageForStorage(message);
                             state.bindByteBuffer(1, data);
-                            state.bindInteger(2, messageId);
+                            state.bindInteger(2, realMessageId);
                             state.bindLong(3, dialogId);
                             state.step();
                             state.dispose();
@@ -4960,8 +4976,7 @@ public class MessagesStorage extends BaseController {
 
                                 state = database.executeFast("UPDATE messages_topics SET data = ? WHERE mid = ? AND uid = ?");
                                 state.requery();
-                                data = new NativeByteBuffer(message.getObjectSize());
-                                message.serializeToStream(data);
+                                data = serializeMessageForStorage(message);
                                 state.bindByteBuffer(1, data);
                                 state.bindInteger(2, messageId);
                                 state.bindLong(3, dialogId);
@@ -5044,8 +5059,7 @@ public class MessagesStorage extends BaseController {
                                             }
 
                                             MessageObject.normalizeFlags(message);
-                                            data = new NativeByteBuffer(message.getObjectSize());
-                                            message.serializeToStream(data);
+                                            data = serializeMessageForStorage(message);
                                             currentState.requery();
                                             currentState.bindByteBuffer(1, data);
                                             currentState.bindInteger(2, mid);
@@ -5103,8 +5117,7 @@ public class MessagesStorage extends BaseController {
                                             }
 
                                             MessageObject.normalizeFlags(message);
-                                            data = new NativeByteBuffer(message.getObjectSize());
-                                            message.serializeToStream(data);
+                                            data = serializeMessageForStorage(message);
                                             currentState.requery();
                                             currentState.bindByteBuffer(1, data);
                                             currentState.bindInteger(2, mid);
@@ -5294,8 +5307,7 @@ public class MessagesStorage extends BaseController {
                                     state = database.executeFast("UPDATE messages_topics SET data = ? WHERE mid = ? AND uid = ?");
                                 }
                                 MessageObject.normalizeFlags(message);
-                                NativeByteBuffer data2 = new NativeByteBuffer(message.getObjectSize());
-                                message.serializeToStream(data2);
+                                NativeByteBuffer data2 = serializeMessageForStorage(message);
                                 state.requery();
                                 state.bindByteBuffer(1, data2);
                                 state.bindInteger(2, msgId);
@@ -5473,7 +5485,8 @@ public class MessagesStorage extends BaseController {
         }
     }
 
-    public void updateMessageVoiceTranscriptionOpen(long dialogId, int msgId, TLRPC.Message saveFromMessage) {
+    public void updateMessageVoiceTranscriptionOpen(long dialogId, int feedMsgId, TLRPC.Message saveFromMessage) {
+        final int msgId = resolveFeedMessageId(dialogId, feedMsgId);
         storageQueue.postRunnable(() -> {
             SQLitePreparedStatement state = null;
             try {
@@ -5521,7 +5534,8 @@ public class MessagesStorage extends BaseController {
         });
     }
 
-    public void updateMessageVoiceTranscription(long dialogId, int messageId, String text, long transcriptionId, boolean isFinal) {
+    public void updateMessageVoiceTranscription(long dialogId, int feedMessageId, String text, long transcriptionId, boolean isFinal) {
+        final int messageId = resolveFeedMessageId(dialogId, feedMessageId);
         storageQueue.postRunnable(() -> {
             SQLitePreparedStatement state = null;
             try {
@@ -5561,7 +5575,8 @@ public class MessagesStorage extends BaseController {
         });
     }
 
-    public void updateMessageVoiceTranscription(long dialogId, int messageId, String text, TLRPC.Message saveFromMessage) {
+    public void updateMessageVoiceTranscription(long dialogId, int feedMessageId, String text, TLRPC.Message saveFromMessage) {
+        final int messageId = resolveFeedMessageId(dialogId, feedMessageId);
         storageQueue.postRunnable(() -> {
             SQLitePreparedStatement state = null;
             try {
@@ -5611,11 +5626,16 @@ public class MessagesStorage extends BaseController {
     }
 
     public void updateMessageCustomParams(long dialogId, TLRPC.Message saveFromMessage) {
+        updateMessageCustomParams(dialogId, saveFromMessage, saveFromMessage.id);
+    }
+
+    public void updateMessageCustomParams(long dialogId, TLRPC.Message saveFromMessage, int feedMessageId) {
+        final int messageId = resolveFeedMessageId(dialogId, feedMessageId);
         storageQueue.postRunnable(() -> {
             SQLitePreparedStatement state = null;
             try {
                 database.beginTransaction();
-                TLRPC.Message message = getMessageWithCustomParamsOnlyInternal(saveFromMessage.id, dialogId);
+                TLRPC.Message message = getMessageWithCustomParamsOnlyInternal(messageId, dialogId);
                 MessageCustomParamsHelper.copyParams(saveFromMessage, message);
 
                 for (int i = 0; i < 2; i++) {
@@ -5631,7 +5651,7 @@ public class MessagesStorage extends BaseController {
                     } else {
                         state.bindNull(1);
                     }
-                    state.bindInteger(2, saveFromMessage.id);
+                    state.bindInteger(2, messageId);
                     state.bindLong(3, dialogId);
                     state.step();
                     state.dispose();
@@ -11369,8 +11389,7 @@ public class MessagesStorage extends BaseController {
                 for (int a = 0; a < messages.size(); a++) {
                     TLRPC.Message message = messages.get(a);
                     MessageObject.normalizeFlags(message);
-                    NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                    message.serializeToStream(data);
+                    NativeByteBuffer data = serializeMessageForStorage(message);
 
                     state.requery();
                     state.bindByteBuffer(1, data);
@@ -11964,8 +11983,7 @@ public class MessagesStorage extends BaseController {
                         messageId = message.local_id;
                     }
                     MessageObject.normalizeFlags(message);
-                    NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                    message.serializeToStream(data);
+                    NativeByteBuffer data = serializeMessageForStorage(message);
 
                     long dialogId = MessageObject.getDialogId(message);
 
@@ -12028,8 +12046,7 @@ public class MessagesStorage extends BaseController {
                         messageId = message.local_id;
                     }
                     MessageObject.normalizeFlags(message);
-                    NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                    message.serializeToStream(data);
+                    NativeByteBuffer data = serializeMessageForStorage(message);
 
                     long did = MessageObject.getDialogId(message);
                     state_messages.bindInteger(1, messageId);
@@ -12089,8 +12106,7 @@ public class MessagesStorage extends BaseController {
                         messageId = message.local_id;
                     }
                     MessageObject.normalizeFlags(message);
-                    NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                    message.serializeToStream(data);
+                    NativeByteBuffer data = serializeMessageForStorage(message);
 
                     long topicId = MessageObject.getQuickReplyId(currentAccount, message);
 
@@ -12600,8 +12616,7 @@ public class MessagesStorage extends BaseController {
                         messageId = message.local_id;
                     }
                     MessageObject.normalizeFlags(message);
-                    NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                    message.serializeToStream(data);
+                    NativeByteBuffer data = serializeMessageForStorage(message);
 
                     boolean updateDialog = true;
                     if (message.action instanceof TLRPC.TL_messageEncryptedAction && !(message.action.encryptedAction instanceof TLRPC.TL_decryptedMessageActionSetMessageTTL || message.action.encryptedAction instanceof TLRPC.TL_decryptedMessageActionScreenshotMessages)) {
@@ -15874,8 +15889,7 @@ public class MessagesStorage extends BaseController {
 
                 fixUnsupportedMedia(message);
                 MessageObject.normalizeFlags(message);
-                NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                message.serializeToStream(data);
+                NativeByteBuffer data = serializeMessageForStorage(message);
                 ArrayList<TLRPC.Message> changedSavedMessages = null;
 
                 final long selfId = getUserConfig().getClientUserId();
@@ -16122,8 +16136,7 @@ public class MessagesStorage extends BaseController {
                         fixUnsupportedMedia(message);
                         MessageObject.normalizeFlags(message);
                         state_messages.requery();
-                        NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                        message.serializeToStream(data);
+                        NativeByteBuffer data = serializeMessageForStorage(message);
                         state_messages.bindInteger(1, message.id);
                         state_messages.bindLong(2, dialog_id);
                         state_messages.bindInteger(3, message.send_state);
@@ -16157,8 +16170,7 @@ public class MessagesStorage extends BaseController {
                         fixUnsupportedMedia(message);
                         MessageObject.normalizeFlags(message);
                         state_messages.requery();
-                        NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                        message.serializeToStream(data);
+                        NativeByteBuffer data = serializeMessageForStorage(message);
                         state_messages.bindInteger(1, message.id);
                         state_messages.bindLong(2, topic_id);
                         state_messages.bindInteger(3, message.send_state);
@@ -16190,8 +16202,7 @@ public class MessagesStorage extends BaseController {
                         fixUnsupportedMedia(message);
                         MessageObject.normalizeFlags(message);
                         state_messages.requery();
-                        NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                        message.serializeToStream(data);
+                        NativeByteBuffer data = serializeMessageForStorage(message);
                         state_messages.bindInteger(1, message.id);
                         state_messages.bindLong(2, dialogId);
                         state_messages.bindInteger(3, message.send_state);
@@ -16413,8 +16424,7 @@ public class MessagesStorage extends BaseController {
 
                         fixUnsupportedMedia(message);
                         MessageObject.normalizeFlags(message);
-                        NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                        message.serializeToStream(data);
+                        NativeByteBuffer data = serializeMessageForStorage(message);
 
                         for (int i = 0; i < 2; i++) {
                             boolean isTopicMessage = i == 1;
@@ -17414,8 +17424,7 @@ public class MessagesStorage extends BaseController {
 
                         fixUnsupportedMedia(message);
                         MessageObject.normalizeFlags(message);
-                        NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                        message.serializeToStream(data);
+                        NativeByteBuffer data = serializeMessageForStorage(message);
 
                         state_messages.requery();
                         state_messages.bindInteger(1, message.id);
@@ -18727,8 +18736,7 @@ public class MessagesStorage extends BaseController {
                     }
                     try {
                         MessageObject.normalizeFlags(message);
-                        NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
-                        message.serializeToStream(data);
+                        NativeByteBuffer data = serializeMessageForStorage(message);
                         state.bindByteBuffer(1, data);
                         state.step();
                         state.dispose();

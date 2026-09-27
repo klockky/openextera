@@ -42,6 +42,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.collection.LongSparseArray;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.pm.ShortcutInfoCompat;
 import androidx.core.content.pm.ShortcutManagerCompat;
 import androidx.core.graphics.drawable.IconCompat;
@@ -50,6 +51,7 @@ import com.android.billingclient.api.ProductDetails;
 import com.exteragram.messenger.ExteraConfig;
 import com.exteragram.messenger.utils.chats.ChatUtils;
 import com.exteragram.messenger.utils.text.LocaleUtils;
+import com.exteragram.messenger.utils.ui.UIUtil;
 
 import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.SQLite.SQLiteDatabase;
@@ -81,6 +83,7 @@ import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.ChatThemeBottomSheet;
+import org.telegram.ui.Components.CombinedDrawable;
 import org.telegram.ui.Components.FormattedDateSpan;
 import org.telegram.ui.Components.QuoteSpan;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
@@ -3712,6 +3715,7 @@ public class MediaDataController extends BaseController {
     private TLRPC.Chat lastSearchChat;
     private int messagesLocalSearchCount;
     private int[] messagesSearchCount = new int[]{0, 0};
+    private int[] filteredMessagesSearchCount = new int[]{0, 0};
     private boolean[] messagesSearchEndReached = new boolean[]{false, false};
     public ArrayList<MessageObject> searchResultMessages = new ArrayList<>();
     public ArrayList<MessageObject> searchServerResultMessages = new ArrayList<>();
@@ -3771,7 +3775,7 @@ public class MediaDataController extends BaseController {
         HashSet<Integer> messageIds = new HashSet<>();
         for (int i = 0; i < searchServerResultMessages.size(); ++i) {
             MessageObject m = searchServerResultMessages.get(i);
-            if ((!m.hasValidGroupId() || m.isPrimaryGroupMessage) && !messageIds.contains(m.getId())) {
+            if (!ChatUtils.isTermsRestrictedMessage(m) && (!m.hasValidGroupId() || m.isPrimaryGroupMessage) && !messageIds.contains(m.getId())) {
                 MessageObject prev = null;
                 for (int j = 0; j < previousSearchResultMessages.size(); ++j) {
                     if (previousSearchResultMessages.get(j).getId() == m.getId()) {
@@ -3791,7 +3795,7 @@ public class MediaDataController extends BaseController {
         }
         for (int i = 0; i < searchLocalResultMessages.size(); ++i) {
             MessageObject m = searchLocalResultMessages.get(i);
-            if (!messageIds.contains(m.getId())) {
+            if (!ChatUtils.isTermsRestrictedMessage(m) && !messageIds.contains(m.getId())) {
                 MessageObject prev = null;
                 for (int j = 0; j < previousSearchResultMessages.size(); ++j) {
                     if (previousSearchResultMessages.get(j).getId() == m.getId()) {
@@ -3830,6 +3834,8 @@ public class MediaDataController extends BaseController {
         searchResultMessages.clear();
         searchServerResultMessages.clear();
         searchLocalResultMessages.clear();
+        filteredMessagesSearchCount[0] = 0;
+        filteredMessagesSearchCount[1] = 0;
     }
 
     public boolean isMessageFound(int messageId, boolean mergeDialog) {
@@ -3951,6 +3957,7 @@ public class MediaDataController extends BaseController {
         } else if (firstQuery) {
             messagesSearchEndReached[0] = messagesSearchEndReached[1] = false;
             messagesSearchCount[0] = messagesSearchCount[1] = 0;
+            filteredMessagesSearchCount[0] = filteredMessagesSearchCount[1] = 0;
             searchResultMessages.clear();
             searchLocalResultMessages.clear();
             searchServerResultMessagesMap[0].clear();
@@ -3999,11 +4006,19 @@ public class MediaDataController extends BaseController {
                         if (response != null) {
                             TLRPC.messages_Messages res = (TLRPC.messages_Messages) response;
                             messagesSearchEndReached[1] = res.messages.isEmpty();
-                            messagesSearchCount[1] = res instanceof TLRPC.TL_messages_messagesSlice ? res.count : res.messages.size();
+                            int filteredCount = 0;
+                            for (int a = 0; a < res.messages.size(); a++) {
+                                if (ChatUtils.hasRestrictionReason(res.messages.get(a).restriction_reason, "terms")) {
+                                    filteredCount++;
+                                }
+                            }
+                            filteredMessagesSearchCount[1] = filteredCount;
+                            messagesSearchCount[1] = Math.max((res instanceof TLRPC.TL_messages_messagesSlice ? res.count : res.messages.size()) - filteredMessagesSearchCount[1], 0);
                             searchMessagesInChat(req.q, dialogId, mergeDialogId, guid, direction, replyMessageId, true, user, chat, jumpToMessage, reaction);
                         } else {
                             messagesSearchEndReached[1] = true;
                             messagesSearchCount[1] = 0;
+                            filteredMessagesSearchCount[1] = 0;
                             searchMessagesInChat(req.q, dialogId, mergeDialogId, guid, direction, replyMessageId, true, user, chat, jumpToMessage, reaction);
                         }
                     }
@@ -4081,14 +4096,20 @@ public class MediaDataController extends BaseController {
         lastSearchQuery = query;
         long queryWithDialogFinal = queryWithDialog;
         String finalQuery = query;
+        final int requestOffsetId = req.offset_id;
         reqId = getConnectionsManager().sendRequest(req, (response, error) -> {
             ArrayList<MessageObject> messageObjects = new ArrayList<>();
+            int filteredCount = 0;
 
             if (error == null) {
                 TLRPC.messages_Messages res = (TLRPC.messages_Messages) response;
                 int N = Math.min(res.messages.size(), req.limit - 1);
                 for (int a = 0; a < N; a++) {
                     TLRPC.Message message = res.messages.get(a);
+                    if (ChatUtils.hasRestrictionReason(message.restriction_reason, "terms")) {
+                        filteredCount++;
+                        continue;
+                    }
                     MessageObject messageObject = new MessageObject(currentAccount, message, null, null, null, null, null, true, true, 0, false, false, isSaved);
                     if (messageObject.hasValidGroupId()) {
                         messageObject.isPrimaryGroupMessage = true;
@@ -4097,6 +4118,7 @@ public class MediaDataController extends BaseController {
                     messageObjects.add(messageObject);
                 }
             }
+            final int filteredCountFinal = filteredCount;
             AndroidUtilities.runOnUIThread(() -> {
                 if (currentReqId == lastReqId) {
                     reqId = 0;
@@ -4124,17 +4146,20 @@ public class MediaDataController extends BaseController {
                                 messagesSearchCount[0] = 0;
                                 getNotificationCenter().postNotificationName(NotificationCenter.chatSearchResultsLoading, guid);
                             }
-                            boolean added = false;
-                            int N = Math.min(res.messages.size(), req.limit - 1);
-                            for (int a = 0; a < N; a++) {
-                                added = true;
+                            final int index = queryWithDialogFinal == dialogId ? 0 : 1;
+                            if (requestOffsetId == 0) {
+                                filteredMessagesSearchCount[index] = 0;
+                            }
+                            filteredMessagesSearchCount[index] += filteredCountFinal;
+                            boolean added = !messageObjects.isEmpty();
+                            for (int a = 0; a < messageObjects.size(); a++) {
                                 MessageObject messageObject = messageObjects.get(a);
                                 searchServerResultMessages.add(messageObject);
-                                searchServerResultMessagesMap[queryWithDialogFinal == dialogId ? 0 : 1].put(messageObject.getId(), messageObject);
+                                searchServerResultMessagesMap[index].put(messageObject.getId(), messageObject);
                             }
                             updateSearchResults();
-                            messagesSearchEndReached[queryWithDialogFinal == dialogId ? 0 : 1] = res.messages.size() < req.limit;
-                            messagesSearchCount[queryWithDialogFinal == dialogId ? 0 : 1] = res instanceof TLRPC.TL_messages_messagesSlice || res instanceof TLRPC.TL_messages_channelMessages ? res.count : res.messages.size();
+                            messagesSearchEndReached[index] = res.messages.size() < req.limit;
+                            messagesSearchCount[index] = Math.max((res instanceof TLRPC.TL_messages_messagesSlice || res instanceof TLRPC.TL_messages_channelMessages ? res.count : res.messages.size()) - filteredMessagesSearchCount[index], searchServerResultMessagesMap[index].size());
                             if (searchServerResultMessages.isEmpty()) {
                                 getNotificationCenter().postNotificationName(NotificationCenter.chatSearchResultsAvailable, guid, 0, getMask(), (long) 0, 0, 0, jumpToMessage);
                             } else {
@@ -4175,6 +4200,7 @@ public class MediaDataController extends BaseController {
         updateSearchResults();
         messagesSearchCount[0] = count;
         messagesSearchCount[1] = 0;
+        filteredMessagesSearchCount[0] = filteredMessagesSearchCount[1] = 0;
         lastReturnedNum = num;
         getNotificationCenter().postNotificationName(NotificationCenter.chatSearchResultsAvailable, guid, 0, getMask(), getUserConfig().getClientUserId(), lastReturnedNum, getSearchCount(), true);
     }
@@ -4499,7 +4525,7 @@ public class MediaDataController extends BaseController {
             } else {
                 return MEDIA_FILE;
             }
-        } else if (!message.entities.isEmpty()) {
+        } else if (!message.entities.isEmpty() && !LocaleUtils.isCustomEmojiOnlyLinkMessage(message)) {
             for (int a = 0; a < message.entities.size(); a++) {
                 final TLRPC.MessageEntity entity = message.entities.get(a);
                 if (entity instanceof TLRPC.TL_messageEntityUrl || entity instanceof TLRPC.TL_messageEntityTextUrl || entity instanceof TLRPC.TL_messageEntityEmail) {
@@ -5096,7 +5122,7 @@ public class MediaDataController extends BaseController {
                 ShortcutInfoCompat shortcut = new ShortcutInfoCompat.Builder(ApplicationLoader.applicationContext, "compose")
                         .setShortLabel(LocaleController.getString(R.string.NewConversationShortcut))
                         .setLongLabel(LocaleController.getString(R.string.NewConversationShortcut))
-                        .setIcon(IconCompat.createWithResource(ApplicationLoader.applicationContext, R.drawable.shortcut_compose))
+                        .setIcon(IconCompat.createWithAdaptiveBitmap(UIUtil.drawableToBitmap(new CombinedDrawable(UIUtil.createFabBackground(56, 0xff58a3dd, 0xff58a3dd), ContextCompat.getDrawable(ApplicationLoader.applicationContext, R.drawable.floating_pencil).mutate()).setIconSize(AndroidUtilities.dp(24), AndroidUtilities.dp(24)), 192, 192)))
                         .setRank(0)
                         .setIntent(intent)
                         .build();
@@ -5821,7 +5847,8 @@ public class MediaDataController extends BaseController {
                             canvas.scale(scale, scale);
                             roundPaint.setShader(shader);
                             bitmapRect.set(0, 0, bitmap.getWidth(), bitmap.getHeight());
-                            canvas.drawRoundRect(bitmapRect, bitmap.getWidth(), bitmap.getHeight(), roundPaint);
+                            float radius = ExteraConfig.getSquareFab() ? AndroidUtilities.dp(16) : size;
+                            canvas.drawRoundRect(bitmapRect, radius, radius, roundPaint);
                             canvas.restore();
                         }
                         Drawable drawable = ApplicationLoader.applicationContext.getResources().getDrawable(R.drawable.book_logo);
@@ -7249,13 +7276,15 @@ public class MediaDataController extends BaseController {
             return null;
         }
         ArrayList<TLRPC.MessageEntity> entities = null;
+        final boolean disableMarkdown = ExteraConfig.getDisableMarkdown();
+        final boolean parseMarkdownEntities = parseMarkdown && !disableMarkdown;
         int index;
         int start = -1;
         int lastIndex = 0;
         boolean isPre = false;
         final String mono = "`";
         final String pre = "```";
-        while (parseMarkdown && (index = TextUtils.indexOf(message[0], !isPre ? mono : pre, lastIndex)) != -1) {
+        while (parseMarkdownEntities && (index = TextUtils.indexOf(message[0], !isPre ? mono : pre, lastIndex)) != -1) {
             if (start == -1) {
                 isPre = message[0].length() - index > 2 && message[0].charAt(index + 1) == '`' && message[0].charAt(index + 2) == '`';
                 start = index;
@@ -7339,6 +7368,10 @@ public class MediaDataController extends BaseController {
             entity.offset = start;
             entity.length = 1;
             entities.add(entity);
+        }
+
+        if (!disableMarkdown) {
+            LocaleUtils.parseMarkdownLinks(message);
         }
 
         if (message[0] instanceof Spanned) {
@@ -7531,7 +7564,7 @@ public class MediaDataController extends BaseController {
 
         CharSequence cs = message[0];
         if (entities == null) entities = new ArrayList<>();
-        if (parseMarkdown) {
+        if (parseMarkdownEntities) {
             cs = parsePattern(cs, BOLD_PATTERN, entities, obj -> new TLRPC.TL_messageEntityBold());
             cs = parsePattern(cs, ITALIC_PATTERN, entities, obj -> new TLRPC.TL_messageEntityItalic());
             cs = parsePattern(cs, SPOILER_PATTERN, entities, obj -> new TLRPC.TL_messageEntitySpoiler());
@@ -7780,7 +7813,7 @@ public class MediaDataController extends BaseController {
                     draftMessage.reply_to.flags |= 16;
                     draftMessage.reply_to.quote_offset = quote.start;
                 }
-                draftMessage.reply_to.quote_entities = quote.getEntities();
+                draftMessage.reply_to.quote_entities = quote.getFilteredEntities();
                 if (draftMessage.reply_to.quote_entities != null && !draftMessage.reply_to.quote_entities.isEmpty()) {
                     draftMessage.reply_to.quote_entities = new ArrayList<>(draftMessage.reply_to.quote_entities);
                     draftMessage.reply_to.flags |= 8;
@@ -7799,7 +7832,8 @@ public class MediaDataController extends BaseController {
             }
         }
         if (entities != null && !entities.isEmpty()) {
-            draftMessage.entities = entities;
+            draftMessage.entities = new ArrayList<>(entities);
+            LocaleUtils.replaceCustomEmojis(currentAccount, dialogId, draftMessage.entities);
             draftMessage.flags |= 8;
         }
 

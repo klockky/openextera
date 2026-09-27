@@ -67,6 +67,9 @@ import androidx.collection.LongSparseArray;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import org.telegram.ui.recyclerview.ChatListItemAnimator;
 
 import org.telegram.messenger.AccountInstance;
@@ -365,6 +368,7 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
     private float animatingKeyboardHeight;
     private ChatAttachAlert chatAttachAlert;
     private InstantCameraView instantCameraView;
+    private MentionsContainerView.Delegate mentionsDelegate;
     private int enterViewBottomOffset;
     private boolean isLongPressed;
 
@@ -1025,7 +1029,7 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
                     FileLog.e(e);
                 }
                 try {
-                    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                    performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.LONG_PRESS), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                 } catch (Exception ignore) {}
                 BottomSheet.Builder builder = new BottomSheet.Builder(getContext(), false, resourcesProvider);
                 builder.setTitle(formattedUrl);
@@ -3515,6 +3519,13 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
                 }
             }
 
+            // overrides ChatActivityEnterView.ChatActivityEnterViewDelegate.setFrontface
+            public void setFrontface(boolean frontface) {
+                if (instantCameraView != null) {
+                    instantCameraView.setFrontface(frontface);
+                }
+            }
+
             @Override
             public void toggleVideoRecordingPause() {
                 if (instantCameraView != null) {
@@ -3667,7 +3678,7 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
                 return true;
             }
         };
-        mentionContainer.withDelegate(new MentionsContainerView.Delegate() {
+        mentionContainer.withDelegate(mentionsDelegate = new MentionsContainerView.Delegate() {
             @Override
             public void onStickerSelected(TLRPC.TL_document document, String query, Object parent) {
                 AlertsCreator.ensurePaidMessageConfirmation(currentAccount, dialogId, 1, payStars -> {
@@ -6639,7 +6650,7 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
                     super.onDraw(canvas);
                 }
             };
-            backupImageView.setRoundRadius(dp(16));
+            backupImageView.setRoundRadius(ExteraConfig.getAvatarCorners(32));
             addView(backupImageView, LayoutHelper.createFrame(32, 32, 0, 12, 2, 0, 0));
             setClipChildren(false);
 

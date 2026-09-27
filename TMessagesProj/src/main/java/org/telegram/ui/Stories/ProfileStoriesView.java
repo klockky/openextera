@@ -12,10 +12,8 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.PathMeasure;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
@@ -29,6 +27,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
 
+import com.exteragram.messenger.ExteraConfig;
 import com.google.zxing.common.detector.MathUtils;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -557,6 +556,9 @@ public class ProfileStoriesView extends View implements NotificationCenter.Notif
                 radialProgress.setBackground(null, true, false);
                 radialProgress.setRoundRectProgress(ChatObject.isForum(UserConfig.selectedAccount, dialogId));
             }
+            // TODO(openextera): lite drops setRoundRectProgress() and calls every frame
+            // radialProgress.setRoundRectRadius(isRoundRectRing() ? getRingCornerRadius(rect2) : -1f);
+            // needs RadialProgress.setRoundRectRadius (drawn via StoriesUtilities.drawRoundRectSegment)
             float uploadingProgress = 0;
             if (!storiesController.hasUploadingStories(dialogId) || storiesController.isLastUploadingFailed(dialogId)) {
                 uploadingProgress = 1f;
@@ -894,42 +896,22 @@ public class ProfileStoriesView extends View implements NotificationCenter.Notif
         return b;
     }
 
-    private final Path forumRoundRectPath = new Path();
-    private final Matrix forumRoundRectMatrix = new Matrix();
-    private final PathMeasure forumRoundRectPathMeasure = new PathMeasure();
-    private final Path forumSegmentPath = new Path();
+    private boolean isRoundRectRing() {
+        return (ChatObject.isForum(UserConfig.selectedAccount, dialogId) || ExteraConfig.getAvatarCorners() < 28) && expandProgress < 0.2f;
+    }
 
     private void drawArc(Canvas canvas, RectF oval, float startAngle, float sweepAngle, boolean useCenter, Paint paint) {
-        boolean isForum = ChatObject.isForum(UserConfig.selectedAccount, dialogId);
-        if (isForum) {
-            float r = oval.height() * 0.32f;
-            if (Math.abs(sweepAngle) == 360) {
-                canvas.drawRoundRect(oval, r, r, paint);
-                return;
-            }
-            startAngle = startAngle + sweepAngle;
-            float endAngle = startAngle - sweepAngle;
-            float rotateAngle = (((int) (startAngle)) / 90) * 90;
-
-            float pathAngleStart = -199 + rotateAngle;
-            float percentFrom = (startAngle - pathAngleStart) / 360;
-            float percentTo = (endAngle - pathAngleStart) / 360;
-            forumRoundRectPath.rewind();
-            forumRoundRectPath.addRoundRect(oval, r, r, Path.Direction.CW);
-            forumRoundRectMatrix.reset();
-            forumRoundRectMatrix.postRotate(rotateAngle, oval.centerX(), oval.centerY());
-            forumRoundRectPath.transform(forumRoundRectMatrix);
-
-            forumRoundRectPathMeasure.setPath(forumRoundRectPath, false);
-            float length = forumRoundRectPathMeasure.getLength();
-
-            forumSegmentPath.reset();
-            forumRoundRectPathMeasure.getSegment(length * percentFrom, length * percentTo, forumSegmentPath, true);
-            forumSegmentPath.rLineTo(0, 0);
-            canvas.drawPath(forumSegmentPath, paint);
+        if (isRoundRectRing()) {
+            float endAngle = startAngle + sweepAngle;
+            StoriesUtilities.drawRoundRectSegment(canvas, oval, getRingCornerRadius(oval), Math.min(startAngle, endAngle), Math.max(startAngle, endAngle), paint);
         } else {
             canvas.drawArc(oval, startAngle, sweepAngle, useCenter, paint);
         }
+    }
+
+    private float getRingCornerRadius(RectF rect) {
+        float scale = avatarContainer.getScaleY();
+        return Math.max(0, avatarImage.getRoundRadiusForExpand() * scale + (rect.height() - (avatarContainer.getHeight() - avatarImage.getStoriesInset() * 2) * scale) / 2f);
     }
 
     private void drawArcs(Canvas canvas, StoryCircle A, StoryCircle B, StoryCircle C, Paint paint) {

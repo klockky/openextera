@@ -901,7 +901,10 @@ public class Emoji {
         }
     }
 
+    public static int recentEmojiVersion;
+
     public static void addRecentEmoji(String code) {
+        recentEmojiVersion++;
         Integer count = emojiUseHistory.get(code);
         if (count == null) {
             count = 0;
@@ -915,6 +918,7 @@ public class Emoji {
     }
 
     public static void removeRecentEmoji(String code) {
+        recentEmojiVersion++;
         emojiUseHistory.remove(code);
         recentEmoji.remove(code);
         if (emojiUseHistory.isEmpty() || recentEmoji.isEmpty()) {
@@ -923,6 +927,7 @@ public class Emoji {
     }
 
     public static void sortEmoji() {
+        recentEmojiVersion++;
         recentEmoji.clear();
         for (HashMap.Entry<String, Integer> entry : emojiUseHistory.entrySet()) {
             recentEmoji.add(entry.getKey());
@@ -963,6 +968,7 @@ public class Emoji {
     }
 
     public static void clearRecentEmoji() {
+        recentEmojiVersion++;
         SharedPreferences preferences = MessagesController.getGlobalEmojiSettings();
         preferences.edit().putBoolean("filled_default", true).apply();
         emojiUseHistory.clear();

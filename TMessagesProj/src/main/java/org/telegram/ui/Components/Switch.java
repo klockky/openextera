@@ -16,9 +16,7 @@ import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.ColorFilter;
 import android.graphics.Paint;
-import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.PorterDuffXfermode;
@@ -31,26 +29,48 @@ import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.annotation.Keep;
+import androidx.dynamicanimation.animation.FloatPropertyCompat;
+import androidx.dynamicanimation.animation.SpringAnimation;
+
+import com.exteragram.messenger.utils.ui.SwitchUiHelper;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.BaseCell;
 
 import me.vkryl.android.animator.BoolAnimator;
 
 public class Switch extends View {
+
+    private static final FloatPropertyCompat<Switch> PROGRESS_PROPERTY = new FloatPropertyCompat<Switch>("progress") {
+        @Override
+        public float getValue(Switch object) {
+            return object.getProgress();
+        }
+
+        @Override
+        public void setValue(Switch object, float value) {
+            object.setProgress(value);
+        }
+    };
+
     private final BoolAnimator animatorIconVisibility = new BoolAnimator(this, CubicBezierInterpolator.EASE_OUT_QUINT, 380L, true);
+    private final BoolAnimator animatorPressed;
+    private final float[] iconLines = new float[8];
 
     private RectF rectF;
 
     private float progress;
     private ObjectAnimator checkAnimator;
+    private SpringAnimation checkSpringAnimator;
     private ObjectAnimator iconAnimator;
 
     private boolean attachedToWindow;
     private boolean isChecked;
     private Paint paint;
     private Paint paint2;
+    private Paint outlinePaint;
 
     private int drawIconType;
     private float iconProgress = 1.0f;
@@ -85,6 +105,7 @@ public class Switch extends View {
     private Theme.ResourcesProvider resourcesProvider;
 
     private int overrideColorProgress;
+    private float overrideAlpha = 1.0f;
 
     public interface OnCheckedChangeListener {
         void onCheckedChanged(Switch view, boolean isChecked);
@@ -97,6 +118,7 @@ public class Switch extends View {
     public Switch(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
         this.resourcesProvider = resourcesProvider;
+        animatorPressed = SwitchUiHelper.createThumbPressedAnimator(this);
         rectF = new RectF();
 
         paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -104,6 +126,8 @@ public class Switch extends View {
         paint2.setStyle(Paint.Style.STROKE);
         paint2.setStrokeCap(Paint.Cap.ROUND);
         paint2.setStrokeWidth(AndroidUtilities.dp(2));
+        outlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        outlinePaint.setStyle(Paint.Style.STROKE);
 
         setHapticFeedbackEnabled(true);
     }
@@ -141,6 +165,10 @@ public class Switch extends View {
             checkAnimator.cancel();
             checkAnimator = null;
         }
+        if (checkSpringAnimator != null) {
+            checkSpringAnimator.cancel();
+            checkSpringAnimator = null;
+        }
     }
 
     private void cancelIconAnimator() {
@@ -155,7 +183,7 @@ public class Switch extends View {
     }
 
     public void setDrawRipple(boolean value) {
-        if (Build.VERSION.SDK_INT < 21 || value == drawRipple) {
+        if (value == drawRipple) {
             return;
         }
         drawRipple = value;
@@ -163,43 +191,14 @@ public class Switch extends View {
         if (rippleDrawable == null) {
             ripplePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             ripplePaint.setColor(0xffffffff);
-            Drawable maskDrawable;
-            if (Build.VERSION.SDK_INT >= 23) {
-                maskDrawable = null;
-            } else {
-                maskDrawable = new Drawable() {
-                    @Override
-                    public void draw(Canvas canvas) {
-                        android.graphics.Rect bounds = getBounds();
-                        canvas.drawCircle(bounds.centerX(), bounds.centerY(), AndroidUtilities.dp(18), ripplePaint);
-                    }
-
-                    @Override
-                    public void setAlpha(int alpha) {
-
-                    }
-
-                    @Override
-                    public void setColorFilter(ColorFilter colorFilter) {
-
-                    }
-
-                    @Override
-                    public int getOpacity() {
-                        return PixelFormat.UNKNOWN;
-                    }
-                };
-            }
             ColorStateList colorStateList = new ColorStateList(
                 new int[][]{StateSet.WILD_CARD},
                 new int[]{0}
             );
-            rippleDrawable = new BaseCell.RippleDrawableSafe(colorStateList, null, maskDrawable);
-            if (Build.VERSION.SDK_INT >= 23) {
-                rippleDrawable.setRadius(AndroidUtilities.dp(18));
-            }
+            rippleDrawable = new BaseCell.RippleDrawableSafe(colorStateList, null, null);
             rippleDrawable.setCallback(this);
         }
+        rippleDrawable.setRadius(SwitchUiHelper.getStateLayerRadius());
         if (isChecked && colorSet != 2 || !isChecked && colorSet != 1) {
             int color = Theme.getColor(isChecked ? Theme.key_switchTrackBlueSelectorChecked : Theme.key_switchTrackBlueSelector, resourcesProvider);
             color = processColor(color);
@@ -214,6 +213,7 @@ public class Switch extends View {
             rippleDrawable.setHotspot(isChecked ? 0 : AndroidUtilities.dp(100), AndroidUtilities.dp(18));
         }
         rippleDrawable.setState(value ? pressedState : StateSet.NOTHING);
+        animatorPressed.setValue(value, attachedToWindow);
         invalidate();
     }
 
@@ -234,8 +234,21 @@ public class Switch extends View {
     }
 
     private void animateToCheckedState(boolean newCheckedState) {
+        if (SwitchUiHelper.isMaterial3SwitchStyle()) {
+            if (checkAnimator != null) {
+                checkAnimator.cancel();
+                checkAnimator = null;
+            }
+            if (checkSpringAnimator == null) {
+                checkSpringAnimator = SwitchUiHelper.createThumbSpring(this, PROGRESS_PROPERTY);
+            }
+            checkSpringAnimator.animateToFinalPosition(newCheckedState ? 1f : 0f);
+            return;
+        }
+        cancelCheckAnimator();
         checkAnimator = ObjectAnimator.ofFloat(this, "progress", newCheckedState ? 1 : 0);
         checkAnimator.setDuration(200);
+        checkAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
         checkAnimator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
@@ -267,6 +280,7 @@ public class Switch extends View {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         attachedToWindow = false;
+        destroyBitmaps();
     }
 
     public void setOnCheckedChangeListener(OnCheckedChangeListener listener) {
@@ -333,30 +347,6 @@ public class Switch extends View {
         if (overrideColorProgress == override) {
             return;
         }
-        if (overlayBitmap == null) {
-            try {
-                overlayBitmap = new Bitmap[2];
-                overlayCanvas = new Canvas[2];
-                for (int a = 0; a < 2; a++) {
-                    overlayBitmap[a] = Bitmap.createBitmap(getMeasuredWidth(), getMeasuredHeight(), Bitmap.Config.ARGB_8888);
-                    overlayCanvas[a] = new Canvas(overlayBitmap[a]);
-                }
-                overlayMaskBitmap = Bitmap.createBitmap(getMeasuredWidth(), getMeasuredHeight(), Bitmap.Config.ARGB_8888);
-                overlayMaskCanvas = new Canvas(overlayMaskBitmap);
-
-                overlayEraserPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                overlayEraserPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
-
-                overlayMaskPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                overlayMaskPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-                bitmapsCreated = true;
-            } catch (Throwable e) {
-                return;
-            }
-        }
-        if (!bitmapsCreated) {
-            return;
-        }
         overrideColorProgress = override;
         overlayCx = 0;
         overlayCy = 0;
@@ -371,156 +361,232 @@ public class Switch extends View {
         invalidate();
     }
 
+    private void checkBitmaps() {
+        if (overrideColorProgress == 0) {
+            return;
+        }
+        final int padding = SwitchUiHelper.getOverlayPadding() * 4;
+        final int width = getMeasuredWidth() + padding;
+        final int height = getMeasuredHeight() + padding;
+        if (bitmapsCreated && overlayBitmap != null && overlayBitmap[0] != null && (overlayBitmap[0].getWidth() != width || overlayBitmap[0].getHeight() != height)) {
+            destroyBitmaps();
+        }
+        if (bitmapsCreated || width <= 0 || height <= 0) {
+            return;
+        }
+        try {
+            overlayBitmap = new Bitmap[2];
+            overlayCanvas = new Canvas[2];
+            for (int a = 0; a < 2; a++) {
+                overlayBitmap[a] = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                overlayCanvas[a] = new Canvas(overlayBitmap[a]);
+            }
+            overlayMaskBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            overlayMaskCanvas = new Canvas(overlayMaskBitmap);
+
+            overlayEraserPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            overlayEraserPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+
+            overlayMaskPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            overlayMaskPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
+            bitmapsCreated = true;
+        } catch (Throwable ignore) {}
+    }
+
+    private void destroyBitmaps() {
+        if (bitmapsCreated) {
+            if (overlayBitmap != null) {
+                for (int a = 0; a < overlayBitmap.length; a++) {
+                    if (overlayBitmap[a] != null) {
+                        overlayBitmap[a].recycle();
+                        overlayBitmap[a] = null;
+                    }
+                }
+                overlayBitmap = null;
+            }
+            if (overlayMaskBitmap != null) {
+                overlayMaskBitmap.recycle();
+                overlayMaskBitmap = null;
+            }
+        }
+        overlayCanvas = null;
+        overlayMaskCanvas = null;
+        bitmapsCreated = false;
+    }
+
+    private static int blendColors(int color1, int color2, float progress) {
+        final int red = (int) (Color.red(color1) + (Color.red(color2) - Color.red(color1)) * progress);
+        final int green = (int) (Color.green(color1) + (Color.green(color2) - Color.green(color1)) * progress);
+        final int blue = (int) (Color.blue(color1) + (Color.blue(color2) - Color.blue(color1)) * progress);
+        final int alpha = (int) (Color.alpha(color1) + (Color.alpha(color2) - Color.alpha(color1)) * progress);
+        return ((alpha & 0xff) << 24) | ((red & 0xff) << 16) | ((green & 0xff) << 8) | (blue & 0xff);
+    }
+
+    private float getColorProgress(int a) {
+        if (overrideColorProgress == 1) {
+            return a == 0 ? 0 : 1;
+        } else if (overrideColorProgress == 2) {
+            return a == 0 ? 1 : 0;
+        }
+        return Utilities.clamp01(progress);
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         if (getVisibility() != VISIBLE) {
             return;
         }
+        if (overrideColorProgress != 0) {
+            checkBitmaps();
+            if (!bitmapsCreated) {
+                overrideColorProgress = 0;
+            }
+        }
 
-        int width = AndroidUtilities.dp(31);
-        int thumb = AndroidUtilities.dp(20);
-        int x = (getMeasuredWidth() - width) / 2;
-        float y = (getMeasuredHeight() - AndroidUtilities.dpf2(14)) / 2;
-        int tx = x + AndroidUtilities.dp(7) + (int) (AndroidUtilities.dp(17) * progress);
-        int ty = getMeasuredHeight() / 2;
+        final boolean material3 = SwitchUiHelper.isMaterial3SwitchStyle();
+        final int overlayPadding = SwitchUiHelper.getOverlayPadding();
+        final int stateLayerRadius = SwitchUiHelper.getStateLayerRadius();
+        final boolean useAlphaLayer = material3 && overrideAlpha < 1f;
+        if (useAlphaLayer) {
+            canvas.saveLayerAlpha(-stateLayerRadius, -stateLayerRadius, getMeasuredWidth() + stateLayerRadius, getMeasuredHeight() + stateLayerRadius, (int) (overrideAlpha * 255));
+        }
 
+        final int width = AndroidUtilities.dp(31);
+        final int x;
+        final float y;
+        final float thumbX;
+        final float thumbY;
+        if (material3) {
+            x = 0;
+            y = 0;
+            thumbX = SwitchUiHelper.getThumbCenterX(getMeasuredWidth(), progress);
+            thumbY = getMeasuredHeight() / 2f;
+        } else {
+            x = (getMeasuredWidth() - width) / 2;
+            y = (getMeasuredHeight() - AndroidUtilities.dpf2(14)) / 2;
+            thumbX = x + AndroidUtilities.dp(8) + (int) (AndroidUtilities.dp(16) * progress);
+            thumbY = getMeasuredHeight() / 2;
+        }
+        final int tx = (int) thumbX;
+        final int ty = (int) thumbY;
 
-        int color1;
-        int color2;
-        float colorProgress;
-        int r1;
-        int r2;
-        int g1;
-        int g2;
-        int b1;
-        int b2;
-        int a1;
-        int a2;
-        int red;
-        int green;
-        int blue;
-        int alpha;
-        int color;
+        final int trackColor = processColor(SwitchUiHelper.getUnselectedTrackColor(trackColorKey, resourcesProvider));
+        final int trackCheckedColor = processColor(Theme.getColor(trackCheckedColorKey, resourcesProvider));
+        final int thumbColor = processColor(SwitchUiHelper.getUnselectedThumbColor(trackColorKey, thumbColorKey, resourcesProvider));
+        final int thumbCheckedColor = processColor(SwitchUiHelper.getSelectedThumbColor(thumbCheckedColorKey, resourcesProvider));
 
         for (int a = 0; a < 2; a++) {
             if (a == 1 && overrideColorProgress == 0) {
                 continue;
             }
-            Canvas canvasToDraw = a == 0 ? canvas : overlayCanvas[0];
+            final Canvas canvasToDraw = a == 0 ? canvas : overlayCanvas[0];
+            final int offset = a == 0 ? 0 : overlayPadding;
 
             if (a == 1) {
                 overlayBitmap[0].eraseColor(0);
                 paint.setColor(0xff000000);
-                overlayMaskCanvas.drawRect(0, 0, overlayMaskBitmap.getWidth(), overlayMaskBitmap.getHeight(), paint);
-                overlayMaskCanvas.drawCircle(overlayCx - getX(), overlayCy - getY(), overlayRad, overlayEraserPaint);
+                overlayMaskCanvas.drawRect(overlayPadding, overlayPadding, overlayMaskBitmap.getWidth() - overlayPadding, overlayMaskBitmap.getHeight() - overlayPadding, paint);
+                overlayMaskCanvas.drawCircle(overlayCx - getX() + overlayPadding, overlayCy - getY() + overlayPadding, overlayRad, overlayEraserPaint);
             }
-            if (overrideColorProgress == 1) {
-                colorProgress = a == 0 ? 0 : 1;
-            } else if (overrideColorProgress == 2) {
-                colorProgress = a == 0 ? 1 : 0;
-            } else {
-                colorProgress = progress;
+            final float colorProgress = getColorProgress(a);
+
+            if (a == 0 && iconDrawable != null && lastIconColor != (isChecked ? trackCheckedColor : trackColor)) {
+                iconDrawable.setColorFilter(new PorterDuffColorFilter(lastIconColor = (isChecked ? trackCheckedColor : trackColor), PorterDuff.Mode.MULTIPLY));
             }
 
-            color1 = processColor(Theme.getColor(trackColorKey, resourcesProvider));
-            color2 = processColor(Theme.getColor(trackCheckedColorKey, resourcesProvider));
-            if (a == 0 && iconDrawable != null && lastIconColor != (isChecked ? color2 : color1)) {
-                iconDrawable.setColorFilter(new PorterDuffColorFilter(lastIconColor = (isChecked ? color2 : color1), PorterDuff.Mode.MULTIPLY));
-            }
-
-            r1 = Color.red(color1);
-            r2 = Color.red(color2);
-            g1 = Color.green(color1);
-            g2 = Color.green(color2);
-            b1 = Color.blue(color1);
-            b2 = Color.blue(color2);
-            a1 = Color.alpha(color1);
-            a2 = Color.alpha(color2);
-
-            red = (int) (r1 + (r2 - r1) * colorProgress);
-            green = (int) (g1 + (g2 - g1) * colorProgress);
-            blue = (int) (b1 + (b2 - b1) * colorProgress);
-            alpha = (int) (a1 + (a2 - a1) * colorProgress);
-            color = ((alpha & 0xff) << 24) | ((red & 0xff) << 16) | ((green & 0xff) << 8) | (blue & 0xff);
+            final int color = blendColors(trackColor, trackCheckedColor, colorProgress);
             paint.setColor(color);
             paint2.setColor(color);
 
-            rectF.set(x, y, x + width, y + AndroidUtilities.dpf2(14));
-            canvasToDraw.drawRoundRect(rectF, AndroidUtilities.dpf2(7), AndroidUtilities.dpf2(7), paint);
-            canvasToDraw.drawCircle(tx, ty, AndroidUtilities.dpf2(10), paint);
+            if (material3) {
+                SwitchUiHelper.setTrackBounds(rectF, getMeasuredWidth(), getMeasuredHeight());
+                rectF.offset(offset, offset);
+                final float radius = rectF.height() / 2f;
+                canvasToDraw.drawRoundRect(rectF, radius, radius, paint);
+                final float outlineAlpha = 1f - colorProgress;
+                if (outlineAlpha > 0) {
+                    final float outlineWidth = SwitchUiHelper.getTrackOutlineWidth();
+                    outlinePaint.setColor(Theme.multAlpha(thumbColor, outlineAlpha));
+                    outlinePaint.setStrokeWidth(outlineWidth);
+                    rectF.inset(outlineWidth / 2f, outlineWidth / 2f);
+                    canvasToDraw.drawRoundRect(rectF, radius - outlineWidth / 2f, radius - outlineWidth / 2f, outlinePaint);
+                }
+            } else {
+                rectF.set(x, y, x + width, y + AndroidUtilities.dpf2(14));
+                canvasToDraw.drawRoundRect(rectF, AndroidUtilities.dpf2(7), AndroidUtilities.dpf2(7), paint);
+                canvasToDraw.drawCircle(tx + offset, ty + offset, AndroidUtilities.dpf2(10), paint);
+            }
 
             if (a == 0 && rippleDrawable != null) {
-                rippleDrawable.setBounds(tx - AndroidUtilities.dp(18), ty - AndroidUtilities.dp(18), tx + AndroidUtilities.dp(18), ty + AndroidUtilities.dp(18));
+                rippleDrawable.setBounds(tx - stateLayerRadius, ty - stateLayerRadius, tx + stateLayerRadius, ty + stateLayerRadius);
                 rippleDrawable.draw(canvasToDraw);
             } else if (a == 1) {
-                canvasToDraw.drawBitmap(overlayMaskBitmap, 0, 0, overlayMaskPaint);
+                canvasToDraw.drawBitmap(overlayMaskBitmap, -overlayPadding, -overlayPadding, overlayMaskPaint);
             }
         }
         if (overrideColorProgress != 0) {
-            canvas.drawBitmap(overlayBitmap[0], 0, 0, null);
+            canvas.drawBitmap(overlayBitmap[0], -overlayPadding, -overlayPadding, null);
         }
 
         for (int a = 0; a < 2; a++) {
             if (a == 1 && overrideColorProgress == 0) {
                 continue;
             }
-            Canvas canvasToDraw = a == 0 ? canvas : overlayCanvas[1];
+            final Canvas canvasToDraw = a == 0 ? canvas : overlayCanvas[1];
+            final int offset = a == 0 ? 0 : overlayPadding;
 
             if (a == 1) {
                 overlayBitmap[1].eraseColor(0);
             }
-            if (overrideColorProgress == 1) {
-                colorProgress = a == 0 ? 0 : 1;
-            } else if (overrideColorProgress == 2) {
-                colorProgress = a == 0 ? 1 : 0;
+            paint.setColor(blendColors(thumbColor, thumbCheckedColor, getColorProgress(a)));
+
+            if (material3) {
+                final float iconVisibility;
+                if (drawIconType == 1 || drawIconType == 2 || iconAnimator != null) {
+                    iconVisibility = 1f;
+                } else if (iconDrawable != null) {
+                    iconVisibility = animatorIconVisibility.getFloatValue();
+                } else {
+                    iconVisibility = 0f;
+                }
+                SwitchUiHelper.setThumbBounds(rectF, thumbX + offset, thumbY + offset, progress, isChecked, iconVisibility, animatorPressed.getFloatValue());
+                final float radius = rectF.height() / 2f;
+                canvasToDraw.drawRoundRect(rectF, radius, radius, paint);
             } else {
-                colorProgress = progress;
+                canvasToDraw.drawCircle(tx + offset, ty + offset, AndroidUtilities.dp(8), paint);
             }
-
-            color1 = Theme.getColor(thumbColorKey, resourcesProvider);
-            color2 = processColor(Theme.getColor(thumbCheckedColorKey, resourcesProvider));
-            r1 = Color.red(color1);
-            r2 = Color.red(color2);
-            g1 = Color.green(color1);
-            g2 = Color.green(color2);
-            b1 = Color.blue(color1);
-            b2 = Color.blue(color2);
-            a1 = Color.alpha(color1);
-            a2 = Color.alpha(color2);
-
-            red = (int) (r1 + (r2 - r1) * colorProgress);
-            green = (int) (g1 + (g2 - g1) * colorProgress);
-            blue = (int) (b1 + (b2 - b1) * colorProgress);
-            alpha = (int) (a1 + (a2 - a1) * colorProgress);
-            paint.setColor(((alpha & 0xff) << 24) | ((red & 0xff) << 16) | ((green & 0xff) << 8) | (blue & 0xff));
-
-            canvasToDraw.drawCircle(tx, ty, AndroidUtilities.dp(8), paint);
 
             if (a == 0) {
                 if (iconDrawable != null) {
-                    final float factor = animatorIconVisibility.getFloatValue();
+                    float factor = animatorIconVisibility.getFloatValue();
                     if (factor > 0) {
-                        final boolean needScale = factor < 1;
-                        if (needScale) {
-                            canvas.save();
-                            canvas.scale(factor, factor, tx, ty);
+                        final int iconWidth = iconDrawable.getIntrinsicWidth();
+                        final int iconHeight = iconDrawable.getIntrinsicHeight();
+                        if (material3) {
+                            factor *= SwitchUiHelper.getThumbIconScale(iconWidth, iconHeight);
                         }
-                        iconDrawable.setBounds(tx - iconDrawable.getIntrinsicWidth() / 2, ty - iconDrawable.getIntrinsicHeight() / 2, tx + iconDrawable.getIntrinsicWidth() / 2, ty + iconDrawable.getIntrinsicHeight() / 2);
-                        iconDrawable.draw(canvasToDraw);
-                        if (needScale) {
-                            canvas.restore();
-                        }
+                        canvas.save();
+                        canvas.translate(thumbX - iconWidth / 2f, thumbY - iconHeight / 2f);
+                        canvas.scale(factor, factor, iconWidth / 2f, iconHeight / 2f);
+                        iconDrawable.setBounds(0, 0, iconWidth, iconHeight);
+                        iconDrawable.draw(canvas);
+                        canvas.restore();
                     }
+                } else if (drawIconType == 1 && material3) {
+                    paint2.setStrokeWidth(SwitchUiHelper.getIconStrokeWidth());
+                    SwitchUiHelper.setCheckIconLines(iconLines, thumbX, thumbY, progress);
+                    canvasToDraw.drawLines(iconLines, paint2);
                 } else if (drawIconType == 1) {
-                    tx -= AndroidUtilities.dp(10.8f) - AndroidUtilities.dp(1.3f) * progress;
-                    ty -= AndroidUtilities.dp(8.5f) - AndroidUtilities.dp(0.5f) * progress;
-                    int startX2 = (int) AndroidUtilities.dpf2(4.6f) + tx;
-                    int startY2 = (int) (AndroidUtilities.dpf2(9.5f) + ty);
+                    paint2.setStrokeWidth(AndroidUtilities.dp(2));
+                    final int iconX = (int) (tx - (AndroidUtilities.dp(10.8f) - AndroidUtilities.dp(1.3f) * progress));
+                    final int iconY = (int) (ty - (AndroidUtilities.dp(8.5f) - AndroidUtilities.dp(0.5f) * progress));
+                    int startX2 = (int) AndroidUtilities.dpf2(4.6f) + iconX;
+                    int startY2 = (int) (AndroidUtilities.dpf2(9.5f) + iconY);
                     int endX2 = startX2 + AndroidUtilities.dp(2);
                     int endY2 = startY2 + AndroidUtilities.dp(2);
 
-                    int startX = (int) AndroidUtilities.dpf2(7.5f) + tx;
-                    int startY = (int) AndroidUtilities.dpf2(5.4f) + ty;
+                    int startX = (int) AndroidUtilities.dpf2(7.5f) + iconX;
+                    int startY = (int) AndroidUtilities.dpf2(5.4f) + iconY;
                     int endX = startX + AndroidUtilities.dp(7);
                     int endY = startY + AndroidUtilities.dp(7);
 
@@ -530,26 +596,32 @@ public class Switch extends View {
                     endY = (int) (endY + (endY2 - endY) * progress);
                     canvasToDraw.drawLine(startX, startY, endX, endY, paint2);
 
-                    startX = (int) AndroidUtilities.dpf2(7.5f) + tx;
-                    startY = (int) AndroidUtilities.dpf2(12.5f) + ty;
+                    startX = (int) AndroidUtilities.dpf2(7.5f) + iconX;
+                    startY = (int) AndroidUtilities.dpf2(12.5f) + iconY;
                     endX = startX + AndroidUtilities.dp(7);
                     endY = startY - AndroidUtilities.dp(7);
                     canvasToDraw.drawLine(startX, startY, endX, endY, paint2);
                 } else if (drawIconType == 2 || iconAnimator != null) {
                     paint2.setAlpha((int) (255 * (1.0f - iconProgress)));
-                    canvasToDraw.drawLine(tx, ty, tx, ty - AndroidUtilities.dp(5), paint2);
+                    paint2.setStrokeWidth(material3 ? SwitchUiHelper.getIconStrokeWidth() : AndroidUtilities.dp(2));
+                    final float hourHand = material3 ? SwitchUiHelper.getClockHandLength(true) : AndroidUtilities.dp(5);
+                    canvasToDraw.drawLine(thumbX, thumbY, thumbX, thumbY - hourHand, paint2);
                     canvasToDraw.save();
-                    canvasToDraw.rotate(-90 * iconProgress, tx, ty);
-                    canvasToDraw.drawLine(tx, ty, tx + AndroidUtilities.dp(4), ty, paint2);
+                    canvasToDraw.rotate(-90 * iconProgress, thumbX, thumbY);
+                    final float minuteHand = material3 ? SwitchUiHelper.getClockHandLength(false) : AndroidUtilities.dp(4);
+                    canvasToDraw.drawLine(thumbX, thumbY, thumbX + minuteHand, thumbY, paint2);
                     canvasToDraw.restore();
                 }
             }
             if (a == 1) {
-                canvasToDraw.drawBitmap(overlayMaskBitmap, 0, 0, overlayMaskPaint);
+                canvasToDraw.drawBitmap(overlayMaskBitmap, -overlayPadding, -overlayPadding, overlayMaskPaint);
             }
         }
         if (overrideColorProgress != 0) {
-            canvas.drawBitmap(overlayBitmap[1], 0, 0, null);
+            canvas.drawBitmap(overlayBitmap[1], -overlayPadding, -overlayPadding, null);
+        }
+        if (useAlphaLayer) {
+            canvas.restore();
         }
     }
 
@@ -559,6 +631,17 @@ public class Switch extends View {
         info.setClassName("android.widget.Switch");
         info.setCheckable(true);
         info.setChecked(isChecked);
-        //info.setContentDescription(isChecked ? LocaleController.getString(R.string.NotificationsOn) : LocaleController.getString(R.string.NotificationsOff));
+    }
+
+    @Override
+    public void setAlpha(float alpha) {
+        if (SwitchUiHelper.isMaterial3SwitchStyle()) {
+            overrideAlpha = alpha;
+            super.setAlpha(1.0f);
+            invalidate();
+        } else {
+            overrideAlpha = 1.0f;
+            super.setAlpha(alpha);
+        }
     }
 }

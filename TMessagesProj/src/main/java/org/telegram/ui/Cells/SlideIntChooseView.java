@@ -8,6 +8,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
@@ -41,6 +42,7 @@ import java.util.List;
 public class SlideIntChooseView extends FrameLayout {
 
     private final Theme.ResourcesProvider resourcesProvider;
+    private boolean needDivider;
 
     private final AnimatedTextView minText;
     private final AnimatedTextView valueText;
@@ -219,6 +221,13 @@ public class SlideIntChooseView extends FrameLayout {
         return value;
     }
 
+    public void setNeedDivider(boolean needDivider) {
+        if (this.needDivider != needDivider) {
+            this.needDivider = needDivider;
+            invalidate();
+        }
+    }
+
     public void setMinValueAllowed(int value) {
         minValueAllowed = value;
         if (this.value < minValueAllowed) {
@@ -242,6 +251,7 @@ public class SlideIntChooseView extends FrameLayout {
         valueText.setText(options.toString.run(0, value), animated);
         minText.setText(options.toString.run(-1, options.getMin()), animated);
         maxText.setText(options.toString.run(+1, options.getMax()), animated);
+        minText.setTextColor(Theme.getColor(value <= options.getMin() ? Theme.key_windowBackgroundWhiteValueText : Theme.key_windowBackgroundWhiteGrayText, resourcesProvider), animated);
         maxText.setTextColor(Theme.getColor(value >= options.getMax() ? Theme.key_windowBackgroundWhiteValueText : Theme.key_windowBackgroundWhiteGrayText, resourcesProvider), animated);
         setMaxTextEmojiSaturation(value >= options.getMax() ? 1f : 0f, animated);
     }
@@ -288,6 +298,14 @@ public class SlideIntChooseView extends FrameLayout {
                 AndroidUtilities.adjustBrightnessColorMatrix(colorMatrix, -.3f * (1f - maxTextEmojiSaturation));
             }
             maxText.setEmojiColorFilter(new ColorMatrixColorFilter(colorMatrix));
+        }
+    }
+
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        super.dispatchDraw(canvas);
+        if (needDivider) {
+            canvas.drawLine(0, getMeasuredHeight() - 1, getMeasuredWidth(), getMeasuredHeight() - 1, Theme.dividerPaint);
         }
     }
 

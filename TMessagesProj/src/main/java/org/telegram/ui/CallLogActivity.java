@@ -38,6 +38,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.exteragram.messenger.config.BottomNavigationBar;
+import com.exteragram.messenger.utils.ui.MainTabsUiHelper;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.DialogObject;
@@ -137,6 +139,8 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 	private HintView2 hideCallTabsHintView;
 	private boolean needFinishFragment = true;
 	private boolean hasMainTabs;
+	private MainTabsActivityController mainTabsActivityController;
+	private boolean mainTabsHiddenByScroll;
 
 	private @Nullable ImageView actionModeCloseView;
 	private NumberTextView selectedDialogsCountTextView;
@@ -382,7 +386,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 				}
 			}
 			if (otherItem != null) {
-				otherItem.setVisibility(calls.isEmpty() ? View.GONE : View.VISIBLE);
+				otherItem.setVisibility(calls.isEmpty() && !getUserConfig().showCallsTab ? View.GONE : View.VISIBLE);
 			}
 		} else if (id == NotificationCenter.messagesDeleted) {
 			if (!firstLoaded) {
@@ -706,8 +710,8 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 			hasMainTabs = arguments.getBoolean("hasMainTabs", false);
 		}
 
-		additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-		additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+		additionNavigationBarHeight = MainTabsUiHelper.getAdditionalNavigationBarHeight(hasMainTabs);
+		additionFloatingButtonOffset = MainTabsUiHelper.getTabsFabOffset(hasMainTabs);
 
 		return true;
 	}
@@ -725,6 +729,8 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 	@SuppressLint("UseCompatLoadingForDrawables")
     @Override
 	public View createView(Context context) {
+		additionNavigationBarHeight = MainTabsUiHelper.getAdditionalNavigationBarHeight(hasMainTabs);
+		additionFloatingButtonOffset = MainTabsUiHelper.getTabsFabOffset(hasMainTabs);
 		if (!hasMainTabs) {
 			actionBar.setBackButtonDrawable(new BackDrawable(false));
 		}
@@ -870,7 +876,10 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 				int firstViewTop = topChild != null ? topChild.getTop() : 0;
 
 				if (dy != 0 && scrollUpdated) {
-					floatingButton.setButtonVisible(dy < 0, true);
+					final boolean canScrollDown = recyclerView.canScrollVertically(1);
+					floatingButton.setButtonVisible(dy < 0 || !canScrollDown, true);
+					mainTabsHiddenByScroll = BottomNavigationBar.floating() && dy > 0 && canScrollDown;
+					updateMainTabsVisibility();
 				}
 				scrollUpdated = true;
 
@@ -1041,6 +1050,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 	private void onClick(UItem item, View view, int position, float x, float y) {
 		if (item.id == ID_SHOW_IN_MAIN_TABS) {
 			setCallsTabVisible(true);
+			otherItem.setVisibility(View.VISIBLE);
 			BulletinFactory.of(CallLogActivity.this)
 				.createSimpleBulletin(R.raw.contact_check, AndroidUtilities.replaceTags(getString(R.string.GroupCallTabWasShownTitle)), getString(R.string.UndoNoCaps), Bulletin.DURATION_PROLONG, true, () -> setCallsTabVisible(false))
 				.setDuration(Bulletin.DURATION_PROLONG)
@@ -1173,7 +1183,9 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 				calls.clear();
 				loading = false;
 				endReached = true;
-				otherItem.setVisibility(View.GONE);
+				if (!getUserConfig().showCallsTab) {
+					otherItem.setVisibility(View.GONE);
+				}
 				listView.adapter.update(true);
 			} else {
 				getMessagesController().deleteMessages(new ArrayList<>(selectedIds), null, null, 0, 0, checks[0], 0);
@@ -1442,7 +1454,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 				resumeDelayedFragmentAnimation();
 			}
 			firstLoaded = true;
-			otherItem.setVisibility(calls.isEmpty() ? View.GONE : View.VISIBLE);
+			otherItem.setVisibility(calls.isEmpty() && !getUserConfig().showCallsTab ? View.GONE : View.VISIBLE);
 			if (emptyView != null) {
 				emptyView.showTextView();
 			}
@@ -1456,8 +1468,21 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 	@Override
 	public void onResume() {
 		super.onResume();
+		mainTabsHiddenByScroll = false;
+		updateMainTabsVisibility();
 		if (listView != null) {
 			listView.adapter.update(true);
+		}
+	}
+
+	public void setMainTabsActivityController(MainTabsActivityController mainTabsActivityController) {
+		this.mainTabsActivityController = mainTabsActivityController;
+	}
+
+	@Override
+	public void updateMainTabsVisibility() {
+		if (mainTabsActivityController != null) {
+			mainTabsActivityController.setTabsVisible(BottomNavigationBar.visible() && !mainTabsHiddenByScroll);
 		}
 	}
 
@@ -1528,14 +1553,15 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 	}
 
 	private void checkUi_listViewPadding() {
+		final int floatingTabsPadding = MainTabsUiHelper.getFloatingTabsPadding(hasMainTabs);
 		listView.setPadding(
 			0,
 			dp(ADDITIONAL_LIST_HEIGHT_DP) + actionBar.getMeasuredHeight() + (int) topPanelLayout.getAnimatedHeightWithPadding(dp(14)),
 			0,
-			dp(ADDITIONAL_LIST_HEIGHT_DP) + navigationBarHeight + additionNavigationBarHeight
+			dp(ADDITIONAL_LIST_HEIGHT_DP) + navigationBarHeight + additionNavigationBarHeight + floatingTabsPadding
 		);
 
-		emptyView.setPadding(0, 0, 0, navigationBarHeight + additionNavigationBarHeight);
+		emptyView.setPadding(0, 0, 0, navigationBarHeight + additionNavigationBarHeight + floatingTabsPadding);
 	}
 
 
@@ -2019,16 +2045,17 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 		ItemOptions io = ItemOptions.makeOptions(this, otherItem);
 		// io.setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle));
 		io.setDimAlpha(0x08);
-		if (getUserConfig().showCallsTab) {
-			io.add(R.drawable.msg_archive_hide, getString(R.string.HideCallTab), () -> {
-				setCallsTabVisible(false);
-				final BulletinFactory factory = hasMainTabs ? BulletinFactory.global() : BulletinFactory.of(CallLogActivity.this);
-				factory.createSimpleBulletin(R.raw.contact_check, AndroidUtilities.replaceTags(getString(R.string.GroupCallTabWasHiddenTitle)), getString(R.string.UndoNoCaps), Bulletin.DURATION_PROLONG, true, () -> {
-					setCallsTabVisible(true);
-				}).setDuration(Bulletin.DURATION_PROLONG).show();
-			});
-		}
-		io.add(R.drawable.msg_delete, getString(R.string.DeleteAllCalls), true, () -> showDeleteAlert(true));
+		io.addIf(getUserConfig().showCallsTab, R.drawable.msg_archive_hide, getString(R.string.HideCallTab), () -> {
+			setCallsTabVisible(false);
+			if (calls.isEmpty()) {
+				otherItem.setVisibility(View.GONE);
+			}
+			final BulletinFactory factory = hasMainTabs ? BulletinFactory.global() : BulletinFactory.of(CallLogActivity.this);
+			factory.createSimpleBulletin(R.raw.contact_check, AndroidUtilities.replaceTags(getString(R.string.GroupCallTabWasHiddenTitle)), getString(R.string.UndoNoCaps), Bulletin.DURATION_PROLONG, true, () -> {
+				setCallsTabVisible(true);
+			}).setDuration(Bulletin.DURATION_PROLONG).show();
+		});
+		io.addIf(!calls.isEmpty(), R.drawable.msg_delete, getString(R.string.DeleteAllCalls), true, () -> showDeleteAlert(true));
 
 		io.show();
 		io.setTranslationY(-dp(64));
@@ -2070,11 +2097,9 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 		}
 
 		final int additionalList = dp(48) + (int) topPanelLayout.getAnimatedHeightWithPadding(dp(7));
-		final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
-		final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
 
 		iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList);
-		iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
+		MainTabsUiHelper.setBlurBounds(iBlur3PositionMainTabs, fragmentView, navigationBarHeight);
 		iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
 
 		scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, hasMainTabs ? 2 : 1);

@@ -30,12 +30,14 @@ import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 
 import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.ProxyDisableCondition;
 import com.exteragram.messenger.appicons.AppIconController;
 import com.exteragram.messenger.icons.IconManager;
 import com.exteragram.messenger.maps.yandex.YandexLocationProvider;
@@ -56,11 +58,14 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.Components.ForegroundDetector;
 import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.IUpdateLayout;
+import org.telegram.utils.proxy.ProxySettings;
 
 import java.io.File;
 import java.util.Locale;
 
-public class ApplicationLoader extends Application {
+public class ApplicationLoader extends Application implements androidx.work.Configuration.Provider {
+
+    private static final String PREF_PROXY_AUTO_DISABLED = "proxy_auto_disabled_by_vpn";
 
     public static ApplicationLoader applicationLoaderInstance;
 
@@ -242,6 +247,7 @@ public class ApplicationLoader extends Application {
                     } catch (Throwable ignore) {
 
                     }
+                    checkProxyForNetworkState();
 
                     boolean isSlow = isConnectionSlow();
                     for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -291,6 +297,8 @@ public class ApplicationLoader extends Application {
                 SendMessagesHelper.getInstance(a).checkUnsentMessages();
             }
         }
+
+        checkProxyForNetworkState();
 
         ApplicationLoader app = (ApplicationLoader) ApplicationLoader.applicationContext;
         app.initPushServices();
@@ -430,6 +438,12 @@ public class ApplicationLoader extends Application {
         NotificationCenter.sanitize();
     });
 
+    @NonNull
+    @Override
+    public androidx.work.Configuration getWorkManagerConfiguration() {
+        return new androidx.work.Configuration.Builder().build();
+    }
+
     @Override
     public void onTerminate() {
         if (ExteraConfig.getUseYandexMaps()) {
@@ -514,11 +528,19 @@ public class ApplicationLoader extends Application {
                             @Override
                             public void onAvailable(@NonNull Network network) {
                                 lastKnownNetworkType = -1;
+                                checkProxyForNetworkState();
                             }
 
                             @Override
                             public void onCapabilitiesChanged(@NonNull Network network, @NonNull NetworkCapabilities networkCapabilities) {
                                 lastKnownNetworkType = -1;
+                                checkProxyForNetworkState();
+                            }
+
+                            @Override
+                            public void onLost(@NonNull Network network) {
+                                lastKnownNetworkType = -1;
+                                checkProxyForNetworkState();
                             }
                         };
                         connectivityManager.registerDefaultNetworkCallback(networkCallback);
@@ -528,6 +550,88 @@ public class ApplicationLoader extends Application {
 
             }
         }
+    }
+
+    public static void checkProxyForNetworkState() {
+        if (applicationContext == null) {
+            return;
+        }
+        try {
+            SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+            boolean autoDisabled = preferences.getBoolean(PREF_PROXY_AUTO_DISABLED, false);
+            boolean shouldDisable = ExteraConfig.isProxyDisabledOn(ProxyDisableCondition.VPN) && isVpnEnabled() ||
+                    ExteraConfig.isProxyDisabledOn(ProxyDisableCondition.MOBILE_DATA) && hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                    ExteraConfig.isProxyDisabledOn(ProxyDisableCondition.WIFI) && hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+            if (shouldDisable) {
+                if (autoDisabled) {
+                    return;
+                }
+                boolean proxyEnabled = preferences.getBoolean("proxy_enabled", false);
+                String proxyAddress = preferences.getString("proxy_ip", "");
+                if (proxyEnabled && !TextUtils.isEmpty(proxyAddress)) {
+                    preferences.edit().putBoolean(PREF_PROXY_AUTO_DISABLED, true).putBoolean("proxy_enabled", false).apply();
+                    ConnectionsManager.setProxySettings(false, null);
+                    NotificationCenter.getGlobalInstance().postNotificationNameOnUIThread(NotificationCenter.proxySettingsChanged);
+                }
+            } else if (autoDisabled) {
+                String proxyAddress = preferences.getString("proxy_ip", "");
+                SharedPreferences.Editor editor = preferences.edit().putBoolean(PREF_PROXY_AUTO_DISABLED, false);
+                if (!TextUtils.isEmpty(proxyAddress)) {
+                    editor.putBoolean("proxy_enabled", true);
+                }
+                editor.apply();
+                if (!TextUtils.isEmpty(proxyAddress)) {
+                    ConnectionsManager.setProxySettings(true, ProxySettings.fromSharedPreferences(preferences));
+                    NotificationCenter.getGlobalInstance().postNotificationNameOnUIThread(NotificationCenter.proxySettingsChanged);
+                }
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
+    private static boolean hasTransport(int transport) {
+        try {
+            if (connectivityManager == null) {
+                connectivityManager = (ConnectivityManager) applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+            }
+            if (connectivityManager == null) {
+                return false;
+            }
+            Network network = connectivityManager.getActiveNetwork();
+            if (network == null) {
+                return false;
+            }
+            NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
+            return capabilities != null && capabilities.hasTransport(transport);
+        } catch (Throwable ignore) {
+            return false;
+        }
+    }
+
+    private static boolean isVpnEnabled() {
+        try {
+            if (connectivityManager == null) {
+                connectivityManager = (ConnectivityManager) applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+            }
+            if (connectivityManager == null) {
+                return false;
+            }
+            Network network = connectivityManager.getActiveNetwork();
+            if (network != null) {
+                NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
+                if (capabilities != null && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                    return true;
+                }
+            }
+            ensureCurrentNetworkGet(false);
+            if (currentNetworkInfo != null && currentNetworkInfo.getType() == ConnectivityManager.TYPE_VPN) {
+                return true;
+            }
+        } catch (Throwable ignore) {
+
+        }
+        return false;
     }
 
     public static boolean isRoaming() {

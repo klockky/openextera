@@ -758,7 +758,68 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
     }
 
     public void resetCurrentItem() {
-        setCurrentItem(adapter.getExtraCount(), false);
+        if (adapter == null) {
+            return;
+        }
+        final int page = getCurrentAvatarPage();
+        if (page >= 0 && getCurrentItem() != page) {
+            setCurrentItem(page, false);
+        }
+    }
+
+    public ImageLocation getCurrentAvatarImageLocation() {
+        final int index = getCurrentAvatarPhotoIndex();
+        if (index >= 0) {
+            return getImageLocation(index);
+        }
+        final int position = getRealPosition();
+        if (position >= 0) {
+            return getImageLocation(position);
+        }
+        return null;
+    }
+
+    private int getCurrentAvatarPage() {
+        final int count = adapter.getCount();
+        if (count <= 0) {
+            return -1;
+        }
+        final int index = getCurrentAvatarPhotoIndex();
+        if (index >= 0) {
+            return adapter.getExtraCount() + index;
+        }
+        final int currentItem = getCurrentItem();
+        return currentItem >= 0 && currentItem < count ? currentItem : adapter.getExtraCount();
+    }
+
+    private int getCurrentAvatarPhotoIndex() {
+        final TLRPC.Photo currentPhoto = getCurrentAvatarPhoto();
+        if (currentPhoto == null) {
+            return -1;
+        }
+        for (int i = 0; i < photos.size(); i++) {
+            final TLRPC.Photo photo = photos.get(i);
+            if (photo != null && photo.id == currentPhoto.id) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private TLRPC.Photo getCurrentAvatarPhoto() {
+        if (DialogObject.isChatDialog(dialogId)) {
+            return chatInfo != null ? chatInfo.chat_photo : null;
+        }
+        final MessagesController messagesController = MessagesController.getInstance(currentAccount);
+        final TLRPC.User user = messagesController.getUser(dialogId);
+        final TLRPC.UserFull userFull = messagesController.getUserFull(dialogId);
+        if (user == null || userFull == null) {
+            return null;
+        }
+        if (user.photo != null && user.photo.personal && userFull.personal_photo != null) {
+            return userFull.personal_photo;
+        }
+        return userFull.profile_photo;
     }
 
     public void setCurrentRealPosition(int realPosition, boolean smooth) {

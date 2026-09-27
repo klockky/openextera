@@ -592,6 +592,38 @@ public class ActionBarMenu extends LinearLayout {
         return (int) w;
     }
 
+    private int getMeasuredWidthWithMargins(View view) {
+        int width = view.getMeasuredWidth();
+        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams marginLayoutParams = (ViewGroup.MarginLayoutParams) layoutParams;
+            width += marginLayoutParams.leftMargin + marginLayoutParams.rightMargin;
+        }
+        return width;
+    }
+
+    public int getVisibleItemsCount() {
+        int count = 0;
+        for (int i = 0, childCount = getChildCount(); i < childCount; i++) {
+            View view = getChildAt(i);
+            if (view instanceof ActionBarMenuItem && ((ActionBarMenuItem) view).isVisibleForCenterTitle()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public int getVisibleItemsMeasuredWidthForCenterTitle() {
+        int w = 0;
+        for (int i = 0, childCount = getChildCount(); i < childCount; i++) {
+            View view = getChildAt(i);
+            if (view.getVisibility() == View.VISIBLE && (!(view instanceof ActionBarMenuItem) || ((ActionBarMenuItem) view).isVisibleForCenterTitle())) {
+                w += getMeasuredWidthWithMargins(view);
+            }
+        }
+        return w;
+    }
+
     public boolean searchFieldVisible() {
         int count = getChildCount();
         for (int a = 0; a < count; a++) {

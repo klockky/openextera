@@ -53,6 +53,8 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BotWebViewVibrationEffect;
@@ -526,7 +528,7 @@ public class ChangeUsernameActivity extends BaseFragment {
                 listView.forcedSections = new ArrayList<>();
             }
             if (usernames.size() > 0) {
-                listView.forcedSections.add(AndroidUtilities.pack(3, 3 + usernames.size()));
+                listView.forcedSections.add(AndroidUtilities.pack(ExteraConfig.getSectionsSeparatedHeaders() ? 4 : 3, 3 + usernames.size()));
             }
         }
 

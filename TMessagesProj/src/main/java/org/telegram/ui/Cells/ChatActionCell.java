@@ -63,6 +63,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
+import com.exteragram.messenger.AvatarCornerType;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.chats.ChatUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BotInlineKeyboard;
@@ -508,7 +512,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
         this.canDrawInParent = canDrawInParent;
         this.themeDelegate = resourcesProvider;
         imageReceiver = new ImageReceiver(this);
-        imageReceiver.setRoundRadius(AndroidUtilities.roundMessageSize / 2);
+        imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(AndroidUtilities.roundMessageSize, true));
         avatarDrawable = new AvatarDrawable();
         TAG = DownloadController.getInstance(currentAccount).generateObserverTag();
 
@@ -684,7 +688,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
             } else {
                 StoriesUtilities.setImage(imageReceiver, storyItem);
             }
-            imageReceiver.setRoundRadius((int) (stickerSize / 2f));
+            imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(stickerSize * 0.7f, true));
         } else if (messageObject.type == MessageObject.TYPE_ACTION_WALLPAPER) {
             TLRPC.PhotoSize strippedPhotoSize = null;
             if (messageObject.strippedThumb == null) {
@@ -725,7 +729,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
             } else {
                 wallpaperPreviewDrawable = null;
             }
-            imageReceiver.setRoundRadius((int) (stickerSize / 2f));
+            imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(stickerSize * 0.7f, true));
 
             float uploadingInfoProgress = getUploadingInfoProgress(messageObject);
             if (uploadingInfoProgress == 1f) {
@@ -735,7 +739,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
                 radialProgress.setIcon(MediaActionDrawable.ICON_CANCEL, !messageIdChanged, !messageIdChanged);
             }
         } else if (messageObject.type == MessageObject.TYPE_SUGGEST_PHOTO) {
-            imageReceiver.setRoundRadius((int) (stickerSize / 2f));
+            imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(stickerSize * 0.7f, true));
             imageReceiver.setAllowStartLottieAnimation(true);
             imageReceiver.setDelegate(null);
             TLRPC.TL_messageActionSuggestProfilePhoto action = (TLRPC.TL_messageActionSuggestProfilePhoto) messageObject.messageOwner.action;
@@ -988,7 +992,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
 
             imageReceiver.setAllowStartLottieAnimation(true);
             imageReceiver.setDelegate(null);
-            imageReceiver.setRoundRadius(dp(14));
+            imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(52, false, AvatarCornerType.COMMUNITY));
             imageReceiver.setAutoRepeatCount(1);
 
             avatarDrawable.setInfo(community);
@@ -996,7 +1000,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
         } else if (messageObject.type == MessageObject.TYPE_ACTION_PHOTO) {
             imageReceiver.setAllowStartLottieAnimation(true);
             imageReceiver.setDelegate(null);
-            imageReceiver.setRoundRadius(AndroidUtilities.roundMessageSize / 2);
+            imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(AndroidUtilities.roundMessageSize, true));
             imageReceiver.setAutoRepeatCount(1);
             long id = messageObject.getDialogId();
             avatarDrawable.setInfo(id, null, null);
@@ -1129,6 +1133,10 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
 
     @Override
     protected boolean onLongPress() {
+        if (actionPressed && onActionLongClick != null && onActionLongClick.onLongClick(this)) {
+            actionPressed = false;
+            return true;
+        }
         if (delegate != null) {
             return delegate.didLongPress(this, lastTouchX, lastTouchY);
         }
@@ -1243,6 +1251,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     if (x >= backgroundLeft && x <= backgroundRight) {
                         actionPressed = true;
+                        startCheckLongPress();
                         result = true;
                     }
                 } else if (actionPressed) {
@@ -1251,8 +1260,14 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
                         actionPressed = false;
                     } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
                         actionPressed = false;
+                    } else if (event.getAction() == MotionEvent.ACTION_MOVE && (x < backgroundLeft || x > backgroundRight)) {
+                        actionPressed = false;
+                        cancelCheckLongPress();
                     }
                 }
+            }
+            if (event.getAction() != MotionEvent.ACTION_DOWN && event.getAction() != MotionEvent.ACTION_MOVE) {
+                cancelCheckLongPress();
             }
             if (result) return true;
             return super.onTouchEvent(event);
@@ -1571,6 +1586,11 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
         this.onActionClick = l;
     }
 
+    private OnLongClickListener onActionLongClick;
+    public void setOnActionLongClickListener(@Nullable OnLongClickListener l) {
+        this.onActionLongClick = l;
+    }
+
     private boolean isGiftCode() {
         return currentMessageObject != null && currentMessageObject.messageOwner.action instanceof TLRPC.TL_messageActionGiftCode;
     }
@@ -1834,9 +1854,9 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
             }
             if (messageObject.type == MessageObject.TYPE_COMMUNITY_CHANGED) {
                 stickerSize = dp(52);
-                imageReceiver.setRoundRadius(dp(14));
+                imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(52, false, AvatarCornerType.COMMUNITY));
             } else if (isNewStyleButtonLayout()) {
-                imageReceiver.setRoundRadius(stickerSize / 2);
+                imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(stickerSize * 0.7f, true));
             } else {
                 imageReceiver.setRoundRadius(0);
             }
@@ -2061,6 +2081,9 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
                     }
                 } else {
                     text = AnimatedEmojiSpan.cloneSpans(messageObject.messageText);
+                }
+                if (ChatUtils.getInstance().shouldAddTimestamp(currentMessageObject, text)) {
+                    text = ChatUtils.getInstance().addTimestamp(text, currentMessageObject.messageOwner.date, themeDelegate);
                 }
             }
         } else {
@@ -2769,6 +2792,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
                 if (messageObject.type == MessageObject.TYPE_GIFT_THEME_UPDATE || messageObject.type == MessageObject.TYPE_GIFT_OFFER || messageObject.type == MessageObject.TYPE_GIFT_OFFER_REJECTED || messageObject.type == MessageObject.TYPE_SHARING_OFFER) {
                     imageSize += dp(20);
                 }
+                imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(imageSize, true, messageObject.type == MessageObject.TYPE_COMMUNITY_CHANGED ? AvatarCornerType.COMMUNITY : AvatarCornerType.DEFAULT));
             } else if (messageObject.type == MessageObject.TYPE_ACTION_PHOTO) {
                 imageReceiver.setImageCoords((previousWidth - stickerSize) / 2f, textY + textHeight + giftRectSize * 0.075f, stickerSize, stickerSize);
             } else if (messageObject.type == MessageObject.TYPE_GIFT_PREMIUM_CHANNEL) {

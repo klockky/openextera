@@ -42,6 +42,8 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DispatchQueue;
 import org.telegram.messenger.FileLog;
@@ -613,7 +615,7 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
         }
 
         int blurAlpha = Color.alpha(Theme.getColor(Theme.key_chat_BlurAlphaSlow));
-        if (blurAlpha == 255) {
+        if (blurAlpha == 255 && !ExteraConfig.getForceBlur()) {
             return;
         }
         int lastW = getMeasuredWidth();
@@ -973,6 +975,9 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
     }
 
     public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top, int blurAlpha) {
+        if (blurAlpha == 255 && ExteraConfig.getForceBlur()) {
+            blurAlpha = 200;
+        }
         if (!SharedConfig.chatBlurEnabled()) {
             canvas.drawRect(rectTmp, blurScrimPaint);
             return;

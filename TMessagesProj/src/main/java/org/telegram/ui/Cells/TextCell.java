@@ -626,16 +626,20 @@ public class TextCell extends FrameLayout {
     }
 
     public void setColorfulIcon(int colorTop, int colorBottom, int resId) {
+        setColorfulIcon(colorTop, colorBottom, resId, true);
+    }
+
+    public void setColorfulIcon(int colorTop, int colorBottom, int resId, boolean tint) {
         offsetFromImage = getOffsetFromImage(true);
         imageView.setVisibility(VISIBLE);
         imageView.setPadding(dp(2), dp(2), dp(2), dp(2));
         imageView.setTranslationX(dp(LocaleController.isRTL ? 0 : -3));
         imageView.setImageResource(resId);
-        imageView.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
+        imageView.setColorFilter(tint ? new PorterDuffColorFilter(Theme.isCurrentThemeMonet() ? Theme.getColor(Theme.key_chats_actionIcon) : Color.WHITE, PorterDuff.Mode.SRC_IN) : null);
 
         final boolean border = resourcesProvider != null ? resourcesProvider.isDark() : Theme.isCurrentThemeDark();
         SettingsActivity.SettingCell.Background drawable = new SettingsActivity.SettingCell.Background();
-        drawable.setColor(colorTop, colorBottom);
+        drawable.setColor(colorTop, colorBottom, tint && Theme.isCurrentThemeMonet());
         drawable.setDrawBorder(border);
         imageView.setBackground(drawable);
     }

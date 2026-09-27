@@ -47,6 +47,7 @@ public class NotificationsCheckCell extends FrameLayout {
     private int currentHeight;
     private boolean animationsEnabled;
     private Theme.ResourcesProvider resourcesProvider;
+    private final int textOffset;
 
     public NotificationsCheckCell(Context context) {
         this(context, 21, 70, false, null);
@@ -61,8 +62,13 @@ public class NotificationsCheckCell extends FrameLayout {
     }
 
     public NotificationsCheckCell(Context context, int padding, int height, boolean withImage, Theme.ResourcesProvider resourcesProvider) {
+        this(context, padding, height, 64, withImage, resourcesProvider);
+    }
+
+    public NotificationsCheckCell(Context context, int padding, int height, int textOffset, boolean withImage, Theme.ResourcesProvider resourcesProvider) {
         super(context);
         this.resourcesProvider = resourcesProvider;
+        this.textOffset = textOffset;
 
         setWillNotDraw(false);
         currentHeight = height;
@@ -71,18 +77,19 @@ public class NotificationsCheckCell extends FrameLayout {
             imageView = new ImageView(context);
             imageView.setFocusable(false);
             imageView.setScaleType(ImageView.ScaleType.CENTER);
-            addView(imageView, LayoutHelper.createFrame(48, 48, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL, 8, 0, 8, 0));
+            addView(imageView, LayoutHelper.createFrame(48, 48, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL, 9, 0, 7, 0));
         }
 
         textView = new TextView(context);
         textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        textView.setTypeface(AndroidUtilities.regular());
         textView.setLines(1);
         textView.setMaxLines(1);
         textView.setSingleLine(true);
         textView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
         textView.setEllipsize(TextUtils.TruncateAt.END);
-        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 80 : (withImage ? 64 : padding), 13 + (currentHeight - 70) / 2, LocaleController.isRTL ? (withImage ? 64 : padding) : 80, 0));
+        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 88 : (withImage ? textOffset : padding), 13 + (currentHeight - 70) / 2, LocaleController.isRTL ? (withImage ? textOffset : padding) : 88, 0));
 
         valueTextView = new AnimatedTextView(context);
         valueTextView.setAnimationProperties(.55f, 0, 320, CubicBezierInterpolator.EASE_OUT_QUINT);
@@ -91,7 +98,7 @@ public class NotificationsCheckCell extends FrameLayout {
         valueTextView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
         valueTextView.setPadding(0, 0, 0, 0);
         valueTextView.setEllipsizeByGradient(true);
-        addView(valueTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 80 : (withImage ? 64 : padding), 38 - 9 - (withImage ? 2 : 0) + (currentHeight - 70) / 2, LocaleController.isRTL ? (withImage ? 64 : padding) : 80, 0));
+        addView(valueTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 88 : (withImage ? textOffset : padding), 38 - 9 - (withImage ? 2 : 0) + (currentHeight - 70) / 2, LocaleController.isRTL ? (withImage ? textOffset : padding) : 88, 0));
 
         multilineValueTextView = new TextView(context);
         multilineValueTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
@@ -103,7 +110,7 @@ public class NotificationsCheckCell extends FrameLayout {
         multilineValueTextView.setEllipsize(null);
         multilineValueTextView.setPadding(0, 0, 0, 0);
         multilineValueTextView.setVisibility(View.GONE);
-        addView(multilineValueTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 80 : (withImage ? 64 : padding), 38 - (withImage ? 2 : 0) + (currentHeight - 70) / 2, LocaleController.isRTL ? (withImage ? 64 : padding) : 80, 0));
+        addView(multilineValueTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 88 : (withImage ? textOffset : padding), 38 - (withImage ? 2 : 0) + (currentHeight - 70) / 2, LocaleController.isRTL ? (withImage ? textOffset : padding) : 88, 0));
 
         checkBox = new Switch(context, resourcesProvider) {
             @Override
@@ -112,8 +119,9 @@ public class NotificationsCheckCell extends FrameLayout {
             }
         };
         checkBox.setColors(Theme.key_switchTrack, Theme.key_switchTrackChecked, Theme.key_windowBackgroundWhite, Theme.key_windowBackgroundWhite);
-        addView(checkBox, LayoutHelper.createFrame(37, 40, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.CENTER_VERTICAL, 21, 0, 21, 0));
+        addView(checkBox, LayoutHelper.createFrame(37, 40, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.CENTER_VERTICAL, 22, 0, 22, 0));
         checkBox.setFocusable(false);
+        setClipChildren(false);
     }
 
     public Switch getCheckBox() {
@@ -172,7 +180,7 @@ public class NotificationsCheckCell extends FrameLayout {
         if (multiline) {
             multilineValueTextView.setVisibility(View.VISIBLE);
             valueTextView.setVisibility(View.GONE);
-            multilineValueTextView.setPadding(0, 0, 0, dp(14));
+            multilineValueTextView.setPadding(0, 0, 0, dp(8));
         } else {
             multilineValueTextView.setVisibility(View.GONE);
             valueTextView.setVisibility(View.VISIBLE);
@@ -208,9 +216,9 @@ public class NotificationsCheckCell extends FrameLayout {
     protected void onDraw(Canvas canvas) {
         if (needDivider) {
             canvas.drawLine(
-                LocaleController.isRTL ? 0 : dp(imageView != null ? 64 : 20),
+                LocaleController.isRTL ? 0 : dp(imageView != null ? textOffset - dp(2) : 20),
                 getMeasuredHeight() - 1,
-                getMeasuredWidth() - (LocaleController.isRTL ? dp(imageView != null ? 64 : 20) : 0),
+                getMeasuredWidth() - (LocaleController.isRTL ? dp(imageView != null ? textOffset - dp(2) : 20) : 0),
                 getMeasuredHeight() - 1,
                 Theme.dividerPaint
             );
@@ -220,6 +228,14 @@ public class NotificationsCheckCell extends FrameLayout {
             int y = (getMeasuredHeight() - dp(22)) / 2;
             canvas.drawRect(x, y, x + 2, y + dp(22), Theme.dividerPaint);
         }
+    }
+
+    public TextView getMultilineValue() {
+        return multilineValueTextView;
+    }
+
+    public ImageView getImageView() {
+        return imageView;
     }
 
     public void setAnimationsEnabled(boolean animationsEnabled) {

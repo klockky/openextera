@@ -20,6 +20,8 @@ import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.DialogObject;
@@ -91,7 +93,7 @@ public class ReplyMessageLine {
                         emoji.detach();
                     }
                     if (sticker != null) {
-                        sticker.attach();
+                        sticker.detach();
                     }
                 }
             });
@@ -189,17 +191,33 @@ public class ReplyMessageLine {
         }
 
         reversedOut = false;
-        color1 = p.colors.get(0) | 0xFF000000;
-        if (hasColor2 = colors.size() >= 2) {
-            color2 = p.colors.get(1) | 0xFF000000;
+        if (!ExteraConfig.getReplyColors()) {
+            hasColor2 = false;
+            hasColor3 = false;
+            color1 = color2 = color3 = Theme.getColor(Theme.key_chat_inReplyLine, resourcesProvider);
+            nameColor = Theme.getColor(Theme.key_chat_inReplyNameText, resourcesProvider);
+        } else {
+            color1 = colors.get(0) | 0xFF000000;
+            if (hasColor2 = colors.size() >= 2) {
+                color2 = colors.get(1) | 0xFF000000;
+            }
+            if (hasColor3 = colors.size() >= 3) {
+                color3 = colors.get(2) | 0xFF000000;
+            }
+            nameColor = accent_color | 0xFF000000;
         }
-        if (hasColor3 = colors.size() >= 3) {
-            color3 = p.colors.get(2) | 0xFF000000;
+        if (!ExteraConfig.getReplyBackground()) {
+            backgroundColor = 0;
+        } else {
+            backgroundColor = Theme.multAlpha(ExteraConfig.getReplyColors() ? nameColor : color1, 0.10f);
         }
-        nameColor = accent_color | 0xFF000000;
-        backgroundColor = Theme.multAlpha(nameColor, 0.10f);
-        emojiDocumentId = p.background_emoji_id;
-        stickerDocumentId = p.gift_emoji_id;
+        if (ExteraConfig.getReplyEmoji()) {
+            emojiDocumentId = p.background_emoji_id;
+            stickerDocumentId = p.gift_emoji_id;
+        } else {
+            emojiDocumentId = 0;
+            stickerDocumentId = 0;
+        }
         if (emojiDocumentId != 0 && emoji == null && parentView != null) {
             emoji = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(parentView, false, dp(20), AnimatedEmojiDrawable.CACHE_TYPE_ALERT_PREVIEW_STATIC);
             if (parentView instanceof ChatMessageCell ? ((ChatMessageCell) parentView).isCellAttachedToWindow() : parentView.isAttachedToWindow()) {
@@ -359,9 +377,16 @@ public class ReplyMessageLine {
             } else {
                 colorId = 0;
             }
-            resolveColor(messageObject, colorId, resourcesProvider);
-            backgroundColor = Theme.multAlpha(color1, 0.10f);
-            nameColor = color1;
+            if (!ExteraConfig.getReplyColors()) {
+                hasColor2 = false;
+                hasColor3 = false;
+                color1 = color2 = color3 = Theme.getColor(Theme.key_chat_inReplyLine, resourcesProvider);
+                nameColor = Theme.getColor(Theme.key_chat_inReplyNameText, resourcesProvider);
+            } else {
+                resolveColor(messageObject, colorId, resourcesProvider);
+                nameColor = color1;
+            }
+            backgroundColor = !ExteraConfig.getReplyBackground() ? 0 : Theme.multAlpha(color1, 0.10f);
         } else if (type == TYPE_REPLY && (
             messageObject.overrideLinkColor >= 0 ||
             messageObject.messageOwner != null &&
@@ -409,20 +434,27 @@ public class ReplyMessageLine {
             } else {
                 colorId = 0;
             }
-            resolveColor(messageObject.replyMessageObject, colorId, resourcesProvider);
-            backgroundColor = Theme.multAlpha(color1, 0.10f);
-            nameColor = color1;
+            if (!ExteraConfig.getReplyColors()) {
+                hasColor2 = false;
+                hasColor3 = false;
+                color1 = color2 = color3 = Theme.getColor(Theme.key_chat_inReplyLine, resourcesProvider);
+                nameColor = Theme.getColor(Theme.key_chat_inReplyNameText, resourcesProvider);
+            } else {
+                resolveColor(messageObject.replyMessageObject, colorId, resourcesProvider);
+                nameColor = color1;
+            }
+            backgroundColor = !ExteraConfig.getReplyBackground() ? 0 : Theme.multAlpha(color1, 0.10f);
         } else {
             hasColor2 = false;
             hasColor3 = false;
             color1 = color2 = color3 = Theme.getColor(Theme.key_chat_inReplyLine, resourcesProvider);
-            backgroundColor = Theme.multAlpha(color1, 0.10f);
+            backgroundColor = ExteraConfig.getReplyBackground() || type == TYPE_QUOTE ? Theme.multAlpha(color1, 0.10f) : 0;
             nameColor = Theme.getColor(Theme.key_chat_inReplyNameText, resourcesProvider);
         }
         if (messageObject.shouldDrawWithoutBackground()) {
             hasColor2 = false;
             hasColor3 = false;
-            color1 = color2 = color3 = Color.WHITE;
+            color1 = color2 = color3 = Theme.isCurrentThemeMonet(resourcesProvider) ? Theme.getColor(Theme.key_chat_inReplyLine, resourcesProvider) : Color.WHITE;
             backgroundColor = Color.TRANSPARENT;
             nameColor = Theme.getColor(Theme.key_chat_stickerReplyNameText, resourcesProvider);
         } else if (messageObject.isOutOwner() || type == TYPE_CODE) {
@@ -439,11 +471,14 @@ public class ReplyMessageLine {
                 reversedOut = true;
                 color1 = Theme.multAlpha(color1, .35f);
             }
-            backgroundColor = Theme.multAlpha(color3, dark ? 0.12f : 0.10f);
+            backgroundColor = ExteraConfig.getReplyBackground() || type != TYPE_REPLY ? Theme.multAlpha(color3, dark ? 0.12f : 0.10f) : 0;
             nameColor = Theme.getColor(Theme.key_chat_outReplyNameText, resourcesProvider);
         }
         if ((type == TYPE_REPLY || type == TYPE_LINK || type == TYPE_CONTACT) && messageObject != null && messageObject.overrideLinkEmoji != -1) {
             emojiDocumentId = messageObject.overrideLinkEmoji;
+        }
+        if (!ExteraConfig.getReplyEmoji()) {
+            emojiDocumentId = 0;
         }
         if (emojiDocumentId != 0 && emoji == null && parentView != null) {
             emoji = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(parentView, false, dp(20), AnimatedEmojiDrawable.CACHE_TYPE_ALERT_PREVIEW_STATIC);

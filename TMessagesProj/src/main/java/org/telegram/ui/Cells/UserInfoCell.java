@@ -25,6 +25,10 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 
+import com.exteragram.messenger.api.dto.BadgeDTO;
+import com.exteragram.messenger.badges.BadgesController;
+import com.exteragram.messenger.regdate.RegDateController;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
@@ -83,6 +87,9 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
     private float height;
     private float width;
 
+    private final int textColor;
+    private boolean timestampSent = false;
+
     private class Row {
         public Text key;
         public Text value;
@@ -109,9 +116,9 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
         return row;
     }
 
-    public static String displayDate(String date) {
+    public static long getTimestamp(String date) {
         final String[] parts = date.split("\\.");
-        if (parts.length != 2) return date;
+        if (parts.length != 2) return 0;
         final int month = Integer.parseInt(parts[0]);
         final int year = Integer.parseInt(parts[1]);
 
@@ -119,7 +126,11 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
         calendar.set(year, month - 1, 1, 0, 0, 0);
         calendar.set(Calendar.MILLISECOND, 0);
 
-        return LocaleController.formatYearMont(calendar.getTimeInMillis() / 1000L, true);
+        return calendar.getTimeInMillis() / 1000L;
+    }
+
+    public static String displayDate(String date) {
+        return LocaleController.formatYearMont(getTimestamp(date), true);
     }
 
     public UserInfoCell(Context context, int currentAccount, Theme.ResourcesProvider resourcesProvider) {
@@ -127,6 +138,7 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
 
         this.currentAccount = currentAccount;
         this.resourcesProvider = resourcesProvider;
+        textColor = Theme.getColor(Theme.key_chat_serviceText, resourcesProvider);
 
         groupsRipple = Theme.createRadSelectorDrawable(0x30FFFFFF, 8, 8);
         groupsRipple.setCallback(this);
@@ -138,7 +150,7 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
         groupsAvatars.setAvatarsTextSize(dp(18));
 
         groupsArrow = context.getResources().getDrawable(R.drawable.msg_mini_forumarrow).mutate();
-        groupsArrow.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
+        groupsArrow.setColorFilter(new PorterDuffColorFilter(textColor, PorterDuff.Mode.SRC_IN));
     }
 
     @Override
@@ -167,6 +179,10 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
             addRow(getString(R.string.ContactInfoPhone), getCountryWithFlag(settings.phone_country, 12, R.string.ContactInfoPhoneFragment), false);
         }
         if (settings != null && settings.registration_month != null) {
+            if (!timestampSent) {
+                RegDateController.getInstance(currentAccount).addRegistrationDate(dialogId, getTimestamp(settings.registration_month), result -> {});
+                timestampSent = true;
+            }
             addRow(getString(R.string.ContactInfoRegistration), displayDate(settings.registration_month), false);
         }
 //        if (settings != null && settings.location_country != null) {
@@ -200,7 +216,20 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
 
         rowsWidth = rowsKeysWidth + dp(7.66f) + rowsValuesWidth;
         if (user != null && !user.verified && !UserObject.isService(user.id)) {
-            if (user.bot_verification_icon != 0) {
+            if (BadgesController.INSTANCE.isDeveloper(user)) {
+                final BadgeDTO badge = BadgesController.INSTANCE.getBadge(user);
+                if (badge != null) {
+                    final SpannableStringBuilder sb = new SpannableStringBuilder("i  ");
+                    footer = new Text(sb, 12);
+                    sb.setSpan(new AnimatedEmojiSpan(badge.getDocumentId(), footer.getFontMetricsInt()), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    sb.append(AndroidUtilities.replaceTags(badge.getText() != null ? badge.getText() : getString(R.string.DeveloperCompact)));
+                    footer = new Text(sb, 12).align(Layout.Alignment.ALIGN_CENTER).multiline(5).setMaxWidth(Math.min(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y) * .5f).supportAnimatedEmojis(this);
+                    height += dp(12) + footer.getHeight() + dp(15.33f);
+                } else {
+                    footer = null;
+                    height += dp(14);
+                }
+            } else if (user.bot_verification_icon != 0) {
                 if (userFull != null && userFull.bot_verification != null) {
                     final TL_bots.botVerification verification = userFull.bot_verification;
                     final SpannableStringBuilder sb = new SpannableStringBuilder("i  ");
@@ -313,14 +342,16 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
         Y += dp(14);
         title
             .ellipsize(width - dp(32))
-            .draw(canvas, cx - title.getWidth() / 2.0f, title.getHeight() / 2.0f, Color.WHITE, 1.0f);
+            .draw(canvas, cx - title.getWidth() / 2.0f, title.getHeight() / 2.0f, textColor, 1.0f);
         canvas.translate(0, title.getHeight() + dp(3));
         Y += title.getHeight() + dp(3);
         subtitle
             .ellipsize(width - dp(32))
-            .draw(canvas, cx - subtitle.getWidth() / 2.0f, subtitle.getHeight() / 2.0f, Color.WHITE, 0.7f);
+            .draw(canvas, cx - subtitle.getWidth() / 2.0f, subtitle.getHeight() / 2.0f, textColor, 0.7f);
         canvas.translate(0, subtitle.getHeight() + dp(11));
         Y += subtitle.getHeight() + dp(11);
+
+        final float rowsLeft = cx - rowsWidth / 2.0f;
 
         for (int i = 0; i < rows.size(); ++i) {
             if (i > 0) {
@@ -329,15 +360,15 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
             }
             canvas.save();
             final Row row = rows.get(i);
-            final float keyX = cx - width / 2.0f + dp(16) + rowsKeysWidth - row.key.getCurrentWidth();
-            final float valueX = cx - width / 2.0f + dp(16) + rowsKeysWidth + dp(7.66f);
+            final float keyX = rowsLeft + rowsKeysWidth - row.key.getCurrentWidth();
+            final float valueX = rowsLeft + rowsKeysWidth + dp(7.66f);
             row.key
                 .ellipsize(valueX - keyX - dp(7.66f))
-                .draw(canvas, keyX, row.key.getHeight() / 2.0f, Color.WHITE, 0.7f);
+                .draw(canvas, keyX, row.key.getHeight() / 2.0f, textColor, 0.7f);
             row.bounds.set(
-                cx - width / 2.0f + dp(16) + rowsKeysWidth + dp(7.66f),
+                valueX,
                 Y,
-                cx - width / 2.0f + dp(16) + rowsKeysWidth + dp(7.66f) + row.value.getCurrentWidth() + (row.avatars ? dp(5) + groupsArrow.getIntrinsicWidth() * 0.8f + groupsAvatars.getMaxX() : 0),
+                valueX + row.value.getCurrentWidth() + (row.avatars ? dp(5) + groupsArrow.getIntrinsicWidth() * 0.8f + groupsAvatars.getMaxX() : 0),
                 Y + row.value.getHeight()
             );
             if (groupsRow == row) {
@@ -352,10 +383,10 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
             }
             row.value
                 .ellipsize(cx + width / 2.0f - dp(8) - valueX)
-                .draw(canvas, valueX, row.value.getHeight() / 2.0f, Color.WHITE, 1.0f);
+                .draw(canvas, valueX, row.value.getHeight() / 2.0f, textColor, 1.0f);
             if (row.avatars) {
                 canvas.save();
-                canvas.translate(cx - width / 2.0f + dp(16) + rowsKeysWidth + dp(7.66f) + row.value.getCurrentWidth() + dp(4), dp(1));
+                canvas.translate(valueX + row.value.getCurrentWidth() + dp(4), dp(1));
                 groupsAvatars.onDraw(canvas);
                 canvas.translate(groupsAvatars.getMaxX() + dp(1), dp(13) / 2.0f);
                 final float s = 0.8f;
@@ -371,11 +402,11 @@ public class UserInfoCell extends View implements NotificationCenter.Notificatio
         if (footer != null) {
             canvas.translate(0, dp(12));
             if (footer.isMultiline()) {
-                footer.draw(canvas, cx - footer.getWidth() / 2.0f, 0, Color.WHITE, 0.7f);
+                footer.draw(canvas, cx - footer.getWidth() / 2.0f, 0, textColor, 0.7f);
             } else {
                 footer
                     .ellipsize(width - dp(32))
-                    .draw(canvas, cx - footer.getWidth() / 2.0f, footer.getHeight() / 2.0f, Color.WHITE, 0.7f);
+                    .draw(canvas, cx - footer.getWidth() / 2.0f, footer.getHeight() / 2.0f, textColor, 0.7f);
             }
         }
 

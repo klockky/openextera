@@ -29,6 +29,8 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.utils.network.RemoteUtils;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.SQLite.SQLitePreparedStatement;
@@ -1129,6 +1131,12 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                         final TLRPC.TL_contacts_sponsoredPeers r = (TLRPC.TL_contacts_sponsoredPeers) res;
                         MessagesController.getInstance(currentAccount).putUsers(r.users, true);
                         MessagesController.getInstance(currentAccount).putChats(r.chats, true);
+                        if (RemoteUtils.getBooleanConfigValue("hide_ads", false)) {
+                            for (TLRPC.TL_sponsoredPeer peer : r.peers) {
+                                seenSponsoredPeer(peer);
+                            }
+                            r.peers.clear();
+                        }
                         sponsoredPeers.addAll(r.peers);
                         notifyDataSetChanged();
                     }

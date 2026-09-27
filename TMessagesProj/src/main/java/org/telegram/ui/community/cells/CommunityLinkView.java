@@ -1,5 +1,8 @@
 package org.telegram.ui.community.cells;
 
+import com.exteragram.messenger.AvatarCornerType;
+import com.exteragram.messenger.ExteraConfig;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.formatPluralString;
 
@@ -44,7 +47,7 @@ public class CommunityLinkView extends FrameLayout implements Theme.Colorable {
         this.resourcesProvider = resourcesProvider;
 
         avatarView = new BackupImageView(context);
-        avatarView.setRoundRadius(dp(9));
+        avatarView.setRoundRadius(ExteraConfig.getAvatarCorners(32, false, AvatarCornerType.COMMUNITY));
         addView(avatarView, LayoutHelper.createFrame(32, 32, Gravity.LEFT | Gravity.CENTER_VERTICAL, 20, 0, 0, 0));
 
         final LinearLayout textBlock = new LinearLayout(context);

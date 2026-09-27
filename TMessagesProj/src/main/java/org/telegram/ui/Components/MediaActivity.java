@@ -28,6 +28,8 @@ import android.widget.FrameLayout;
 
 import androidx.core.graphics.ColorUtils;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BotWebViewVibrationEffect;
 import org.telegram.messenger.ContactsController;
@@ -151,6 +153,14 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
             Runnable runnable = applyBulletin;
             applyBulletin = null;
             AndroidUtilities.runOnUIThread(runnable);
+        }
+        Bulletin.removeDelegate(this);
+        if (sharedMediaLayout != null) {
+            sharedMediaLayout.onDestroy();
+        }
+        if (sharedMediaPreloader != null) {
+            sharedMediaPreloader.onDestroy(this);
+            sharedMediaPreloader.removeDelegate(this);
         }
     }
 
@@ -390,7 +400,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
             }
         };
         avatarImageView.getImageReceiver().setAllowDecodeSingleFrame(true);
-        avatarImageView.setRoundRadius(dp(getDialogId() == getUserConfig().getClientUserId() && topicId == 0 && getMessagesController().savedViewAsChats ? 13 : 21));
+        avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(42, false, getDialogId() == getUserConfig().getClientUserId() && topicId == 0 && getMessagesController().savedViewAsChats));
         avatarImageView.setPivotX(0);
         avatarImageView.setPivotY(0);
         AvatarDrawable avatarDrawable = new AvatarDrawable();

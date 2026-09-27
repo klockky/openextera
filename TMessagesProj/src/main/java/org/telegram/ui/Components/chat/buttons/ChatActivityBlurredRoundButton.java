@@ -18,6 +18,8 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CircularProgressDrawable;
@@ -47,6 +49,7 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
     private @Nullable ImageView imageView;
     private @Nullable ImageView loadingIndicatorView;
     private CircularProgressDrawable loadingIndicatorDrawable;
+    private int iconColor;
     private Theme.ResourcesProvider resourcesProvider;
 
     @Override
@@ -100,6 +103,7 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
         if (imageView == null) {
             return;
         }
+        iconColor = color;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             imageView.setColorFilter(new BlendModeColorFilter(color, BlendMode.SRC_IN));
@@ -121,17 +125,27 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
     private BlurredBackgroundDrawable backgroundDrawable;
     public void setBlurredBackgroundDrawable(BlurredBackgroundDrawable drawable) {
         backgroundDrawable = drawable;
-        backgroundDrawable.setPadding(dp(CLICK_ZONE_MARGIN));
-        backgroundDrawable.setRadius(dp(BUTTON_SIZE / 2f));
+        backgroundDrawable.setPadding(dp(4));
+        backgroundDrawable.setRadius(dp(24));
     }
 
     public void showLoading(boolean loading, boolean animated) {
+        showLoading(loading, animated, 24, 3, 0.75f, 7, 6);
+    }
+
+    public void showLoading(boolean loading, boolean animated, float size, float thickness, float amplitude, float wavelength, float speed) {
         if (loadingIndicatorView == null) {
             if (!loading) {
                 return;
             }
 
-            loadingIndicatorDrawable = new CircularProgressDrawable(AndroidUtilities.dp(18), AndroidUtilities.dp(1.7f), 0xFF757575);
+            if (ExteraConfig.getNewLoadingStyle()) {
+                loadingIndicatorDrawable = new CircularProgressDrawable(AndroidUtilities.dp(size), AndroidUtilities.dp(thickness), 0xFF757575, iconColor);
+                loadingIndicatorDrawable.setStyle(CircularProgressDrawable.STYLE_CIRCULAR_WAVY, getContext());
+                loadingIndicatorDrawable.setWavyValues(amplitude, wavelength, speed);
+            } else {
+                loadingIndicatorDrawable = new CircularProgressDrawable(AndroidUtilities.dp(18), AndroidUtilities.dp(1.7f), 0xFF757575);
+            }
             loadingIndicatorDrawable.setAngleOffset(90);
 
             loadingIndicatorView = new ImageView(getContext());
@@ -194,9 +208,9 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
         button.setBlurredBackgroundDrawable(factory.create(button, colorProvider));
         button.setIcon(res, iconSize);
         button.setIconColor(color);
-        int rad = dp(22);
+        int rad = dp(24);
         int pressedColor = Theme.multAlpha(color, .15f);
-        button.setBackground(Theme.createInsetRoundRectDrawable(pressedColor, rad, dp(6)));
+        button.setBackground(Theme.createInsetRoundRectDrawable(pressedColor, rad, dp(4)));
 
         return button;
     }
@@ -209,9 +223,9 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
 
         final int color = Theme.getColor(Theme.key_glass_defaultIcon, resourcesProvider);
         setIconColor(Theme.getColor(Theme.key_glass_defaultIcon, resourcesProvider));
-        int rad = dp(22);
+        int rad = dp(24);
         int pressedColor = Theme.multAlpha(color, .15f);
-        setBackground(Theme.createInsetRoundRectDrawable(pressedColor, rad, dp(6)));
+        setBackground(Theme.createInsetRoundRectDrawable(pressedColor, rad, dp(4)));
     }
 
     private void checkUi_IconViewVisibility() {

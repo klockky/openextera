@@ -8,6 +8,8 @@
 
 package org.telegram.ui.Components;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
@@ -226,7 +228,7 @@ public class GroupCreateSpan extends View {
         }
 
         imageReceiver = new ImageReceiver();
-        imageReceiver.setRoundRadius(dp(16));
+        imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(small ? 28 : 32));
         imageReceiver.setParentView(this);
         imageReceiver.setImageCoords(drawAvatarBackground ? 0 : dp(4), 0, dp(small ? 28 : 32), dp(small ? 28 : 32));
 
@@ -344,7 +346,8 @@ public class GroupCreateSpan extends View {
         canvas.save();
         rect.set(0, 0, getMeasuredWidth(), dp(small ? 28 : 32));
         backPaint.setColor(Color.argb(colors[6] + (int) ((colors[7] - colors[6]) * progress), colors[0] + (int) ((colors[1] - colors[0]) * progress), colors[2] + (int) ((colors[3] - colors[2]) * progress), colors[4] + (int) ((colors[5] - colors[4]) * progress)));
-        canvas.drawRoundRect(rect, dp(small ? 14 : 16), dp(small ? 14 : 16), backPaint);
+        int avatarRadius = ExteraConfig.getAvatarCorners(small ? 28 : 32);
+        canvas.drawRoundRect(rect, avatarRadius, avatarRadius, backPaint);
         if (progress != 1f) {
             imageReceiver.draw(canvas);
         }
@@ -353,7 +356,7 @@ public class GroupCreateSpan extends View {
             float alpha = Color.alpha(color) / 255.0f;
             backPaint.setColor(color);
             backPaint.setAlpha((int) (255 * progress * alpha));
-            canvas.drawCircle(dp(small ? 14 : 16), dp(small ? 14 : 16), dp(small ? 14 : 16), backPaint);
+            canvas.drawRoundRect(0, 0, dp(small ? 28 : 32), dp(small ? 28 : 32), avatarRadius, avatarRadius, backPaint);
             canvas.save();
             canvas.rotate(45 * (1.0f - progress), dp(16), dp(16));
             deleteDrawable.setBounds(dp(small ? 9 : 11), dp(small ? 9 : 11), dp(small ? 19 : 21), dp(small ? 19 : 21));

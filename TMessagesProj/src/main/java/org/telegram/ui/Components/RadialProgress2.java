@@ -8,15 +8,28 @@
 
 package org.telegram.ui.Components;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
+import android.graphics.drawable.Animatable;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 
 import androidx.annotation.Keep;
+import androidx.annotation.NonNull;
+import androidx.core.graphics.ColorUtils;
+
+import com.exteragram.messenger.ExteraConfig;
+import com.google.android.material.progressindicator.BaseProgressIndicator;
+import com.google.android.material.progressindicator.CircularProgressIndicatorSpec;
+import com.google.android.material.progressindicator.DeterminateDrawable;
+import com.google.android.material.progressindicator.IndeterminateDrawable;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ImageLocation;
@@ -27,7 +40,7 @@ import org.telegram.ui.ActionBar.Theme;
 
 import java.util.Locale;
 
-public class RadialProgress2 {
+public class RadialProgress2 implements Drawable.Callback {
 
     public RectF progressRect = new RectF();
     private View parent;
@@ -74,6 +87,29 @@ public class RadialProgress2 {
     private float overlayImageAlpha = 1f;
 
     public float iconScale = 1f;
+    public float drawScale = 1f;
+
+    // Material 3 progress indicator (ExteraConfig.getNewLoadingStyle()): 0 - classic, 1 - Material 3, 2 - Material 3 wavy
+    protected int style;
+    private boolean needDrawBackground = true;
+    private boolean invertColors = false;
+    private CircularProgressIndicatorSpec progressSpec;
+    private CircularProgressIndicatorSpec miniProgressSpec;
+    private DeterminateDrawable<CircularProgressIndicatorSpec> progressDrawable;
+    private IndeterminateDrawable<CircularProgressIndicatorSpec> indeterminateDrawable;
+    private DeterminateDrawable<CircularProgressIndicatorSpec> miniProgressDrawable;
+    private IndeterminateDrawable<CircularProgressIndicatorSpec> miniIndeterminateDrawable;
+    private int lastMainProgressLevel = -1;
+    private int lastMiniProgressLevel = -1;
+    private int indicatorColor = -1;
+    private int indicatorPressedColor = -1;
+    private int trackColor = -1;
+    private int trackPressedColor = -1;
+    private int waveAmplitude;
+
+    private static boolean iconIsCancel(int icon) {
+        return icon == MediaActionDrawable.ICON_CANCEL || icon == MediaActionDrawable.ICON_CANCEL_FILL || icon == MediaActionDrawable.ICON_CANCEL_NOPROFRESS || icon == MediaActionDrawable.ICON_CANCEL_PERCENT;
+    }
 
     public RadialProgress2(View parentView) {
         this(parentView, null);
@@ -112,6 +148,248 @@ public class RadialProgress2 {
         miniMediaActionDrawable.setDelegate(parent::invalidate);
     }
 
+    @Keep
+    public void setStyle(int style) {
+        if (!ExteraConfig.getNewLoadingStyle() && style != 0) {
+            style = 0;
+        }
+        if (this.style == style) {
+            return;
+        }
+        this.style = style;
+        if (style == 0) {
+            mediaActionDrawable.drawProgressCircle = true;
+            miniMediaActionDrawable.drawProgressCircle = true;
+            stopMdcDrawable(progressDrawable, true);
+            stopMdcDrawable(indeterminateDrawable, true);
+            stopMdcDrawable(miniProgressDrawable, true);
+            stopMdcDrawable(miniIndeterminateDrawable, true);
+            progressDrawable = null;
+            indeterminateDrawable = null;
+            miniProgressDrawable = null;
+            miniIndeterminateDrawable = null;
+            progressSpec = null;
+            miniProgressSpec = null;
+        } else if (style == 1 || style == 2) {
+            mediaActionDrawable.drawProgressCircle = false;
+            miniMediaActionDrawable.drawProgressCircle = false;
+            initMdcDrawables(parent.getContext());
+            if (lastMainProgressLevel >= 0) {
+                progressDrawable.setLevel(lastMainProgressLevel);
+            }
+            if (lastMiniProgressLevel >= 0) {
+                miniProgressDrawable.setLevel(lastMiniProgressLevel);
+            }
+            setWavy(style == 2);
+        }
+    }
+
+    @Keep
+    public int getStyle() {
+        return style;
+    }
+
+    public boolean isMaterial3Style() {
+        return style == 1 || style == 2;
+    }
+
+    @Keep
+    public void setSpecValues(int indicatorSize, int trackThickness, int trackCornerRadius, int gapSize) {
+        if (isMaterial3Style()) {
+            applySpecValues(progressSpec, indicatorSize, trackThickness, trackCornerRadius, gapSize);
+        }
+    }
+
+    @Keep
+    public void setMiniSpecValues(int indicatorSize, int trackThickness, int trackCornerRadius, int gapSize) {
+        if (isMaterial3Style()) {
+            applySpecValues(miniProgressSpec, indicatorSize, trackThickness, trackCornerRadius, gapSize);
+        }
+    }
+
+    private static void applySpecValues(CircularProgressIndicatorSpec spec, int indicatorSize, int trackThickness, int trackCornerRadius, int gapSize) {
+        spec.indicatorSize = indicatorSize;
+        spec.trackThickness = trackThickness;
+        spec.trackCornerRadius = trackCornerRadius;
+        spec.useRelativeTrackCornerRadius = true;
+        spec.trackCornerRadiusFraction = 0.5f;
+        spec.indicatorTrackGapSize = gapSize;
+    }
+
+    private void initMdcDrawables(Context context) {
+        progressSpec = new CircularProgressIndicatorSpec(context, null);
+        miniProgressSpec = new CircularProgressIndicatorSpec(context, null);
+        progressSpec.hideAnimationBehavior = BaseProgressIndicator.HIDE_OUTWARD;
+        progressSpec.showAnimationBehavior = BaseProgressIndicator.SHOW_INWARD;
+        miniProgressSpec.hideAnimationBehavior = BaseProgressIndicator.HIDE_OUTWARD;
+        miniProgressSpec.showAnimationBehavior = BaseProgressIndicator.SHOW_INWARD;
+        setSpecValues(circleRadius * 2, AndroidUtilities.dp(3), AndroidUtilities.dp(2), AndroidUtilities.dp(4));
+        setMiniSpecValues(AndroidUtilities.dp(24), AndroidUtilities.dp(3), AndroidUtilities.dp(2), AndroidUtilities.dp(2));
+
+        progressDrawable = DeterminateDrawable.createCircularDrawable(context, progressSpec);
+        progressDrawable.setCallback(this);
+        progressDrawable.setVisible(false, false, false);
+        indeterminateDrawable = IndeterminateDrawable.createCircularDrawable(context, progressSpec);
+        indeterminateDrawable.setCallback(this);
+        indeterminateDrawable.setVisible(false, false, false);
+
+        miniProgressDrawable = DeterminateDrawable.createCircularDrawable(context, miniProgressSpec);
+        miniProgressDrawable.setCallback(this);
+        miniProgressDrawable.setVisible(false, false, false);
+        miniIndeterminateDrawable = IndeterminateDrawable.createCircularDrawable(context, miniProgressSpec);
+        miniIndeterminateDrawable.setCallback(this);
+        miniIndeterminateDrawable.setVisible(false, false, false);
+
+        updateM3Colors();
+    }
+
+    private void updateM3Colors() {
+        if (!isMaterial3Style()) {
+            return;
+        }
+        if (progressSpec != null) {
+            int iconColor;
+            int circleColor;
+            if (isPressed) {
+                iconColor = iconPressedColorKey >= 0 ? getThemedColor(iconPressedColorKey) : iconPressedColor;
+                circleColor = circlePressedColorKey >= 0 ? getThemedColor(circlePressedColorKey) : circlePressedColor;
+            } else {
+                iconColor = iconColorKey >= 0 ? getThemedColor(iconColorKey) : this.iconColor;
+                circleColor = circleColorKey >= 0 ? getThemedColor(circleColorKey) : this.circleColor;
+            }
+            if (overlayImageView.hasBitmapImage()) {
+                final float alpha = overlayImageView.getCurrentAlpha();
+                if (alpha >= 1.0f) {
+                    iconColor = 0xffffffff;
+                } else {
+                    final int r = Color.red(iconColor);
+                    final int g = Color.green(iconColor);
+                    final int b = Color.blue(iconColor);
+                    final int a = Color.alpha(iconColor);
+                    iconColor = Color.argb(a + (int) ((0xff - a) * alpha), r + (int) ((0xff - r) * alpha), g + (int) ((0xff - g) * alpha), b + (int) ((0xff - b) * alpha));
+                }
+            }
+            if (isPressed && indicatorPressedColor != -1) {
+                iconColor = indicatorPressedColor;
+            } else if (indicatorColor != -1) {
+                iconColor = indicatorColor;
+            }
+            final boolean drawCircleBackground = (!overlayImageView.hasBitmapImage() || overlayImageView.getCurrentAlpha() < 1.0f) && drawBackground && (!isMaterial3Style() || needDrawBackground);
+            final int color = !invertColors || drawCircleBackground ? iconColor : circleColor;
+            int track;
+            if (isPressed && trackPressedColor != -1) {
+                track = trackPressedColor;
+            } else if (trackColor != -1) {
+                track = trackColor;
+            } else {
+                track = ColorUtils.setAlphaComponent(color, getTrackAlpha());
+            }
+            if (progressSpec.indicatorColors.length == 0 || progressSpec.indicatorColors[0] != color) {
+                progressSpec.indicatorColors = new int[]{color};
+                final PorterDuffColorFilter colorFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN);
+                if (indeterminateDrawable != null) {
+                    indeterminateDrawable.setColorFilter(colorFilter);
+                }
+                if (progressDrawable != null) {
+                    progressDrawable.setColorFilter(colorFilter);
+                }
+            }
+            if (progressSpec.trackColor != track) {
+                progressSpec.trackColor = track;
+            }
+        }
+        if (miniProgressSpec != null) {
+            int color;
+            if (isPressedMini && circleCrossfadeColorKey < 0) {
+                color = iconPressedColorKey >= 0 ? getThemedColor(iconPressedColorKey) : iconPressedColor;
+            } else {
+                color = iconColorKey >= 0 ? getThemedColor(iconColorKey) : iconColor;
+            }
+            if (isPressedMini && indicatorPressedColor != -1) {
+                color = indicatorPressedColor;
+            } else if (indicatorColor != -1) {
+                color = indicatorColor;
+            }
+            int track;
+            if (isPressedMini && trackPressedColor != -1) {
+                track = trackPressedColor;
+            } else if (trackColor != -1) {
+                track = trackColor;
+            } else {
+                track = ColorUtils.setAlphaComponent(color, getTrackAlpha());
+            }
+            if (miniProgressSpec.indicatorColors.length == 0 || miniProgressSpec.indicatorColors[0] != color) {
+                miniProgressSpec.indicatorColors = new int[]{color};
+            }
+            if (miniProgressSpec.trackColor != track) {
+                miniProgressSpec.trackColor = track;
+            }
+        }
+    }
+
+    private int getTrackAlpha() {
+        return (int) ((Theme.isCurrentThemeDark() ? 0.325f : 0.275f) * 255);
+    }
+
+    @Keep
+    public void setWavy(boolean wavy) {
+        if (style != 2) {
+            return;
+        }
+        if (wavy) {
+            miniProgressSpec.indicatorInset = 0;
+            progressSpec.indicatorInset = 0;
+            setWavyValues(AndroidUtilities.dp(15), AndroidUtilities.dp(1.6f), AndroidUtilities.dp(5), 0.05f);
+        } else {
+            progressSpec.indicatorInset = AndroidUtilities.dp(4);
+            miniProgressSpec.indicatorInset = AndroidUtilities.dp(4);
+            setWavyValues(0, 0, 0, 1.0f);
+        }
+    }
+
+    public void setWavyValues(int wavelength, int amplitude, int speed, float amplitudeRampProgressMin) {
+        if (style != 2) {
+            return;
+        }
+        progressSpec.wavelengthDeterminate = wavelength;
+        progressSpec.wavelengthIndeterminate = wavelength;
+        progressSpec.waveAmplitude = waveAmplitude = amplitude;
+        progressSpec.waveSpeed = speed;
+        progressSpec.waveAmplitudeRampProgressMin = amplitudeRampProgressMin;
+        invalidateParent();
+    }
+
+    public void setNeedDrawBackground(boolean needDrawBackground) {
+        this.needDrawBackground = needDrawBackground;
+    }
+
+    @Keep
+    public boolean isNeedDrawBackground() {
+        return needDrawBackground;
+    }
+
+    public void setInvertColors(boolean invertColors) {
+        this.invertColors = invertColors;
+    }
+
+    @Keep
+    public boolean isInvertColors() {
+        return invertColors;
+    }
+
+    @Keep
+    public void setM3Colors(int indicator, int indicatorPressed, int track, int trackPressed) {
+        indicatorColor = indicator;
+        indicatorPressedColor = indicatorPressed;
+        trackColor = track;
+        trackPressedColor = trackPressed;
+    }
+
+    @Keep
+    public void setM3Colors(int indicator, int track) {
+        setM3Colors(indicator, indicator, track, track);
+    }
+
     public void setResourcesProvider(Theme.ResourcesProvider resourcesProvider) {
         this.resourcesProvider = resourcesProvider;
     }
@@ -125,6 +403,9 @@ public class RadialProgress2 {
     public void setCircleRadius(int value) {
         circleRadius = value;
         overlayImageView.setRoundRadius(circleRadius);
+        if (isMaterial3Style()) {
+            progressSpec.indicatorSize = circleRadius * 2;
+        }
     }
 
     public void setBackgroundStroke(int value) {
@@ -172,6 +453,10 @@ public class RadialProgress2 {
     }
 
     public void onDetachedFromWindow() {
+        stopMdcDrawable(progressDrawable, false);
+        stopMdcDrawable(indeterminateDrawable, false);
+        stopMdcDrawable(miniProgressDrawable, false);
+        stopMdcDrawable(miniIndeterminateDrawable, false);
         overlayImageView.onDetachedFromWindow();
     }
 
@@ -229,10 +514,79 @@ public class RadialProgress2 {
     }
 
     public void setProgress(float value, boolean animated) {
+        setProgress(value, animated, false);
+    }
+
+    public void setProgress(float value, boolean animated, boolean force) {
+        if (!force && isMaterial3Style() && value == 0 && getProgress() > 0) {
+            return;
+        }
+        if (!force && value == getProgress()) {
+            return;
+        }
+        final int level = (int) (value * 10000);
         if (drawMiniIcon) {
             miniMediaActionDrawable.setProgress(value, animated);
+            if (isMaterial3Style()) {
+                miniProgressDrawable.setLevel(level);
+                updateM3Colors();
+                validateVisibleDrawables(value, getMiniIcon(), miniProgressDrawable, miniIndeterminateDrawable, animated);
+            }
+            lastMiniProgressLevel = level;
         } else {
             mediaActionDrawable.setProgress(value, animated);
+            if (isMaterial3Style()) {
+                progressDrawable.setLevel(level);
+                updateM3Colors();
+                validateVisibleDrawables(value, getIcon(), progressDrawable, indeterminateDrawable, animated);
+            }
+            lastMainProgressLevel = level;
+        }
+    }
+
+    private void validateVisibleDrawables(float progress, int icon, DeterminateDrawable<CircularProgressIndicatorSpec> determinate, IndeterminateDrawable<CircularProgressIndicatorSpec> indeterminate, boolean animated) {
+        if (progress < 1.0f && (iconIsCancel(icon) || progress > 0.04f && icon == MediaActionDrawable.ICON_DOWNLOAD)) {
+            if (progress <= 0.04f) {
+                if (!indeterminate.isVisible() && parent != null && parent.isAttachedToWindow()) {
+                    indeterminate.setVisible(true, true, true);
+                }
+                if (determinate.isVisible()) {
+                    determinate.setVisible(false, false, animated);
+                }
+            } else {
+                if (indeterminate.isVisible()) {
+                    indeterminate.setVisible(false, false, false);
+                }
+                if (!determinate.isVisible()) {
+                    determinate.setVisible(true, false, false);
+                }
+            }
+        } else {
+            if (determinate.isVisible()) {
+                determinate.setVisible(false, false, animated);
+            }
+            if (indeterminate.isVisible()) {
+                indeterminate.setVisible(false, false, animated);
+            }
+        }
+    }
+
+    private void validateVisibleDrawables(int icon, int currentIcon, float progress, DeterminateDrawable<CircularProgressIndicatorSpec> determinate, IndeterminateDrawable<CircularProgressIndicatorSpec> indeterminate, boolean animated) {
+        if (iconIsCancel(icon) || progress > 0.04f && progress < 1.0f && iconIsCancel(currentIcon) && icon == MediaActionDrawable.ICON_DOWNLOAD) {
+            final boolean showIndeterminate = progress <= 0.04f;
+            if (determinate.isVisible() == showIndeterminate) {
+                determinate.setVisible(!showIndeterminate, false, false);
+            }
+            if (indeterminate.isVisible() != showIndeterminate && (!showIndeterminate || parent != null && parent.isAttachedToWindow())) {
+                indeterminate.setVisible(showIndeterminate, true, showIndeterminate);
+            }
+        } else {
+            if (determinate.isVisible()) {
+                determinate.setVisible(false, false, animated);
+            }
+            if (indeterminate.isVisible()) {
+                indeterminate.setVisible(false, false, animated);
+            }
         }
     }
 
@@ -255,8 +609,16 @@ public class RadialProgress2 {
 
     @Keep
     public void setIcon(int icon, boolean ifSame, boolean animated) {
-        if (ifSame && icon == mediaActionDrawable.getCurrentIcon()) {
+        final boolean same = icon == mediaActionDrawable.getCurrentIcon();
+        if (ifSame && same) {
             return;
+        }
+        if (isMaterial3Style() && mediaActionDrawable.getProgress() > 0.999f && iconIsCancel(icon)) {
+            setProgress(0, false, true);
+        }
+        if (isMaterial3Style() && !same) {
+            updateM3Colors();
+            validateVisibleDrawables(icon, mediaActionDrawable.getCurrentIcon(), getProgress(), progressDrawable, indeterminateDrawable, animated);
         }
         mediaActionDrawable.setIcon(icon, animated);
         if (parent != null) {
@@ -276,8 +638,13 @@ public class RadialProgress2 {
         if (icon != MediaActionDrawable.ICON_DOWNLOAD && icon != MediaActionDrawable.ICON_CANCEL && icon != MediaActionDrawable.ICON_NONE) {
             return;
         }
-        if (ifSame && icon == miniMediaActionDrawable.getCurrentIcon()) {
+        final boolean same = icon == miniMediaActionDrawable.getCurrentIcon();
+        if (ifSame && same) {
             return;
+        }
+        if (drawMiniIcon && isMaterial3Style() && !same) {
+            updateM3Colors();
+            validateVisibleDrawables(icon, miniMediaActionDrawable.getCurrentIcon(), getProgress(), miniProgressDrawable, miniIndeterminateDrawable, animated);
         }
         miniMediaActionDrawable.setIcon(icon, animated);
         drawMiniIcon = icon != MediaActionDrawable.ICON_NONE || miniMediaActionDrawable.getTransitionProgress() < 1.0f;
@@ -315,6 +682,7 @@ public class RadialProgress2 {
         } else {
             isPressed = value;
         }
+        updateM3Colors();
         invalidateParent();
     }
 
@@ -351,7 +719,14 @@ public class RadialProgress2 {
             return;
         }
 
+        final boolean scaled = drawScale != 1f;
+        if (scaled) {
+            canvas.save();
+            canvas.scale(drawScale, drawScale, progressRect.centerX(), progressRect.centerY());
+        }
+
         int currentIcon = mediaActionDrawable.getCurrentIcon();
+        final int previousIcon = mediaActionDrawable.getPreviousIcon();
         final float wholeAlpha = getWholeAlpha();
 
         if (isPressedMini && circleCrossfadeColorKey < 0) {
@@ -461,7 +836,8 @@ public class RadialProgress2 {
             float scaleMini = 1.0f - 0.1f * (1.0f - circleCheckProgress);
             miniDrawCanvas.scale(scaleMini, scaleMini, centerX, centerY);
         }
-        if (drawCircle && drawBackground) {
+        final boolean drawCircleBackground = drawCircle && drawBackground && (!isMaterial3Style() || needDrawBackground);
+        if (drawCircleBackground) {
             if ((drawMiniIcon || circleCrossfadeColorKey >= 0) && miniDrawCanvas != null) {
                 miniDrawCanvas.drawCircle(centerX, centerY, circleRadius, circlePaint);
             } else {
@@ -495,6 +871,30 @@ public class RadialProgress2 {
         }
         mediaActionDrawable.setBounds(centerX - iconSize, centerY - iconSize, centerX + iconSize, centerY + iconSize);
         mediaActionDrawable.setHasOverlayImage(overlayImageView.hasBitmapImage());
+
+        final Canvas progressCanvas = (drawMiniIcon || circleCrossfadeColorKey >= 0) && miniDrawCanvas != null ? miniDrawCanvas : canvas;
+        final float progress = getProgress();
+        final int miniIcon = miniMediaActionDrawable.getCurrentIcon();
+        final boolean drawM3Progress = ExteraConfig.getNewLoadingStyle() && isMaterial3Style() && (
+            (drawMiniIcon ? iconIsCancel(miniIcon) : iconIsCancel(currentIcon)) ||
+            progress > 0.04f && progress < 1.0f && (drawMiniIcon ? miniIcon : currentIcon) == MediaActionDrawable.ICON_DOWNLOAD
+        );
+        if (drawM3Progress && !drawMiniIcon) {
+            updateM3Colors();
+            if (style == 2) {
+                progressSpec.waveAmplitude = drawCircleBackground ? 0 : (int) (waveAmplitude * getWaveScale(currentIcon, previousIcon));
+            }
+            final int alpha = (int) (255 * wholeAlpha * overrideAlpha);
+            boolean indeterminate = indeterminateDrawable != null && indeterminateDrawable.isVisible();
+            if (progress <= 0.04f && !indeterminate && parent != null && parent.isAttachedToWindow()) {
+                indeterminateDrawable.setVisible(true, true, true);
+                indeterminate = true;
+            }
+            final Drawable progressIndicator = indeterminate ? indeterminateDrawable : progressDrawable;
+            progressIndicator.setBounds(centerX - iconSize, centerY - iconSize, centerX + iconSize, centerY + iconSize);
+            progressIndicator.setAlpha(alpha);
+            progressIndicator.draw(progressCanvas);
+        }
         if ((drawMiniIcon || circleCrossfadeColorKey >= 0)) {
             if (miniDrawCanvas != null) {
                 mediaActionDrawable.draw(miniDrawCanvas);
@@ -557,6 +957,14 @@ public class RadialProgress2 {
             canvas.drawCircle(cx, cy, AndroidUtilities.dp(halfSize) * alpha + AndroidUtilities.dp(1) * (1.0f - circleCheckProgress), circleMiniPaint);
             if (drawMiniIcon) {
                 miniMediaActionDrawable.setBounds((int) (cx - AndroidUtilities.dp(halfSize) * alpha), (int) (cy - AndroidUtilities.dp(halfSize) * alpha), (int) (cx + AndroidUtilities.dp(halfSize) * alpha), (int) (cy + AndroidUtilities.dp(halfSize) * alpha));
+                if (drawM3Progress) {
+                    updateM3Colors();
+                    final float r = AndroidUtilities.dp(12) * alpha;
+                    final Drawable progressIndicator = progress <= 0.04f ? miniIndeterminateDrawable : miniProgressDrawable;
+                    progressIndicator.setBounds((int) (cx - r), (int) (cy - r), (int) (cx + r), (int) (cy + r));
+                    progressIndicator.setAlpha((int) (255 * alpha));
+                    progressIndicator.draw(canvas);
+                }
                 miniMediaActionDrawable.draw(canvas);
             }
             if (restore != Integer.MIN_VALUE) {
@@ -566,6 +974,15 @@ public class RadialProgress2 {
         if (iconScale != 1f) {
             canvas.restore();
         }
+        if (scaled) {
+            canvas.restore();
+        }
+    }
+
+    private float getWaveScale(int currentIcon, int previousIcon) {
+        final float to = iconIsCancel(currentIcon) ? 1f : 0f;
+        final float from = iconIsCancel(previousIcon) ? 1f : 0f;
+        return from + (to - from) * mediaActionDrawable.getTransitionProgress();
     }
 
     public int getCircleColorKey() {
@@ -586,5 +1003,38 @@ public class RadialProgress2 {
 
     public float getTransitionProgress() {
         return drawMiniIcon ? miniMediaActionDrawable.getTransitionProgress() : mediaActionDrawable.getTransitionProgress();
+    }
+
+    @Override
+    public void invalidateDrawable(@NonNull Drawable who) {
+        invalidateParent();
+    }
+
+    @Override
+    public void scheduleDrawable(@NonNull Drawable who, @NonNull Runnable what, long when) {
+        if (parent != null) {
+            parent.scheduleDrawable(who, what, when);
+        }
+    }
+
+    @Override
+    public void unscheduleDrawable(@NonNull Drawable who, @NonNull Runnable what) {
+        if (parent != null) {
+            parent.unscheduleDrawable(who, what);
+        }
+    }
+
+    private static void stopMdcDrawable(Drawable drawable, boolean clearCallback) {
+        if (drawable == null) {
+            return;
+        }
+        if (drawable instanceof Animatable) {
+            ((Animatable) drawable).stop();
+        } else {
+            drawable.setVisible(false, false);
+        }
+        if (clearCallback) {
+            drawable.setCallback(null);
+        }
     }
 }

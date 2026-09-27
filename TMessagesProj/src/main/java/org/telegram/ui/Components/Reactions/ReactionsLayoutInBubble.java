@@ -24,6 +24,10 @@ import android.view.ViewConfiguration;
 
 import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
+
+import com.exteragram.messenger.ExteraConfig;
+
+import org.telegram.messenger.ChatObject;
 import org.telegram.ui.recyclerview.ChatListItemAnimator;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -332,7 +336,13 @@ public class ReactionsLayoutInBubble {
         for (int i = 0; i < oldButtons.size(); i++) {
             oldButtons.get(i).detach();
         }
-        isEmpty = reactionButtons.isEmpty();
+        long chatId = messageObject != null ? messageObject.getChatId() : 0;
+        boolean channel = chatId != 0 && ChatObject.isChannelAndNotMegaGroup(chatId, currentAccount);
+        boolean hidden = ExteraConfig.getHideReactionsInChannels() && channel
+                || ExteraConfig.getHideReactionsInGroups() && chatId != 0 && !channel
+                || ExteraConfig.getHideReactionsInPrivateChats() && messageObject != null
+                && messageObject.messageOwner.peer_id instanceof TLRPC.TL_peerUser;
+        isEmpty = reactionButtons.isEmpty() || hidden && !tags;
     }
 
     private final ArrayList<Integer> reactionLineWidths = new ArrayList<>();

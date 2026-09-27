@@ -9,6 +9,7 @@ import android.util.SparseArray;
 
 import androidx.annotation.Nullable;
 
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildConfig;
 
 import java.util.LinkedHashSet;
@@ -222,7 +223,24 @@ public final class Choreographer60FpsContent implements Choreographer.FrameCallb
     // ── Private implementation ────────────────────────────────────────────────
 
     private Choreographer60FpsContent() {
+        if (!ApplicationLoader.isScreenOn || ApplicationLoader.mainInterfacePaused) {
+            return;
+        }
         mChoreographer.postFrameCallback(this);
+    }
+
+    /** Stops frame callbacks while the screen is off or the app is paused, restarts them otherwise. */
+    public static void onApplicationStateChanged() {
+        if (sInstance == null) {
+            return;
+        }
+        sInstance.mChoreographer.removeFrameCallback(sInstance);
+        sInstance.mAccumulatedNs = 0;
+        sInstance.mLastVsyncNs = 0;
+        if (!ApplicationLoader.isScreenOn || ApplicationLoader.mainInterfacePaused) {
+            return;
+        }
+        sInstance.mChoreographer.postFrameCallback(sInstance);
     }
 
     @Override

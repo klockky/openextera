@@ -170,6 +170,115 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
         applyTextStyleToSelection(new TextStyleSpan(run));
     }
 
+    public void makeSelectedCode() {
+        final int start, end;
+        if (selectionStart >= 0 && selectionEnd >= 0) {
+            start = selectionStart;
+            end = selectionEnd;
+            selectionStart = selectionEnd = -1;
+        } else {
+            start = getSelectionStart();
+            end = getSelectionEnd();
+        }
+        if (start >= end) {
+            return;
+        }
+        final EditTextBoldCursor editText = createCodeLanguageEditText();
+        fillSelectedCodeLanguage(editText, start, end);
+
+        final AlertDialog.Builder builder;
+        if (adaptiveCreateLinkDialog) {
+            builder = new AlertDialogDecor.Builder(getContext(), resourcesProvider);
+        } else {
+            builder = new AlertDialog.Builder(getContext(), resourcesProvider);
+        }
+        builder.setTitle(LocaleController.getString(R.string.CreateCode));
+        FrameLayout container = new FrameLayout(getContext());
+        container.addView(editText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36, Gravity.CENTER_HORIZONTAL, 24, 0, 24, 0));
+        builder.setView(container);
+        builder.setWidth(AndroidUtilities.dp(292));
+        builder.setPositiveButton(LocaleController.getString(R.string.OK), (dialog, which) -> applyCodeBlock(start, end, editText.getText().toString()));
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        final AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(d -> {
+            editText.requestFocus();
+            AndroidUtilities.showKeyboard(editText);
+        });
+        if (adaptiveCreateLinkDialog) {
+            creationLinkDialog = dialog;
+            dialog.setOnDismissListener(d -> {
+                creationLinkDialog = null;
+                requestFocus();
+            });
+            dialog.showDelayed(250);
+        } else {
+            dialog.show();
+        }
+        editText.setSelection(0, editText.getText().length());
+    }
+
+    private EditTextBoldCursor createCodeLanguageEditText() {
+        EditTextBoldCursor editText = new EditTextBoldCursor(getContext()) {
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(64), MeasureSpec.EXACTLY));
+            }
+        };
+        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
+        editText.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
+        editText.setCursorColor(getThemedColor(Theme.key_windowBackgroundWhiteInputFieldActivated));
+        editText.setHintText(LocaleController.getString(R.string.CreateCodeLanguage));
+        editText.setHeaderHintColor(getThemedColor(Theme.key_windowBackgroundWhiteBlueHeader));
+        editText.setSingleLine(true);
+        editText.setFocusable(true);
+        editText.setTransformHintToHeader(true);
+        editText.setLineColors(getThemedColor(Theme.key_windowBackgroundWhiteInputField), getThemedColor(Theme.key_windowBackgroundWhiteInputFieldActivated), getThemedColor(Theme.key_text_RedRegular));
+        editText.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        editText.setBackground(null);
+        editText.requestFocus();
+        editText.setPadding(0, 0, 0, 0);
+        return editText;
+    }
+
+    private void fillSelectedCodeLanguage(EditTextBoldCursor editText, int start, int end) {
+        final CodeHighlighting.Span[] spans = getText().getSpans(start, end, CodeHighlighting.Span.class);
+        if (spans == null) {
+            return;
+        }
+        for (CodeHighlighting.Span span : spans) {
+            if (span != null && !TextUtils.isEmpty(span.lng)) {
+                editText.setText(span.lng);
+                return;
+            }
+        }
+    }
+
+    private void applyCodeBlock(int start, int end, String language) {
+        final Editable editable = getText();
+        try {
+            final CharacterStyle[] spans = editable.getSpans(start, end, CharacterStyle.class);
+            if (spans != null) {
+                for (CharacterStyle span : spans) {
+                    final int spanStart = editable.getSpanStart(span);
+                    final int spanEnd = editable.getSpanEnd(span);
+                    editable.removeSpan(span);
+                    if (spanStart < start) {
+                        editable.setSpan(span, spanStart, start, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                    if (spanEnd > end) {
+                        editable.setSpan(span, end, spanEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                }
+            }
+            editable.setSpan(new CodeHighlighting.Span(true, 0, null, CodeHighlighting.normalizeLanguage(language), editable.subSequence(start, end).toString()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+        if (delegate != null) {
+            delegate.onSpansChanged();
+        }
+    }
+
     public void makeSelectedMono() {
         TextStyleSpan.TextStyleRun run = new TextStyleSpan.TextStyleRun();
         run.flags |= TextStyleSpan.FLAG_STYLE_MONO;
@@ -794,8 +903,15 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
         } else if (itemId == R.id.menu_italic) {
             makeSelectedItalic();
             return true;
+        } else if (itemId == R.id.menu_bold_italic) {
+            makeSelectedBold();
+            makeSelectedItalic();
+            return true;
         } else if (itemId == R.id.menu_mono) {
             makeSelectedMono();
+            return true;
+        } else if (itemId == R.id.menu_code) {
+            makeSelectedCode();
             return true;
         } else if (itemId == R.id.menu_link) {
             makeSelectedUrl();
@@ -945,7 +1061,9 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
             infoCompat.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(R.id.menu_spoiler, LocaleController.getString(R.string.Spoiler)));
             infoCompat.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(R.id.menu_bold, LocaleController.getString(R.string.Bold)));
             infoCompat.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(R.id.menu_italic, LocaleController.getString(R.string.Italic)));
+            infoCompat.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(R.id.menu_bold_italic, LocaleController.getString(R.string.BoldItalic)));
             infoCompat.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(R.id.menu_mono, LocaleController.getString(R.string.Mono)));
+            infoCompat.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(R.id.menu_code, LocaleController.getString(R.string.CodeBlock)));
             infoCompat.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(R.id.menu_strike, LocaleController.getString(R.string.Strike)));
             infoCompat.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(R.id.menu_underline, LocaleController.getString(R.string.Underline)));
             infoCompat.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(R.id.menu_link, LocaleController.getString(R.string.CreateLink)));

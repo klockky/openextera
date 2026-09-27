@@ -8,6 +8,8 @@
 
 package org.telegram.ui.Cells;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.getString;
 
@@ -335,11 +337,11 @@ public class PhotoAttachPhotoCell extends FrameLayout {
                     videoPlayImageView.setVisibility(VISIBLE);
                     ((LayoutParams) videoTextView.getLayoutParams()).leftMargin = dp(13);
                     videoTextView.setText(AndroidUtilities.formatShortDuration(photoEntry.duration));
-                } else if (photoEntry.isHighQuality()) {
+                } else if (photoEntry.isHighQuality() != ExteraConfig.getAlwaysSendInHD()) {
                     videoInfoContainer.setVisibility(VISIBLE);
                     videoPlayImageView.setVisibility(GONE);
                     ((LayoutParams) videoTextView.getLayoutParams()).leftMargin = dp(0);
-                    videoTextView.setText(getString(R.string.ShortHighQuality));
+                    videoTextView.setText(getString(photoEntry.isHighQuality() ? R.string.ShortHighQuality : R.string.ShortStandardQuality));
                 } else {
                     videoPlayImageView.setVisibility(GONE);
                     videoInfoContainer.setVisibility(INVISIBLE);
@@ -521,11 +523,11 @@ public class PhotoAttachPhotoCell extends FrameLayout {
             videoPlayImageView.setVisibility(VISIBLE);
             ((LayoutParams) videoTextView.getLayoutParams()).leftMargin = dp(13);
             videoTextView.setText(AndroidUtilities.formatShortDuration(photoEntry.duration));
-        } else if (photoEntry.isHighQuality() && isChecked()) {
+        } else if (photoEntry.isHighQuality() != ExteraConfig.getAlwaysSendInHD()) {
             videoInfoContainer.setVisibility(VISIBLE);
             videoPlayImageView.setVisibility(GONE);
             ((LayoutParams) videoTextView.getLayoutParams()).leftMargin = dp(0);
-            videoTextView.setText(getString(R.string.ShortHighQuality));
+            videoTextView.setText(getString(photoEntry.isHighQuality() ? R.string.ShortHighQuality : R.string.ShortStandardQuality));
         } else {
             videoPlayImageView.setVisibility(GONE);
             videoInfoContainer.setVisibility(INVISIBLE);

@@ -11,6 +11,7 @@ import android.graphics.drawable.Drawable;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -38,6 +39,7 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
 
     private final ButtonHolder replyButton = new ButtonHolder();
     private final ButtonHolder forwardButton = new ButtonHolder();
+    private final ButtonHolder selectButton = new ButtonHolder();
 
     public ChatActivityActionsButtonsLayout(@NonNull Context context,
                                             Theme.ResourcesProvider resourcesProvider,
@@ -58,13 +60,26 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
         forwardButton.button.setOnClickListener(v -> {});
         ScaleStateListAnimator.apply(forwardButton.button, .065f, 2f);
 
+        selectButton.button = ChatActivityBlurredRoundButton.create(
+            context, blurredBackgroundDrawableViewFactory, colorProvider, resourcesProvider
+        );
+        selectButton.button.setOnClickListener(v -> {});
+        ScaleStateListAnimator.apply(selectButton.button, .065f, 2f);
+        selectButton.button.setVisibility(INVISIBLE);
+        selectButton.button.setAlpha(0f);
+
         addTextView(replyButton, LocaleController.getString(R.string.Reply), R.drawable.input_reply, false);
         addTextView(forwardButton, LocaleController.getString(R.string.Forward), R.drawable.input_forward, true);
+        addTextView(selectButton, LocaleController.getString(R.string.Select), R.drawable.select_between, false);
 
         setOrientation(HORIZONTAL);
         setClipChildren(false);
 
-        addView(replyButton.button, LayoutHelper.createLinear(0, 56, 1f, 1, 0, -1, 0));
+        FrameLayout leftContainer = new FrameLayout(context);
+        leftContainer.setClipChildren(false);
+        leftContainer.addView(replyButton.button, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        leftContainer.addView(selectButton.button, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        addView(leftContainer, LayoutHelper.createLinear(0, 56, 1f, 1, 0, -1, 0));
         addView(forwardButton.button, LayoutHelper.createLinear(0, 56, 1f, -1, 0, 1, 0));
     }
 
@@ -74,6 +89,14 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
 
     public void setForwardButtonOnClickListener(View.OnClickListener listener) {
         forwardButton.button.setOnClickListener(listener);
+    }
+
+    public void setForwardButtonOnLongClickListener(View.OnLongClickListener listener) {
+        forwardButton.button.setOnLongClickListener(listener);
+    }
+
+    public void setSelectButtonOnClickListener(View.OnClickListener listener) {
+        selectButton.button.setOnClickListener(listener);
     }
 
     public View getForwardButton() {
@@ -119,10 +142,9 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
         forwardButton.button.setEnabled(enabled);
     }
 
-
-
-
-
+    public void showSelectButton(boolean visible, boolean animated) {
+        selectButton.visibilityAnimator.setValue(visible, animated);
+    }
 
     public void updateColors() {
         replyButton.button.updateColors();
@@ -146,20 +168,21 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
     private void checkButtonsPositionsAndVisibility() {
         checkHolderPositionsAndVisibility(forwardButton);
         checkHolderPositionsAndVisibility(replyButton);
+        checkHolderPositionsAndVisibility(selectButton);
     }
 
     private void checkHolderPositionsAndVisibility(ButtonHolder holder) {
         final float visibility = totalVisibilityFactor * holder.visibilityAnimator.getFloatValue();
         final float offsetY = -dp(54) * (1f - visibility);
         float offsetX = getMeasuredWidth() / 2f * (1f - AnimatorUtils.DECELERATE_INTERPOLATOR.getInterpolation(visibility));
-        if (holder == replyButton) {
+        if (holder == replyButton || holder == selectButton) {
             offsetX *= -1;
         }
 
         holder.button.setTranslationX(offsetX);
         holder.button.setTranslationY(offsetY);
         holder.button.setAlpha(visibility);
-        holder.button.setVisibility(visibility > 0 ? VISIBLE : INVISIBLE);
+        holder.button.setVisibility(visibility > 0.05f ? VISIBLE : INVISIBLE);
     }
 
     private class ButtonHolder implements FactorAnimator.Target {

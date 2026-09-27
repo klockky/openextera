@@ -15,7 +15,10 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
@@ -753,6 +756,30 @@ public class ReactionsEffectOverlay {
     public static void show(BaseFragment baseFragment, ReactionsContainerLayout reactionsLayout, View cell, View fromAnimationView, float x, float y, ReactionsLayoutInBubble.VisibleReaction visibleReaction, int currentAccount, int animationType) {
         if (cell == null || visibleReaction == null || baseFragment == null || baseFragment.getParentActivity() == null) {
             return;
+        }
+        if (baseFragment instanceof ChatActivity) {
+            ChatActivity chatActivity = (ChatActivity) baseFragment;
+            if (ExteraConfig.getHideReactionsInChannels() && chatActivity.isChannel()) {
+                return;
+            }
+            if (ExteraConfig.getHideReactionsInGroups() && !chatActivity.isChannel() && chatActivity.getCurrentChat() != null) {
+                return;
+            }
+            if (ExteraConfig.getHideReactionsInPrivateChats() && chatActivity.getCurrentUser() != null) {
+                return;
+            }
+        }
+        if (cell instanceof ChatMessageCell) {
+            ChatMessageCell messageCell = (ChatMessageCell) cell;
+            if (ExteraConfig.getHideReactionsInChannels() && ChatObject.isChannelAndNotMegaGroup(messageCell.getCurrentChat())) {
+                return;
+            }
+            if (ExteraConfig.getHideReactionsInGroups() && !ChatObject.isChannelAndNotMegaGroup(messageCell.getCurrentChat()) && messageCell.getCurrentChat() != null) {
+                return;
+            }
+            if (ExteraConfig.getHideReactionsInPrivateChats() && messageCell.getCurrentUser() != null) {
+                return;
+            }
         }
         boolean animationEnabled = MessagesController.getGlobalMainSettings().getBoolean("view_animations", true);
         if (!animationEnabled) {

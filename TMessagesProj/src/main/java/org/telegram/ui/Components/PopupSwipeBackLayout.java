@@ -206,17 +206,19 @@ public class PopupSwipeBackLayout extends FrameLayout {
             return;
         }
 
-        ActionBarPopupWindow.ActionBarPopupWindowLayout p = (ActionBarPopupWindow.ActionBarPopupWindowLayout) getParent();
-        float w = fW + (tW - fW) * transitionProgress;
-        float h = fH + (tH - fH) * transitionProgress;
-        w += p.getPaddingLeft() + p.getPaddingRight();
-        h += p.getPaddingTop() + p.getPaddingBottom();
-        p.updateAnimation = false;
-        p.setBackScaleX(w / p.getMeasuredWidth());
-        if (applyBackScaleY) {
-            p.setBackScaleY(Math.min(1, h / p.getMeasuredHeight()));
+        if (getParent() instanceof ActionBarPopupWindow.ActionBarPopupWindowLayout) {
+            ActionBarPopupWindow.ActionBarPopupWindowLayout p = (ActionBarPopupWindow.ActionBarPopupWindowLayout) getParent();
+            float w = fW + (tW - fW) * transitionProgress;
+            float h = fH + (tH - fH) * transitionProgress;
+            w += p.getPaddingLeft() + p.getPaddingRight();
+            h += p.getPaddingTop() + p.getPaddingBottom();
+            p.updateAnimation = false;
+            p.setBackScaleX(w / p.getMeasuredWidth());
+            if (applyBackScaleY) {
+                p.setBackScaleY(Math.min(1, h / p.getMeasuredHeight()));
+            }
+            p.updateAnimation = true;
         }
-        p.updateAnimation = true;
 
         for (int i = 0; i < getChildCount(); i++) {
             View ch = getChildAt(i);
@@ -379,8 +381,19 @@ public class PopupSwipeBackLayout extends FrameLayout {
     }
 
     public boolean stickToRight;
+    public boolean stickToCenterHorizontal;
     public void setStickToRight(boolean right) {
         stickToRight = right;
+        if (right) {
+            stickToCenterHorizontal = false;
+        }
+    }
+
+    public void setStickToCenterHorizontal(boolean center) {
+        stickToCenterHorizontal = center;
+        if (center) {
+            stickToRight = false;
+        }
     }
 
     @Override
@@ -388,18 +401,18 @@ public class PopupSwipeBackLayout extends FrameLayout {
         for (int i = 0; i < getChildCount(); i++) {
             View ch = getChildAt(i);
             boolean shownFromBottom = ch.getLayoutParams() instanceof FrameLayout.LayoutParams && ((LayoutParams) ch.getLayoutParams()).gravity == Gravity.BOTTOM;
-            if (shownFromBottom) {
-                if (stickToRight) {
-                    ch.layout((right - left) - ch.getMeasuredWidth(), bottom - top - ch.getMeasuredHeight(), right - left, bottom - top);
-                } else {
-                    ch.layout(0, bottom - top - ch.getMeasuredHeight(), ch.getMeasuredWidth(), bottom - top);
-                }
+            final int x;
+            if (stickToRight) {
+                x = (right - left) - ch.getMeasuredWidth();
+            } else if (stickToCenterHorizontal) {
+                x = ((right - left) - ch.getMeasuredWidth()) / 2;
             } else {
-                if (stickToRight) {
-                    ch.layout((right - left) - ch.getMeasuredWidth(), 0, right - left, ch.getMeasuredHeight());
-                } else {
-                    ch.layout(0, 0, ch.getMeasuredWidth(), ch.getMeasuredHeight());
-                }
+                x = 0;
+            }
+            if (shownFromBottom) {
+                ch.layout(x, bottom - top - ch.getMeasuredHeight(), x + ch.getMeasuredWidth(), bottom - top);
+            } else {
+                ch.layout(x, 0, x + ch.getMeasuredWidth(), ch.getMeasuredHeight());
             }
         }
     }
@@ -443,6 +456,9 @@ public class PopupSwipeBackLayout extends FrameLayout {
         int rad = AndroidUtilities.dp(12);
         if (stickToRight) {
             mRect.set(getWidth() - w, y, getWidth(), y + h);
+        } else if (stickToCenterHorizontal) {
+            final float x = (getWidth() - w) / 2f;
+            mRect.set(x, y, x + w, y + h);
         } else {
             mRect.set(0, y, w, y + h);
         }

@@ -3,6 +3,8 @@ package org.telegram.ui.Components;
 import com.exteragram.messenger.icons.IconManager;
 import com.exteragram.messenger.backup.PreferencesUtils;
 import com.exteragram.messenger.backup.BackupBottomSheet;
+import com.exteragram.messenger.utils.AppUtils;
+import com.exteragram.messenger.utils.text.LocaleUtils;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
 import static org.telegram.messenger.AndroidUtilities.lerp;
@@ -225,6 +227,36 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         MediaDataController.MEDIA_AUDIO,
         MediaDataController.MEDIA_MUSIC
     };
+
+    private boolean postNotifyDataSetChangedSafely(RecyclerView.Adapter<?> adapter) {
+        if (adapter == null) {
+            return false;
+        }
+        RecyclerView computingListView = null;
+        for (MediaPage mediaPage : mediaPages) {
+            if (mediaPage == null) {
+                continue;
+            }
+            if (mediaPage.listView != null && mediaPage.listView.getAdapter() == adapter && mediaPage.listView.isComputingLayout()) {
+                computingListView = mediaPage.listView;
+            }
+            if (mediaPage.animationSupportingListView != null && mediaPage.animationSupportingListView.getAdapter() == adapter && mediaPage.animationSupportingListView.isComputingLayout()) {
+                computingListView = mediaPage.animationSupportingListView;
+            }
+        }
+        if (computingListView == null) {
+            return false;
+        }
+        computingListView.post(() -> notifyDataSetChangedSafely(adapter));
+        return true;
+    }
+
+    private void notifyDataSetChangedSafely(RecyclerView.Adapter<?> adapter) {
+        if (adapter == null || postNotifyDataSetChangedSafely(adapter)) {
+            return;
+        }
+        adapter.notifyDataSetChanged();
+    }
 
     public boolean isInFastScroll() {
         return mediaPages[0] != null && mediaPages[0].listView.getFastScroll() != null && mediaPages[0].listView.getFastScroll().isPressed();
@@ -913,7 +945,11 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         }
 
         public void onDestroy(BaseFragment fragment) {
-            if (fragment != parentFragment) {
+            onDestroy(fragment, false);
+        }
+
+        public void onDestroy(BaseFragment fragment, boolean force) {
+            if (fragment != parentFragment && !force) {
                 return;
             }
             delegates.clear();
@@ -1430,6 +1466,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             if (messagesDict[loadIndex].indexOfKey(messageObject.getId()) >= 0) {
                 return false;
             }
+            if (LocaleUtils.isCustomEmojiOnlyLinkMessage(messageObject.messageOwner)) {
+                updateIds(messageObject, loadIndex, enc);
+                return false;
+            }
             ArrayList<MessageObject> messageObjects = sectionArrays.get(messageObject.monthKey);
             if (messageObjects == null) {
                 messageObjects = new ArrayList<>();
@@ -1448,6 +1488,17 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                 messages.add(messageObject);
             }
             messagesDict[loadIndex].put(messageObject.getId(), messageObject);
+            updateIds(messageObject, loadIndex, enc);
+            if (!hasVideos && messageObject.isVideo()) {
+                hasVideos = true;
+            }
+            if (!hasPhotos && messageObject.isPhoto()) {
+                hasPhotos = true;
+            }
+            return true;
+        }
+
+        private void updateIds(MessageObject messageObject, int loadIndex, boolean enc) {
             if (!enc) {
                 if (messageObject.getId() > 0) {
                     max_id[loadIndex] = Math.min(messageObject.getId(), max_id[loadIndex]);
@@ -1457,13 +1508,6 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                 max_id[loadIndex] = Math.max(messageObject.getId(), max_id[loadIndex]);
                 min_id = Math.min(messageObject.getId(), min_id);
             }
-            if (!hasVideos && messageObject.isVideo()) {
-                hasVideos = true;
-            }
-            if (!hasPhotos && messageObject.isPhoto()) {
-                hasPhotos = true;
-            }
-            return true;
         }
 
         public MessageObject deleteMessage(int mid, int loadIndex) {
@@ -2276,10 +2320,13 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         photoVideoAdapter = new SharedPhotoVideoAdapter(context) {
             @Override
             public void notifyDataSetChanged() {
+                if (postNotifyDataSetChangedSafely(this)) {
+                    return;
+                }
                 super.notifyDataSetChanged();
                 MediaPage mediaPage = getMediaPage(0);
                 if (mediaPage != null && mediaPage.animationSupportingListView.getVisibility() == View.VISIBLE) {
-                    animationSupportingPhotoVideoAdapter.notifyDataSetChanged();
+                    notifyDataSetChangedSafely(animationSupportingPhotoVideoAdapter);
                 }
             }
         };
@@ -5852,7 +5899,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             velX = velocityTracker.getXVelocity();
             velY = velocityTracker.getYVelocity();
             if (!startedTracking) {
-                if (Math.abs(velX) >= 3000 && Math.abs(velX) > Math.abs(velY)) {
+                if (Math.abs(velX) >= AppUtils.getSwipeVelocity() && Math.abs(velX) > Math.abs(velY)) {
                     prepareForMoving(ev, velX < 0);
                 }
             }
@@ -5863,7 +5910,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         if (startedTracking) {
             float x = mediaPages[0].getX();
             tabsAnimation = new AnimatorSet();
-            backAnimation = Math.abs(x) < mediaPages[0].getMeasuredWidth() / 3.0f && (Math.abs(velX) < 3500 || Math.abs(velX) < Math.abs(velY));
+            backAnimation = Math.abs(x) < mediaPages[0].getMeasuredWidth() / 3.0f && (Math.abs(velX) < AppUtils.getSwipeVelocity() || Math.abs(velX) < Math.abs(velY));
             float dx;
             ValueAnimator invalidate = ValueAnimator.ofFloat(0, 1);
             invalidate.addUpdateListener(anm -> onTabProgress(getTabProgress()));
@@ -7763,6 +7810,46 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         return true;
     }
 
+    private void parseMarkdownAsync(MessageObject messageObject) {
+        if (profileActivity == null || profileActivity.getParentActivity() == null) {
+            return;
+        }
+        final AlertDialog progressDialog = new AlertDialog(profileActivity.getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER, profileActivity.getResourceProvider());
+        progressDialog.setCanceledOnTouchOutside(false);
+        final boolean[] cancelled = new boolean[] { false };
+        progressDialog.setOnCancelListener(d -> cancelled[0] = true);
+        progressDialog.showDelayed(150);
+        new Thread(() -> {
+            TLRPC.WebPage webPage;
+            Throwable error = null;
+            try {
+                webPage = MarkdownParser.fromMarkdown(messageObject);
+            } catch (Throwable e) {
+                FileLog.e(e);
+                webPage = null;
+                error = e;
+            }
+            final TLRPC.WebPage finalWebPage = webPage;
+            final boolean success = error == null && webPage != null;
+            AndroidUtilities.runOnUIThread(() -> {
+                try {
+                    progressDialog.dismiss();
+                } catch (Throwable ignore) {}
+                if (cancelled[0]) {
+                    return;
+                }
+                if (success) {
+                    if (messageObject.messageOwner.media != null) {
+                        messageObject.messageOwner.media.webpage = finalWebPage;
+                    }
+                    profileActivity.createArticleViewer(false).open(messageObject);
+                } else {
+                    AndroidUtilities.openDocument(messageObject, profileActivity.getParentActivity(), profileActivity);
+                }
+            });
+        }).start();
+    }
+
     private void onItemClick(int index, View view, MessageObject message, int a, int selectedMode) {
         if (message == null || photoVideoChangeColumnsAnimation) {
             return;
@@ -7861,6 +7948,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                             } else {
                                 PhotoViewer.getInstance().openPhoto(sharedMediaData[selectedMode].messages, index, dialog_id, mergeDialogId, topicId, provider);
                             }
+                            return;
+                        }
+                        if (MarkdownParser.isMarkdown(message)) {
+                            parseMarkdownAsync(message);
                             return;
                         }
                         AndroidUtilities.openDocument(message, profileActivity.getParentActivity(), profileActivity);
@@ -9316,7 +9407,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                     TLRPC.messages_Messages res = (TLRPC.messages_Messages) response;
                     for (int a = 0; a < res.messages.size(); a++) {
                         TLRPC.Message message = res.messages.get(a);
-                        if (max_id != 0 && message.id > max_id) {
+                        if (max_id != 0 && message.id > max_id || LocaleUtils.isCustomEmojiOnlyLinkMessage(message)) {
                             continue;
                         }
                         messageObjects.add(new MessageObject(profileActivity.getCurrentAccount(), message, false, true));

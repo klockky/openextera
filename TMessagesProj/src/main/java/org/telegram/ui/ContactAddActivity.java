@@ -33,6 +33,8 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLoader;
@@ -242,7 +244,7 @@ public class ContactAddActivity extends BaseFragment implements NotificationCent
         infoLayout.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
 
         avatarImage = new BackupImageView(context);
-        avatarImage.setRoundRadius(dp(32));
+        avatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(64));
         infoLayout.addView(avatarImage, LayoutHelper.createFrame(64, 64, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 16, 13, 16, 13));
 
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -399,7 +401,7 @@ public class ContactAddActivity extends BaseFragment implements NotificationCent
                 protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                     super.onMeasure(widthMeasureSpec, heightMeasureSpec);
                     oldAvatarView.measure(MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(30), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(30), MeasureSpec.EXACTLY));
-                    oldAvatarView.setRoundRadius(AndroidUtilities.dp(30));
+                    oldAvatarView.setRoundRadius(ExteraConfig.getAvatarCorners(30));
                 }
 
                 @Override

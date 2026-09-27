@@ -146,6 +146,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
 
 import com.android.internal.telephony.ITelephony;
+import com.exteragram.messenger.DividerStyle;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.proxy.ProxyController;
+import com.exteragram.messenger.utils.ui.FontUtils;
 import com.google.android.gms.auth.api.phone.SmsRetriever;
 import com.google.android.gms.auth.api.phone.SmsRetrieverClient;
 import com.google.android.gms.tasks.Task;
@@ -233,6 +237,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -266,7 +272,7 @@ public class AndroidUtilities {
     public static Typeface bold() {
         if (mediumTypeface == null) {
             if (SharedConfig.useSystemBoldFont && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                mediumTypeface = Typeface.create(null, 500, false);
+                mediumTypeface = FontUtils.getSystemTypeface(TYPEFACE_ROBOTO_MEDIUM);
             } else {
                 mediumTypeface = getTypeface(TYPEFACE_ROBOTO_MEDIUM);
             }
@@ -589,6 +595,15 @@ public class AndroidUtilities {
         if (startIndex >= 0 && endIndex >= 0 && endIndex - startIndex > 2) {
             len = endIndex - startIndex - 2;
             index = startIndex;
+        }
+        if (index < 0) {
+            int linkStart = str.indexOf("[");
+            int linkEnd = str.indexOf("]()", linkStart + 1);
+            if (linkStart >= 0 && linkEnd > linkStart) {
+                len = linkEnd - linkStart - 1;
+                str = str.substring(0, linkStart) + str.substring(linkStart + 1, linkEnd) + str.substring(linkEnd + 3);
+                index = linkStart;
+            }
         }
         SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder(str);
         if (/*runnable != null &&*/ index >= 0) {
@@ -1258,7 +1273,7 @@ public class AndroidUtilities {
         return url != null && IPV4_URL.matcher(url).lookingAt() ? "http://" : "https://";
     }
 
-    private static String makeUrl(String url, String[] prefixes, Matcher matcher) {
+    private static String makeUrl(String url, String[] prefixes) {
         boolean hasPrefix = false;
         for (int i = 0; i < prefixes.length; i++) {
             if (url.regionMatches(true, 0, prefixes[i], 0, prefixes[i].length())) {
@@ -1269,20 +1284,26 @@ public class AndroidUtilities {
                 break;
             }
         }
-        if (!hasPrefix && prefixes.length > 0) {
-            url = prefixes[0] + url;
+        if (!hasPrefix) {
+            url = defaultUrlScheme(url) + url;
         }
         return url;
     }
 
-    private static void gatherLinks(ArrayList<LinkSpec> links, Spannable s, Pattern pattern, String[] schemes, Linkify.MatchFilter matchFilter, boolean internalOnly) {
-        if (TextUtils.indexOf(s, '─') >= 0) {
-            s = new SpannableStringBuilder(s.toString().replace('─', ' '));
+    private static String getPlainText(CharSequence text) {
+        if (text == null) {
+            return null;
+        }
+        return text.toString();
+    }
+
+    private static void gatherLinks(ArrayList<LinkSpec> links, CharSequence s, Pattern pattern, String[] schemes, Linkify.MatchFilter matchFilter, boolean internalOnly) {
+        if (TextUtils.indexOf(s, '\u2500') >= 0) {
+            s = s.toString().replace('\u2500', ' ');
         }
         if (!TextUtils.isEmpty(s) && TextUtils.lastIndexOf(s, '_') == s.length() - 1) {
             //fix infinity loop regex
-            SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder(s.toString());
-            s = spannableStringBuilder.replace(s.length() - 1, s.length(), "a");
+            s = s.subSequence(0, s.length() - 1).toString() + "a";
         }
         Matcher m = pattern.matcher(s);
         while (m.find()) {
@@ -1292,7 +1313,7 @@ public class AndroidUtilities {
             if (matchFilter == null || matchFilter.acceptMatch(s, start, end)) {
                 LinkSpec spec = new LinkSpec();
 
-                String url = makeUrl(m.group(0), schemes, m);
+                String url = makeUrl(m.group(0), schemes);
                 if (internalOnly && !Browser.isInternalUrl(url, true, null)) {
                     continue;
                 }
@@ -1329,7 +1350,11 @@ public class AndroidUtilities {
         if (text == null)
             return false;
         SpannableStringBuilder newText = new SpannableStringBuilder(text);
-        boolean success = doSafe(() -> addLinks(newText, mask, internalOnly, removeOldReplacements));
+        String plainText = getPlainText(newText);
+        if (plainText == null || containsUnsupportedCharacters(plainText) || mask == 0) {
+            return false;
+        }
+        boolean success = doSafe(() -> addLinks(newText, plainText, mask, internalOnly, removeOldReplacements));
         if (success) {
             URLSpan[] oldSpans = text.getSpans(0, text.length(), URLSpan.class);
             for (int i = 0; i < oldSpans.length; ++i) {
@@ -1347,8 +1372,9 @@ public class AndroidUtilities {
         return doSafe(runnable, 200);
     }
 
+    private static final ExecutorService LINK_EXECUTOR = new ThreadPoolExecutor(ConnectionsManager.CPU_COUNT, ConnectionsManager.CPU_COUNT, 60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(100), new ThreadPoolExecutor.DiscardPolicy());
+
     public static boolean doSafe(Utilities.Callback0Return<Boolean> runnable, int timeout) {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
         Callable<Boolean> task = () -> {
             try {
                 return runnable.run();
@@ -1360,7 +1386,7 @@ public class AndroidUtilities {
         boolean success = false;
         Future<Boolean> future = null;
         try {
-            future = executor.submit(task);
+            future = LINK_EXECUTOR.submit(task);
             success = future.get(timeout, TimeUnit.MILLISECONDS);
         } catch (TimeoutException ex) {
             if (future != null) {
@@ -1368,15 +1394,17 @@ public class AndroidUtilities {
             }
         } catch (Exception ex) {
             FileLog.e(ex);
-        } finally {
-            executor.shutdownNow();
         }
         return success;
     }
 
     @Deprecated // use addLinksSafe
     public static boolean addLinks(Spannable text, int mask, boolean internalOnly, boolean removeOldReplacements) {
-        if (text == null || containsUnsupportedCharacters(text.toString()) || mask == 0) {
+        return addLinks(text, getPlainText(text), mask, internalOnly, removeOldReplacements);
+    }
+
+    private static boolean addLinks(Spannable text, String plainText, int mask, boolean internalOnly, boolean removeOldReplacements) {
+        if (text == null || plainText == null || containsUnsupportedCharacters(plainText) || mask == 0) {
             return false;
         }
         URLSpan[] old = text.getSpans(0, text.length(), URLSpan.class);
@@ -1391,7 +1419,7 @@ public class AndroidUtilities {
             Linkify.addLinks(text, Linkify.PHONE_NUMBERS);
         }
         if ((mask & Linkify.WEB_URLS) != 0) {
-            gatherLinks(links, text, LinkifyPort.WEB_URL, new String[]{"http://", "https://", "tg://", "tonsite://"}, sUrlMatchFilter, internalOnly);
+            gatherLinks(links, plainText, LinkifyPort.WEB_URL, new String[]{"http://", "https://", "tg://", "tonsite://"}, sUrlMatchFilter, internalOnly);
         }
         pruneOverlaps(links);
         if (links.size() == 0) {
@@ -2411,20 +2439,13 @@ public class AndroidUtilities {
             if (!typefaceCache.containsKey(assetPath)) {
                 try {
                     Typeface t;
-                    if (Build.VERSION.SDK_INT >= 26) {
-                        Typeface.Builder builder = new Typeface.Builder(ApplicationLoader.applicationContext.getAssets(), assetPath);
-                        if (assetPath.contains("rextrabold")) {
-                            builder.setWeight(800);
-                        }
-                        if (assetPath.contains("medium") || assetPath.contains("rbold")) {
-                            builder.setWeight(700);
-                        }
-                        if (assetPath.contains("italic")) {
-                            builder.setItalic(true);
-                        }
-                        t = builder.build();
+                    if (!ExteraConfig.getUseSystemFonts()) {
+                        t = FontUtils.getFontFromAssets(assetPath);
                     } else {
-                        t = Typeface.createFromAsset(ApplicationLoader.applicationContext.getAssets(), assetPath);
+                        t = FontUtils.getSystemTypeface(assetPath);
+                        if (t == null) {
+                            t = FontUtils.getFontFromAssets(assetPath);
+                        }
                     }
                     typefaceCache.put(assetPath, t);
                 } catch (Exception e) {
@@ -2473,6 +2494,9 @@ public class AndroidUtilities {
     }
 
     public static int getShadowHeight() {
+        if (ExteraConfig.getDividerStyle() != DividerStyle.LINE) {
+            return 0;
+        }
         if (density >= 4.0f) {
             return 3;
         } else if (density >= 2.0f) {
@@ -2973,7 +2997,11 @@ public class AndroidUtilities {
     }
 
     public static boolean isTabletInternal() {
-        if (isTablet == null) {
+        if (ExteraConfig.getTabletMode() == 1) {
+            isTablet = true;
+        } else if (ExteraConfig.getTabletMode() == 2) {
+            isTablet = false;
+        } else if (isTablet == null) {
             isTablet = isTabletForce();
         }
         return isTablet;
@@ -3016,6 +3044,16 @@ public class AndroidUtilities {
     public static boolean isSmallTablet() {
         float minSide = Math.min(displaySize.x, displaySize.y) / density;
         return minSide <= 690;
+    }
+
+    public static boolean isTabletTwoPane() {
+        if (isInMultiwindow) {
+            return false;
+        }
+        if (!isSmallTablet()) {
+            return true;
+        }
+        return displaySize.x > displaySize.y;
     }
 
     public static int getMinTabletSide() {
@@ -4690,6 +4728,20 @@ public class AndroidUtilities {
         final TableView tableView = new TableView(activity, null);
         linearLayout.addView(tableView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.FILL_HORIZONTAL, 14, 18, 14, 0));
 
+        final ProxyController proxyController = ProxyController.getInstance();
+        final SharedConfig.ProxyInfo proxyInfo = new SharedConfig.ProxyInfo(settings);
+        tableView.addRow(getString(R.string.ProxyType), proxyController.getProxyTypeName(proxyInfo));
+        final ButtonSpan.TextViewButtons[] countryTextView = new ButtonSpan.TextViewButtons[1];
+        tableView.addRow(getString(R.string.Country), getString(R.string.Loading), countryTextView);
+        final WeakReference<ButtonSpan.TextViewButtons> countryTextViewRef = new WeakReference<>(countryTextView[0]);
+        proxyController.requestProxyCountry(proxyInfo, country -> {
+            ButtonSpan.TextViewButtons textView = countryTextViewRef.get();
+            if (textView == null) {
+                return;
+            }
+            textView.setText(TextUtils.isEmpty(country) ? getString(R.string.Unknown) : country);
+        });
+
         if (!TextUtils.isEmpty(address)) {
             tableView.addRow(getString(R.string.UseProxyAddress), address);
         }
@@ -4769,8 +4821,7 @@ public class AndroidUtilities {
             settings.toSharedPreferences(editor);
             editor.commit();
 
-            final SharedConfig.ProxyInfo info = new SharedConfig.ProxyInfo(settings);
-            SharedConfig.currentProxy = SharedConfig.addProxy(info);
+            proxyController.setCurrentProxy(proxyController.saveProxy(proxyInfo, null, null));
 
             ConnectionsManager.setProxySettings(true, settings);
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
@@ -5879,6 +5930,10 @@ public class AndroidUtilities {
         return null;
     }
 
+    public static int getTransparentColor(int color, float alphaFactor) {
+        return Color.argb((int) (Color.alpha(color) * alphaFactor), Color.red(color), Color.green(color), Color.blue(color));
+    }
+
     public static boolean isNumeric(String str) {
         try {
             Double.parseDouble(str);
@@ -6513,6 +6568,7 @@ public class AndroidUtilities {
     public static void vibrateCursor(View view) {
         try {
             if (view == null || view.getContext() == null) return;
+            if (!ExteraConfig.getInAppVibration()) return;
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
             if (!((Vibrator) view.getContext().getSystemService(Context.VIBRATOR_SERVICE)).hasAmplitudeControl()) return;
             view.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
@@ -6522,6 +6578,7 @@ public class AndroidUtilities {
     public static void vibrate(View view) {
         try {
             if (view == null || view.getContext() == null) return;
+            if (!ExteraConfig.getInAppVibration()) return;
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
             if (!((Vibrator) view.getContext().getSystemService(Context.VIBRATOR_SERVICE)).hasAmplitudeControl()) return;
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);

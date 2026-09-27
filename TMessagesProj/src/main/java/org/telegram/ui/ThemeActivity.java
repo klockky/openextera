@@ -73,6 +73,7 @@ import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.EmojiThemes;
+import org.telegram.ui.ActionBar.MonetAccentHelper;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeColors;
 import org.telegram.ui.ActionBar.ThemeDescription;
@@ -647,7 +648,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
 
             Theme.ThemeInfo themeInfo = Theme.getCurrentTheme();
             Theme.ThemeAccent accent = themeInfo.getAccent(false);
-            if (themeInfo.themeAccents != null && !themeInfo.themeAccents.isEmpty() && accent != null && accent.id >= 100) {
+            if (themeInfo.themeAccents != null && !themeInfo.themeAccents.isEmpty() && MonetAccentHelper.canEditAccent(accent)) {
                 editThemeRow = rowCount++;
             }
             createNewThemeRow = rowCount++;
@@ -1525,7 +1526,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
     private void editTheme() {
         Theme.ThemeInfo currentTheme = Theme.getCurrentTheme();
         Theme.ThemeAccent accent = currentTheme.getAccent(false);
-        presentFragment(new ThemePreviewActivity(currentTheme, false, ThemePreviewActivity.SCREEN_TYPE_ACCENT_COLOR, accent.id >= 100, currentType == THEME_TYPE_NIGHT));
+        presentFragment(new ThemePreviewActivity(currentTheme, false, ThemePreviewActivity.SCREEN_TYPE_ACCENT_COLOR, MonetAccentHelper.canEditAccent(accent), currentType == THEME_TYPE_NIGHT));
     }
 
     private void createNewTheme() {
@@ -1666,7 +1667,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
         }
         Theme.ThemeInfo themeInfo = Theme.getCurrentTheme();
         Theme.ThemeAccent accent = themeInfo.getAccent(false);
-        if (themeInfo.themeAccents != null && !themeInfo.themeAccents.isEmpty() && accent != null && accent.id >= 100) {
+        if (themeInfo.themeAccents != null && !themeInfo.themeAccents.isEmpty() && MonetAccentHelper.canEditAccent(accent)) {
             menuItem.showSubItem(share_theme);
             menuItem.showSubItem(edit_theme);
         } else {
@@ -1976,11 +1977,31 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
         }
     }
 
+    private static class AccentDividerView extends View {
+        AccentDividerView(Context context) {
+            super(context);
+            setWillNotDraw(false);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            super.onMeasure(MeasureSpec.makeMeasureSpec(dp(12), MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(dp(62), MeasureSpec.EXACTLY));
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            float x = getMeasuredWidth() / 2f;
+            canvas.drawLine(x, dp(14), x, getMeasuredHeight() - dp(14), Theme.dividerPaint);
+        }
+    }
+
     private class ThemeAccentsListAdapter extends RecyclerListView.SelectionAdapter {
 
         private Context mContext;
         private Theme.ThemeInfo currentTheme;
         private ArrayList<Theme.ThemeAccent> themeAccents;
+        private int monetAccentsCount;
 
         ThemeAccentsListAdapter(Context context) {
             mContext = context;
@@ -1991,6 +2012,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
         public void notifyDataSetChanged() {
             currentTheme = currentType == THEME_TYPE_NIGHT ? Theme.getCurrentNightTheme() : Theme.getCurrentTheme();
             themeAccents = new ArrayList<>(currentTheme.themeAccents);
+            monetAccentsCount = MonetAccentHelper.countLeadingMonetAccents(themeAccents);
             super.notifyDataSetChanged();
         }
 
@@ -2001,7 +2023,10 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
 
         @Override
         public int getItemViewType(int position) {
-            return position == getItemCount() - 1 ? 1 : 0;
+            if (position == getCustomAccentPosition()) {
+                return 1;
+            }
+            return isDividerPosition(position) ? 2 : 0;
         }
 
         @Override
@@ -2009,6 +2034,9 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             switch (viewType) {
                 case 0: {
                     return new RecyclerListView.Holder(new InnerAccentView(mContext));
+                }
+                case 2: {
+                    return new RecyclerListView.Holder(new AccentDividerView(mContext));
                 }
                 case 1:
                 default: {
@@ -2022,7 +2050,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             switch (getItemViewType(position)) {
                 case 0: {
                     InnerAccentView view = (InnerAccentView) holder.itemView;
-                    view.setThemeAndColor(currentTheme, themeAccents.get(position));
+                    view.setThemeAndColor(currentTheme, getAccent(position));
                     break;
                 }
                 case 1: {
@@ -2035,11 +2063,28 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
 
         @Override
         public int getItemCount() {
-            return themeAccents.isEmpty() ? 0 : themeAccents.size() + 1;
+            return themeAccents.isEmpty() ? 0 : themeAccents.size() + 1 + (hasDivider() ? 1 : 0);
         }
 
         private int findCurrentAccent() {
-            return themeAccents.indexOf(currentTheme.getAccent(false));
+            int index = themeAccents.indexOf(currentTheme.getAccent(false));
+            return index < 0 || !hasDivider() || index < monetAccentsCount ? index : index + 1;
+        }
+
+        private boolean hasDivider() {
+            return monetAccentsCount > 0 && monetAccentsCount < themeAccents.size();
+        }
+
+        private boolean isDividerPosition(int position) {
+            return hasDivider() && position == monetAccentsCount;
+        }
+
+        private int getCustomAccentPosition() {
+            return getItemCount() - 1;
+        }
+
+        private Theme.ThemeAccent getAccent(int position) {
+            return themeAccents.get(position - (hasDivider() && position > monetAccentsCount ? 1 : 0));
         }
     }
 
@@ -2157,7 +2202,8 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                             }
                         }
                     } else if (themeInfo.assetName != null) {
-                        currentFile = Theme.getAssetFile(themeInfo.assetName);
+                        Theme.ThemeAccent accent = themeInfo.getAccent(false);
+                        currentFile = MonetAccentHelper.canEditAccent(accent) ? accent.saveToFile() : Theme.getAssetFile(themeInfo.assetName);
                     } else {
                         currentFile = new File(themeInfo.pathToFile);
                     }
@@ -2319,12 +2365,15 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                     accentsListView.setAdapter(accentsAdapter);
                     accentsListView.setOnItemClickListener((view1, position) -> {
                         Theme.ThemeInfo currentTheme = currentType == THEME_TYPE_NIGHT ? Theme.getCurrentNightTheme() : Theme.getCurrentTheme();
-                        if (position == accentsAdapter.getItemCount() - 1) {
+                        if (position == accentsAdapter.getCustomAccentPosition()) {
                             presentFragment(new ThemePreviewActivity(currentTheme, false, ThemePreviewActivity.SCREEN_TYPE_ACCENT_COLOR, false, currentType == THEME_TYPE_NIGHT));
                         } else {
-                            Theme.ThemeAccent accent = accentsAdapter.themeAccents.get(position);
+                            if (accentsAdapter.isDividerPosition(position)) {
+                                return;
+                            }
+                            Theme.ThemeAccent accent = accentsAdapter.getAccent(position);
 
-                            if (!TextUtils.isEmpty(accent.patternSlug) && accent.id != Theme.DEFALT_THEME_ACCENT_ID) {
+                            if (MonetAccentHelper.hasRemotePatternWallpaper(accent) && accent.id != Theme.DEFALT_THEME_ACCENT_ID) {
                                 Theme.PatternsLoader.createLoader(false);
                             }
 
@@ -2333,7 +2382,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                                 EmojiThemes.saveCustomTheme(currentTheme, accent.id);
                                 Theme.turnOffAutoNight(ThemeActivity.this);
                             } else {
-                                presentFragment(new ThemePreviewActivity(currentTheme, false, ThemePreviewActivity.SCREEN_TYPE_ACCENT_COLOR, accent.id >= 100, currentType == THEME_TYPE_NIGHT));
+                                presentFragment(new ThemePreviewActivity(currentTheme, false, ThemePreviewActivity.SCREEN_TYPE_ACCENT_COLOR, MonetAccentHelper.canEditAccent(accent), currentType == THEME_TYPE_NIGHT));
                             }
                         }
 
@@ -2355,11 +2404,11 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                         }
                     });
                     accentsListView.setOnItemLongClickListener((view12, position) -> {
-                        if (position < 0 || position >= accentsAdapter.themeAccents.size()) {
+                        if (position < 0 || position == accentsAdapter.getCustomAccentPosition() || accentsAdapter.isDividerPosition(position)) {
                             return false;
                         }
-                        Theme.ThemeAccent accent = accentsAdapter.themeAccents.get(position);
-                        if (accent.id >= 100 && !accent.isDefault) {
+                        Theme.ThemeAccent accent = accentsAdapter.getAccent(position);
+                        if (MonetAccentHelper.canEditAccent(accent)) {
                             AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
                             CharSequence[] items = new CharSequence[]{
                                     getString("OpenInEditor", R.string.OpenInEditor),

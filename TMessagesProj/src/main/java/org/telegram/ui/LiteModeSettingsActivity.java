@@ -38,6 +38,8 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.LiteMode;
@@ -145,8 +147,13 @@ public class LiteModeSettingsActivity extends BaseFragment {
                     SharedPreferences.Editor editor = preferences.edit();
                     editor.putBoolean("view_animations", !animations);
                     SharedConfig.setAnimationsEnabled(!animations);
-                    editor.commit();
+                    editor.apply();
                     ((TextCell) view).setChecked(!animations);
+                } else if (item.type == SWITCH_TYPE_POWER_SAVER_FOLLOW_SYSTEM) {
+                    LiteMode.setPowerSaverFollowSystem(!LiteMode.isPowerSaverFollowSystem());
+                    updateValues();
+                    updateInfo();
+                    ((TextCell) view).setChecked(LiteMode.isPowerSaverFollowSystem());
                 }
             }
         });
@@ -233,13 +240,8 @@ public class LiteModeSettingsActivity extends BaseFragment {
         items.clear();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             items.add(Item.asSlider());
-            items.add(Item.asInfo(
-                LiteMode.getPowerSaverLevel() <= 0 ?
-                    LocaleController.getString(R.string.LiteBatteryInfoDisabled) :
-                LiteMode.getPowerSaverLevel() >= 100 ?
-                    LocaleController.getString(R.string.LiteBatteryInfoEnabled) :
-                    LocaleController.formatString(R.string.LiteBatteryInfoBelow, String.format("%d%%", LiteMode.getPowerSaverLevel()))
-            ));
+            items.add(Item.asSwitch(LocaleController.getString(R.string.LiteBatteryFollowSystem), SWITCH_TYPE_POWER_SAVER_FOLLOW_SYSTEM));
+            items.add(Item.asInfo(getPowerSaverInfoText()));
         }
 
         items.add(Item.asHeader(LocaleController.getString(R.string.LiteOptionsTitle)));
@@ -291,16 +293,23 @@ public class LiteModeSettingsActivity extends BaseFragment {
 
         if (items.isEmpty()) {
             updateItems();
-        } else if (items.size() >= 2) {
-            items.set(1, Item.asInfo(
-                LiteMode.getPowerSaverLevel() <= 0 ?
-                    LocaleController.getString(R.string.LiteBatteryInfoDisabled) :
-                LiteMode.getPowerSaverLevel() >= 100 ?
-                    LocaleController.getString(R.string.LiteBatteryInfoEnabled) :
-                    LocaleController.formatString(R.string.LiteBatteryInfoBelow, String.format("%d%%", LiteMode.getPowerSaverLevel()))
-            ));
-            adapter.notifyItemChanged(1);
+        } else if (items.size() >= 3) {
+            items.set(2, Item.asInfo(getPowerSaverInfoText()));
+            adapter.notifyItemChanged(2);
         }
+    }
+
+    private CharSequence getPowerSaverInfoText() {
+        if (LiteMode.isPowerSaverFollowSystem()) {
+            return LocaleController.getString(R.string.LiteBatteryFollowSystemInfo);
+        }
+        if (LiteMode.getPowerSaverLevel() <= 0) {
+            return LocaleController.getString(R.string.LiteBatteryInfoDisabled);
+        }
+        if (LiteMode.getPowerSaverLevel() >= 100) {
+            return LocaleController.getString(R.string.LiteBatteryInfoEnabled);
+        }
+        return LocaleController.formatString(R.string.LiteBatteryInfoBelow, String.format("%d%%", LiteMode.getPowerSaverLevel()));
     }
 
     private void updateValues() {
@@ -321,6 +330,12 @@ public class LiteModeSettingsActivity extends BaseFragment {
                 ((SwitchCell) child).update(item);
             } else if (item.viewType == VIEW_TYPE_SLIDER) {
                 ((PowerSaverSlider) child).update();
+            } else if (item.viewType == VIEW_TYPE_SWITCH2) {
+                if (item.type == SWITCH_TYPE_SMOOTH_TRANSITIONS) {
+                    ((TextCell) child).setChecked(MessagesController.getGlobalMainSettings().getBoolean("view_animations", true));
+                } else if (item.type == SWITCH_TYPE_POWER_SAVER_FOLLOW_SYSTEM) {
+                    ((TextCell) child).setChecked(LiteMode.isPowerSaverFollowSystem());
+                }
             }
         }
 
@@ -338,6 +353,7 @@ public class LiteModeSettingsActivity extends BaseFragment {
     private static final int VIEW_TYPE_SWITCH2 = 5;
 
     public static final int SWITCH_TYPE_SMOOTH_TRANSITIONS = 1;
+    public static final int SWITCH_TYPE_POWER_SAVER_FOLLOW_SYSTEM = 2;
 
     private class Adapter extends AdapterWithDiffUtils {
 
@@ -411,6 +427,8 @@ public class LiteModeSettingsActivity extends BaseFragment {
                     SharedPreferences preferences = MessagesController.getGlobalMainSettings();
                     boolean animations = preferences.getBoolean("view_animations", true);
                     textCell.setTextAndCheck(item.text, animations, false);
+                } else if (item.type == SWITCH_TYPE_POWER_SAVER_FOLLOW_SYSTEM) {
+                    textCell.setTextAndCheck(item.text, LiteMode.isPowerSaverFollowSystem(), false);
                 }
             }
         }
@@ -515,6 +533,38 @@ public class LiteModeSettingsActivity extends BaseFragment {
             addView(checkBoxView, LayoutHelper.createFrame(21, 21, Gravity.CENTER_VERTICAL | (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT), LocaleController.isRTL ? 0 : 64, 0, LocaleController.isRTL ? 64 : 0, 0));
 
             setFocusable(true);
+            setClipChildren(false);
+        }
+
+        private float switchAlpha = 1f;
+        private ValueAnimator switchAlphaAnimator;
+
+        private void setSwitchAlpha(float alpha, boolean animated) {
+            if (switchAlphaAnimator != null) {
+                switchAlphaAnimator.cancel();
+                switchAlphaAnimator = null;
+            }
+            switchView.clearAnimation();
+            if (animated) {
+                switchAlphaAnimator = ValueAnimator.ofFloat(switchAlpha, alpha);
+                switchAlphaAnimator.addUpdateListener(anm -> {
+                    switchAlpha = (float) anm.getAnimatedValue();
+                    switchView.setAlpha(switchAlpha);
+                });
+                switchAlphaAnimator.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        switchAlpha = alpha;
+                        switchView.setAlpha(alpha);
+                        switchAlphaAnimator = null;
+                    }
+                });
+                switchAlphaAnimator.setDuration(220);
+                switchAlphaAnimator.start();
+            } else {
+                switchAlpha = alpha;
+                switchView.setAlpha(alpha);
+            }
         }
 
         private boolean disabled;
@@ -524,12 +574,12 @@ public class LiteModeSettingsActivity extends BaseFragment {
                 if (animated) {
                     imageView.animate().alpha(disabled ? .5f : 1f).setDuration(220).start();
                     textViewLayout.animate().alpha(disabled ? .5f : 1f).setDuration(220).start();
-                    switchView.animate().alpha(disabled ? .5f : 1f).setDuration(220).start();
+                    setSwitchAlpha(disabled ? .5f : 1f, true);
                     checkBoxView.animate().alpha(disabled ? .5f : 1f).setDuration(220).start();
                 } else {
                     imageView.setAlpha(disabled ? .5f : 1f);
                     textViewLayout.setAlpha(disabled ? .5f : 1f);
-                    switchView.setAlpha(disabled ? .5f : 1f);
+                    setSwitchAlpha(disabled ? .5f : 1f, false);
                     checkBoxView.setAlpha(disabled ? .5f : 1f);
                 }
                 setEnabled(!disabled);
@@ -697,6 +747,7 @@ public class LiteModeSettingsActivity extends BaseFragment {
 
         public PowerSaverSlider(Context context) {
             super(context);
+            setWillNotDraw(false);
 
             headerLayout = new LinearLayout(context);
             headerLayout.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
@@ -742,7 +793,7 @@ public class LiteModeSettingsActivity extends BaseFragment {
 
                         if (newValue <= 0 || newValue >= 100) {
                             try {
-                                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                                performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_TAP), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                             } catch (Exception e) {}
                         }
                     }
@@ -836,13 +887,17 @@ public class LiteModeSettingsActivity extends BaseFragment {
                     super.onPopulateAccessibilityEvent(host, event);
 
                     StringBuilder sb = new StringBuilder(LocaleController.getString(R.string.LiteBatteryTitle)).append(", ");
-                    int percent = LiteMode.getPowerSaverLevel();
-                    if (percent <= 0) {
-                        sb.append(LocaleController.getString(R.string.LiteBatteryAlwaysDisabled));
-                    } else if (percent >= 100) {
-                        sb.append(LocaleController.getString(R.string.LiteBatteryAlwaysEnabled));
+                    if (LiteMode.isPowerSaverFollowSystem()) {
+                        sb.append(LocaleController.getString(R.string.LiteBatteryFollowSystemInfo));
                     } else {
-                        sb.append(LocaleController.formatString(R.string.AccDescrLiteBatteryWhenBelow, Math.round(percent)));
+                        int percent = LiteMode.getPowerSaverLevel();
+                        if (percent <= 0) {
+                            sb.append(LocaleController.getString(R.string.LiteBatteryAlwaysDisabled));
+                        } else if (percent >= 100) {
+                            sb.append(LocaleController.getString(R.string.LiteBatteryAlwaysEnabled));
+                        } else {
+                            sb.append(LocaleController.formatString(R.string.AccDescrLiteBatteryWhenBelow, Math.round(percent)));
+                        }
                     }
 
                     event.setContentDescription(sb);
@@ -874,9 +929,11 @@ public class LiteModeSettingsActivity extends BaseFragment {
 
         public void update() {
             final int percent = LiteMode.getPowerSaverLevel();
+            final boolean followSystem = LiteMode.isPowerSaverFollowSystem();
 
-            middleTextView.cancelAnimation();
-            if (percent <= 0) {
+            if (followSystem) {
+                middleTextView.setText(LocaleController.getString(R.string.LiteBatteryFollowSystemState), !LocaleController.isRTL);
+            } else if (percent <= 0) {
                 middleTextView.setText(LocaleController.getString(R.string.LiteBatteryAlwaysDisabled), !LocaleController.isRTL);
             } else if (percent >= 100) {
                 middleTextView.setText(LocaleController.getString(R.string.LiteBatteryAlwaysEnabled), !LocaleController.isRTL);
@@ -886,10 +943,18 @@ public class LiteModeSettingsActivity extends BaseFragment {
             }
 
             headerOnView.setText((LiteMode.isPowerSaverApplied() ? LocaleController.getString(R.string.LiteBatteryEnabled) : LocaleController.getString(R.string.LiteBatteryDisabled)).toUpperCase());
-            updateHeaderOnVisibility(percent > 0 && percent < 100);
+            updateHeaderOnVisibility(followSystem || percent > 0 && percent < 100);
 
-            updateOnActive(percent >= 100);
-            updateOffActive(percent <= 0);
+            updateOnActive(!followSystem && percent >= 100);
+            updateOffActive(!followSystem && percent <= 0);
+            seekBarView.setEnabled(!followSystem);
+            seekBarView.setAlpha(followSystem ? .5f : 1f);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            canvas.drawLine(0, getMeasuredHeight() - 1, getMeasuredWidth(), getMeasuredHeight() - 1, Theme.dividerPaint);
         }
 
         private boolean headerOnVisible;
@@ -1061,6 +1126,7 @@ public class LiteModeSettingsActivity extends BaseFragment {
         LiteMode.savePreference();
         AnimatedEmojiDrawable.updateAll();
         Theme.reloadWallpaper(true);
+        LiteMode.removeOnPowerSaverAppliedListener(onPowerAppliedChange);
     }
 
     @Override

@@ -99,6 +99,9 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.ui.FabUiHelper;
+
 import com.android.billingclient.api.BillingClient;
 import com.android.billingclient.api.BillingFlowParams;
 import com.android.billingclient.api.ProductDetails;
@@ -572,9 +575,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 }
                 if (Bulletin.getVisibleBulletin() != null && Bulletin.getVisibleBulletin().isShowing()) {
                     super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-                    marginLayoutParams.bottomMargin = dp(14) + Bulletin.getVisibleBulletin().getLayout().getMeasuredHeight() - dp(10) + keyboardOffset;
+                    marginLayoutParams.bottomMargin = dp(FabUiHelper.getFabBottomMarginDp()) + Bulletin.getVisibleBulletin().getLayout().getMeasuredHeight() - dp(10) + keyboardOffset;
                 } else {
-                    marginLayoutParams.bottomMargin = dp(14) + keyboardOffset;
+                    marginLayoutParams.bottomMargin = dp(FabUiHelper.getFabBottomMarginDp()) + keyboardOffset;
                 }
 
                 int statusBarHeight = AndroidUtilities.isTablet() ? 0 : AndroidUtilities.statusBarHeight;
@@ -7826,7 +7829,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     super.invalidate(l, t, r, b);
                 }
             };
-            avatarImage.setRoundRadius(AndroidUtilities.dp(64));
+            avatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(78));
             avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_REGISTER);
             avatarDrawable.setInfo(5, null, null);
             avatarImage.setImageDrawable(avatarDrawable);
@@ -7840,7 +7843,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 protected void onDraw(Canvas canvas) {
                     if (avatarImage != null && avatarProgressView.getVisibility() == VISIBLE) {
                         paint.setAlpha((int) (0x55 * avatarImage.getImageReceiver().getCurrentAlpha() * avatarProgressView.getAlpha()));
-                        canvas.drawCircle(getMeasuredWidth() / 2.0f, getMeasuredHeight() / 2.0f, getMeasuredWidth() / 2.0f, paint);
+                        float radius = ExteraConfig.getAvatarCorners(getMeasuredWidth(), true);
+                        canvas.drawRoundRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), radius, radius, paint);
                     }
                 }
             };

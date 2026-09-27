@@ -549,6 +549,23 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             highQuality = null;
         }
 
+        public void resetEdit() {
+            thumbPath = null;
+            filterPath = null;
+            imagePath = null;
+            paintPath = null;
+            croppedPaintPath = null;
+            isFiltered = false;
+            isPainted = false;
+            isCropped = false;
+            mediaEntities = null;
+            editedInfo = null;
+            entities = null;
+            savedFilterState = null;
+            stickers = null;
+            cropState = null;
+        }
+
         public void copyFrom(MediaEditState state) {
             caption = state.caption;
 
@@ -2409,6 +2426,12 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                 sensorManager.registerListener(MediaController.this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
             });
             sensorsStarted = true;
+        }
+    }
+
+    public void clearRaiseChat(ChatActivity chatActivity) {
+        if (raiseChat == chatActivity) {
+            raiseChat = null;
         }
     }
 

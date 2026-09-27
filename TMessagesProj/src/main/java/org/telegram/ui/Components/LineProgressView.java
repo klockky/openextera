@@ -12,14 +12,19 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
-import android.util.Log;
-import android.view.View;
+import android.util.AttributeSet;
 import android.view.animation.DecelerateInterpolator;
+
+import com.exteragram.messenger.ExteraConfig;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.Components.voip.CellFlickerDrawable;
 
-public class LineProgressView extends View {
+public class LineProgressView extends LinearProgressIndicator {
+
+    public static final int TYPE_DEFAULT = 0;
+    public static final int TYPE_WAVY = 1;
 
     private long lastUpdateTime;
     private float currentProgress;
@@ -31,15 +36,25 @@ public class LineProgressView extends View {
     private int backColor;
     private int progressColor;
 
+    public int type;
+
     private static DecelerateInterpolator decelerateInterpolator;
     private static Paint progressPaint;
 
-    private RectF rect = new RectF();
+    private final RectF rect = new RectF();
 
-    CellFlickerDrawable cellFlickerDrawable;
+    private CellFlickerDrawable cellFlickerDrawable;
 
     public LineProgressView(Context context) {
-        super(context);
+        this(context, null);
+    }
+
+    public LineProgressView(Context context, AttributeSet attrs) {
+        this(context, attrs, com.google.android.material.R.attr.linearProgressIndicatorStyle);
+    }
+
+    public LineProgressView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
 
         if (decelerateInterpolator == null) {
             decelerateInterpolator = new DecelerateInterpolator();
@@ -47,9 +62,42 @@ public class LineProgressView extends View {
             progressPaint.setStrokeCap(Paint.Cap.ROUND);
             progressPaint.setStrokeWidth(AndroidUtilities.dp(2));
         }
+        init();
     }
 
-    private void updateAnimation() {
+    public void setProgressType(int type) {
+        if (!ExteraConfig.getNewLoadingStyle()) {
+            this.type = TYPE_DEFAULT;
+            return;
+        }
+        if (this.type == type) {
+            return;
+        }
+        this.type = type;
+        if (type == TYPE_DEFAULT) {
+            setWaveSpeed(0);
+            setWavelength(0);
+            setWaveAmplitude(0);
+        } else if (type == TYPE_WAVY) {
+            setWavelengthDeterminate(AndroidUtilities.dp(40));
+            setWaveAmplitude(AndroidUtilities.dp(3));
+            setWaveSpeed(AndroidUtilities.dp(15));
+            setWaveAmplitudeRampProgressMin(0.05f);
+        }
+    }
+
+    private void init() {
+        setMax(1000);
+        setTrackThickness(AndroidUtilities.dp(2));
+        setTrackCornerRadius(AndroidUtilities.dp(1));
+        setTrackStopIndicatorSize(AndroidUtilities.dp(2));
+        setIndicatorTrackGapSize(AndroidUtilities.dp(2));
+        setTrackCornerRadiusFraction(0.5f);
+        setIndeterminate(false);
+        setProgressType(TYPE_DEFAULT);
+    }
+
+    private void updateLegacyAnimation() {
         long newTime = System.currentTimeMillis();
         long dt = newTime - lastUpdateTime;
         lastUpdateTime = newTime;
@@ -79,13 +127,24 @@ public class LineProgressView extends View {
 
     public void setProgressColor(int color) {
         progressColor = color;
+        if (ExteraConfig.getNewLoadingStyle()) {
+            setIndicatorColor(color);
+        }
     }
 
     public void setBackColor(int color) {
         backColor = color;
+        if (ExteraConfig.getNewLoadingStyle()) {
+            setTrackColor(color);
+        }
     }
 
     public void setProgress(float value, boolean animated) {
+        currentProgress = value;
+        if (ExteraConfig.getNewLoadingStyle()) {
+            setProgressCompat((int) (value * getMax()), animated);
+            return;
+        }
         if (!animated) {
             animatedProgressValue = value;
             animationProgressStart = value;
@@ -95,7 +154,6 @@ public class LineProgressView extends View {
         if (value != 1) {
             animatedAlphaValue = 1;
         }
-        currentProgress = value;
         currentProgressTime = 0;
 
         lastUpdateTime = System.currentTimeMillis();
@@ -106,11 +164,15 @@ public class LineProgressView extends View {
         return currentProgress;
     }
 
-    public void onDraw(Canvas canvas) {
+    @Override
+    protected void onDraw(Canvas canvas) {
+        if (ExteraConfig.getNewLoadingStyle()) {
+            super.onDraw(canvas);
+            return;
+        }
         if (backColor != 0 && animatedProgressValue != 1) {
             progressPaint.setColor(backColor);
             progressPaint.setAlpha((int) (255 * animatedAlphaValue));
-            int start = (int) (getWidth() * animatedProgressValue);
             rect.set(0, 0, getWidth(), getHeight());
             canvas.drawRoundRect(rect, getHeight() / 2f, getHeight() / 2f, progressPaint);
         }
@@ -132,6 +194,6 @@ public class LineProgressView extends View {
             invalidate();
         }
 
-        updateAnimation();
+        updateLegacyAnimation();
     }
 }

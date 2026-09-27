@@ -15,6 +15,8 @@ import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.Shader;
@@ -26,6 +28,8 @@ import android.text.TextPaint;
 import android.text.TextUtils;
 
 import androidx.core.graphics.ColorUtils;
+
+import com.exteragram.messenger.ExteraConfig;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
@@ -128,7 +132,7 @@ public class AvatarDrawable extends Drawable {
         super();
         this.resourcesProvider = resourcesProvider;
         namePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-        namePaint.setTypeface(AndroidUtilities.bold());
+        namePaint.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_NUNITO_EXTRABOLD));
         namePaint.setTextSize(dp(18));
     }
 
@@ -583,13 +587,15 @@ public class AvatarDrawable extends Drawable {
         canvas.save();
         canvas.translate(bounds.left, bounds.top);
 
-        if (drawAvatarBackground) {
+        if (drawAvatarBackground && (avatarType != AVATAR_TYPE_ARCHIVED || archivedAvatarProgress < 1.0f)) {
             if (rotate45Background) {
                 canvas.save();
                 canvas.rotate(-45, size / 2.0f, size / 2.0f);
             }
-            if (roundRadius > 0) {
-                AndroidUtilities.rectTmp.set(0, 0, size, size);
+            AndroidUtilities.rectTmp.set(0, 0, size, size);
+            if (roundRadius == 0) {
+                canvas.drawRect(AndroidUtilities.rectTmp, backgroundPaint);
+            } else if (roundRadius > 0) {
                 canvas.drawRoundRect(AndroidUtilities.rectTmp, roundRadius, roundRadius, backgroundPaint);
             } else {
                 canvas.drawCircle(size / 2.0f, size / 2.0f, size / 2.0f, backgroundPaint);
@@ -602,7 +608,11 @@ public class AvatarDrawable extends Drawable {
         if (avatarType == AVATAR_TYPE_ARCHIVED) {
             if (archivedAvatarProgress != 0) {
                 backgroundPaint.setColor(ColorUtils.setAlphaComponent(getThemedColor(Theme.key_avatar_backgroundArchived), alpha));
-                canvas.drawCircle(size / 2.0f, size / 2.0f, size / 2.0f * archivedAvatarProgress, backgroundPaint);
+                int avatarCorners = roundRadius;
+                if (avatarCorners < 0) {
+                    avatarCorners = ExteraConfig.getAvatarCorners(size, true, false);
+                }
+                canvas.drawRoundRect(0, 0, size * archivedAvatarProgress, size * archivedAvatarProgress, avatarCorners, avatarCorners, backgroundPaint);
                 if (Theme.dialogs_archiveAvatarDrawableRecolored) {
                     Theme.dialogs_archiveAvatarDrawable.beginApplyLayerColors();
                     Theme.dialogs_archiveAvatarDrawable.setLayerColor("Arrow1", Theme.getNonAnimatedColor(Theme.key_avatar_backgroundArchived));
@@ -688,8 +698,10 @@ public class AvatarDrawable extends Drawable {
                 final int y = (size - h) / 2 + iconTy;
                 drawable.setBounds(x, y, x + w, y + h);
                 if (alpha != 255) {
+                    drawable.setColorFilter(new PorterDuffColorFilter(ColorUtils.setAlphaComponent(getThemedColor(Theme.key_avatar_text), alpha), PorterDuff.Mode.SRC_IN));
                     drawable.setAlpha(alpha);
                     drawable.draw(canvas);
+                    drawable.setColorFilter(new PorterDuffColorFilter(ColorUtils.setAlphaComponent(getThemedColor(Theme.key_avatar_text), 255), PorterDuff.Mode.SRC_IN));
                     drawable.setAlpha(255);
                 } else {
                     drawable.draw(canvas);
@@ -735,7 +747,7 @@ public class AvatarDrawable extends Drawable {
             if (textLayout != null) {
                 float scale = size / (float) dp(50);
                 canvas.scale(scale, scale, size / 2f, size / 2f) ;
-                canvas.translate((size - textWidth) / 2 - textLeft, (size - textHeight) / 2);
+                canvas.translate((size - textWidth) / 2 - textLeft, (size - textHeight) / 2 + AndroidUtilities.dpf2(0.5f));
 
                 textLayout.draw(canvas);
             }

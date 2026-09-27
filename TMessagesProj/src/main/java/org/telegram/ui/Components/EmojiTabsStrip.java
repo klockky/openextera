@@ -1,5 +1,8 @@
 package org.telegram.ui.Components;
 
+import com.exteragram.messenger.IconPackType;
+import com.exteragram.messenger.icons.IconManager;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
@@ -849,7 +852,7 @@ public class EmojiTabsStrip extends ScrollableHorizontalScrollView {
                 setBackground(Theme.createRadSelectorDrawable(selectorColor(), 8, 8));
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (IconManager.INSTANCE.isBasePackOnly(IconPackType.DEFAULT)) {
                 lottieDrawable = new RLottieDrawable(lottieId, AndroidUtilities.dp(24), AndroidUtilities.dp(24), false, null);
                 lottieDrawable.setBounds(AndroidUtilities.dp(3), AndroidUtilities.dp(3), AndroidUtilities.dp(27), AndroidUtilities.dp(27));
                 lottieDrawable.setMasterParent(this);
@@ -858,6 +861,7 @@ public class EmojiTabsStrip extends ScrollableHorizontalScrollView {
             } else {
                 imageView = new BackupImageView(context);
                 imageView.applyAttach = false;
+                imageView.setSize(AndroidUtilities.dp(20), AndroidUtilities.dp(20));
                 imageView.setImageDrawable(context.getResources().getDrawable(drawableId).mutate());
                 addView(imageView);
             }

@@ -294,6 +294,9 @@ public class CheckBoxCell extends FrameLayout {
                 collapsedArrow.setBackground(drawable);
                 addView(collapsedArrow, LayoutHelper.createFrame(16, 16, Gravity.CENTER_VERTICAL));
             }
+            if (collapsedArrow.getVisibility() == GONE) {
+                collapsedArrow.setVisibility(VISIBLE);
+            }
 
             updateCollapseArrowTranslation();
             collapsedArrow.animate().cancel();
@@ -402,12 +405,38 @@ public class CheckBoxCell extends FrameLayout {
         } else {
             checkBoxSquare.setChecked(checked, animated);
         }
-        valueTextView.setText(value);
+        setValueText(value);
         needDivider = divider;
         setWillNotDraw(!divider);
     }
 
+    public void setText(CharSequence text, String value, boolean animated) {
+        if (textAnimated) {
+            animatedTextView.setText(Emoji.replaceEmoji(text, animatedTextView.getPaint().getFontMetricsInt(), false), animated);
+        } else {
+            linksTextView.setText(text);
+        }
+        setValueText(value);
+    }
+
+    private void setValueText(String value) {
+        if (!TextUtils.isEmpty(value)) {
+            valueTextView.setText(value);
+            valueTextView.setVisibility(VISIBLE);
+        } else {
+            valueTextView.setText("");
+            valueTextView.setVisibility(GONE);
+        }
+    }
+
     public void setUserOrChat(TLObject userOrChat) {
+        setUserOrChat(userOrChat, true);
+    }
+
+    public void setUserOrChat(TLObject userOrChat, boolean animated) {
+        if (avatarImageView.getVisibility() == GONE) {
+            avatarImageView.setVisibility(VISIBLE);
+        }
         avatarDrawable.setInfo(userOrChat);
         avatarImageView.setForUserOrChat(userOrChat, avatarDrawable);
         CharSequence name;
@@ -421,7 +450,7 @@ public class CheckBoxCell extends FrameLayout {
         }
         if (textAnimated) {
             name = Emoji.replaceEmoji(name, animatedTextView.getPaint().getFontMetricsInt(), false);
-            animatedTextView.setText(name);
+            animatedTextView.setText(name, animated);
         } else {
             linksTextView.setText(name);
         }
@@ -582,11 +611,35 @@ public class CheckBoxCell extends FrameLayout {
 
     public void setCollapseButton(boolean collapsed, CharSequence text, View.OnClickListener onClick) {
         if (collapseButton != null) {
+            if (collapseButton.getVisibility() == GONE) {
+                collapseButton.setVisibility(VISIBLE);
+            }
             collapseButton.set(collapsed, text);
             if (onClick != null) {
                 collapseButton.setOnClickListener(onClick);
             }
         }
+    }
+
+    public void reset() {
+        if (textAnimated) {
+            animatedTextView.setText("");
+        } else {
+            linksTextView.setText("");
+        }
+        if (avatarImageView != null) {
+            avatarImageView.setVisibility(GONE);
+            avatarImageView.setImage(null, null, null);
+        }
+        if (collapseButton != null) {
+            collapseButton.setVisibility(GONE);
+            collapseButton.setOnClickListener(null);
+        }
+        if (collapsedArrow != null) {
+            collapsedArrow.setVisibility(GONE);
+        }
+        setPad(0);
+        setMultiline(false);
     }
 
     public class CollapseButton extends LinearLayout {

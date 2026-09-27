@@ -1,11 +1,18 @@
 package org.telegram.ui.Components;
 
+import com.exteragram.messenger.utils.system.VibratorUtils;
+import com.exteragram.messenger.utils.chats.ChatUtils;
+import com.exteragram.messenger.utils.text.LocaleUtils;
+import com.exteragram.messenger.api.dto.BadgeDTO;
+import com.exteragram.messenger.badges.BadgesController;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.os.Bundle;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
@@ -68,6 +75,7 @@ import org.telegram.tgnet.Vector;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
 import org.telegram.ui.ActionBar.ActionBarPopupWindow;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.Theme;
@@ -114,6 +122,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
 
     int highlightStartPosition = -1, highlightEndPosition = -1;
     private AnimatedFloat highlightAlpha;
+    private Runnable cancelSearchCreatorRunnable;
 
     private ContentPreviewViewer.ContentPreviewViewerDelegate previewDelegate = new ContentPreviewViewer.ContentPreviewViewerDelegate() {
         @Override
@@ -123,7 +132,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
 
         @Override
         public boolean needSend(int contentType) {
-            return fragment instanceof ChatActivity && ((ChatActivity) fragment).canSendMessage() && (UserConfig.getInstance(UserConfig.selectedAccount).isPremium() || ((ChatActivity) fragment).getCurrentUser() != null && UserObject.isUserSelf(((ChatActivity) fragment).getCurrentUser()));
+            return fragment instanceof ChatActivity && ((ChatActivity) fragment).canSendMessage() && (UserConfig.getInstance(UserConfig.selectedAccount).isPremium() || LocaleUtils.canUseLocalPremiumEmojis() || ((ChatActivity) fragment).getCurrentUser() != null && UserObject.isUserSelf(((ChatActivity) fragment).getCurrentUser()));
         }
 
         @Override
@@ -137,7 +146,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
 
         @Override
         public boolean needCopy(TLRPC.Document document) {
-            return UserConfig.getInstance(UserConfig.selectedAccount).isPremium() && MessageObject.isAnimatedEmoji(document);
+            return (UserConfig.getInstance(UserConfig.selectedAccount).isPremium() || LocaleUtils.canUseLocalPremiumEmojis()) && MessageObject.isAnimatedEmoji(document);
         }
 
         @Override
@@ -192,6 +201,30 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
             } else {
                 BulletinFactory.of((FrameLayout) containerView, resourcesProvider).createEmojiBulletin(document, LocaleController.getString(R.string.SetAsEmojiStatusInfo), LocaleController.getString(R.string.UndoNoCaps), undoAction).show();
             }
+        }
+
+        @Override
+        public void setAsBadge(TLRPC.Document document) {
+            if (document == null) {
+                return;
+            }
+            BadgesController controller = BadgesController.INSTANCE;
+            BadgeDTO previous = controller.getBadge();
+            controller.updateBadge(new BadgeDTO(document.id, previous != null ? previous.getText() : null), result ->
+                    AndroidUtilities.runOnUIThread(() -> {
+                        if (!"ok".equals(result)) {
+                            BulletinFactory.of((FrameLayout) containerView, resourcesProvider).createErrorBulletin(LocaleController.getString(R.string.UnknownError)).show();
+                            return;
+                        }
+                        Runnable undo = () -> controller.updateBadge(previous, undoResult -> {
+                            if (!"ok".equals(undoResult)) {
+                                AndroidUtilities.runOnUIThread(() -> BulletinFactory.of((FrameLayout) containerView, resourcesProvider)
+                                        .createErrorBulletin(LocaleController.getString(R.string.UnknownError)).show());
+                            }
+                        });
+                        BulletinFactory.of((FrameLayout) containerView, resourcesProvider)
+                                .createEmojiBulletin(document, LocaleController.getString(R.string.SetAsBadgeStatusInfo), LocaleController.getString(R.string.UndoNoCaps), undo).show();
+                    }));
         }
 
         @Override
@@ -381,7 +414,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
                         dismiss();
                     } catch (Exception ignore) {}
                     try {
-                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                        view.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_TAP), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                     } catch (Exception e) {}
                 }
                 return;
@@ -461,7 +494,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
                 popupWindow.showAtLocation(view, Gravity.TOP | Gravity.LEFT, loc[0] - AndroidUtilities.dp(49) + view.getMeasuredWidth() / 2, loc[1] - AndroidUtilities.dp(52));
 
                 try {
-                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                    view.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.LONG_PRESS), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                 } catch (Exception e) {}
 
                 return true;
@@ -1456,7 +1489,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
 
         @Override
         public int getItemCount() {
-            hasDescription = !UserConfig.getInstance(currentAccount).isPremium() && customEmojiPacks.stickerSets != null && customEmojiPacks.stickerSets.size() == 1 && MessageObject.isPremiumEmojiPack(customEmojiPacks.stickerSets.get(0));
+            hasDescription = !UserConfig.getInstance(currentAccount).isPremium() && !LocaleUtils.canUseLocalPremiumEmojis(currentAccount) && customEmojiPacks.stickerSets != null && customEmojiPacks.stickerSets.size() == 1 && MessageObject.isPremiumEmojiPack(customEmojiPacks.stickerSets.get(0));
             return 1 + (hasDescription ? 1 : 0) + customEmojiPacks.getItemsCount() + Math.max(0, customEmojiPacks.data.length - 1);
         }
     }
@@ -1514,6 +1547,30 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
             } catch (Exception e) {
                 FileLog.e(e);
             }
+        } else if (id == 3 && stickerSet.set != null) {
+            AlertDialog loading = new AlertDialog(getContext(), AlertDialog.ALERT_TYPE_SPINNER);
+            loading.setCancelDialog(true);
+            loading.show();
+            long ownerId = ChatUtils.extractOwnerId(stickerSet.set.id);
+            cancelSearchCreatorRunnable = ChatUtils.getInstance().searchUserById(ownerId, user -> {
+                loading.dismiss();
+                cancelSearchCreatorRunnable = null;
+                if (user != null && fragment != null) {
+                    Bundle args = new Bundle();
+                    args.putLong("user_id", user.id);
+                    fragment.presentFragment(new ProfileActivity(args));
+                    dismiss();
+                } else {
+                    AndroidUtilities.addToClipboard(String.valueOf(ownerId));
+                    BulletinFactory.of((FrameLayout) containerView, resourcesProvider).createCopyBulletin(LocaleController.getString(R.string.TextCopied)).show();
+                }
+            }, cancel -> cancelSearchCreatorRunnable = cancel);
+            loading.setOnCancelListener(dialog -> {
+                if (cancelSearchCreatorRunnable != null) {
+                    cancelSearchCreatorRunnable.run();
+                    cancelSearchCreatorRunnable = null;
+                }
+            });
         }
     }
 
@@ -1630,7 +1687,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
 
             float endMarginDp = 8;
             if (!single) {
-                if (!UserConfig.getInstance(currentAccount).isPremium()) {
+                if (!UserConfig.getInstance(currentAccount).isPremium() && !LocaleUtils.canUseLocalPremiumEmojis(currentAccount)) {
                     unlockButtonView = new PremiumButtonView(context, AndroidUtilities.dp(4), false, resourcesProvider);
                     unlockButtonView.setButton(LocaleController.getString(R.string.Unlock), ev -> {
                         premiumButtonClicked = SystemClock.elapsedRealtime();
@@ -1729,6 +1786,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
                 addView(optionsButton, LayoutHelper.createFrame(40, 40, Gravity.TOP | Gravity.RIGHT, 0, 5, 5 - backgroundPaddingLeft / AndroidUtilities.density, 0));
                 optionsButton.addSubItem(1, R.drawable.msg_share, LocaleController.getString(R.string.StickersShare));
                 optionsButton.addSubItem(2, R.drawable.msg_link, LocaleController.getString(R.string.CopyLink));
+                optionsButton.addSubItem(3, R.drawable.msg_openprofile, LocaleController.getString(R.string.ChannelCreator));
                 optionsButton.setOnClickListener(v -> optionsButton.toggleSubMenu());
                 optionsButton.setDelegate(EmojiPacksAlert.this::onSubItemClick);
                 optionsButton.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
@@ -1828,7 +1886,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
                 }
             }
 
-            if (premium && unlockButtonView != null && !UserConfig.getInstance(currentAccount).isPremium()) {
+            if (premium && unlockButtonView != null && !UserConfig.getInstance(currentAccount).isPremium() && !LocaleUtils.canUseLocalPremiumEmojis(currentAccount)) {
                 unlockButtonView.setVisibility(VISIBLE);
                 if (addButtonView != null) {
                     addButtonView.setVisibility(GONE);

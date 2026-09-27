@@ -197,6 +197,16 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         }
     }
 
+    public boolean isCameraReady() {
+        // TODO(openextera): stage2 incomplete — lite also checks cameraXSession.isReady() when
+        //  ExteraConfig.getCameraType() == CameraType.CAMERA_X; the CameraX round-video path is not ported yet.
+        return cameraReady && isCameraSessionInitiated() && cameraThread != null;
+    }
+
+    public void setFrontface(boolean frontface) {
+        isFrontface = frontface;
+    }
+
     private float panTranslationY;
     private float animationTranslationY;
 

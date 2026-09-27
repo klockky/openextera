@@ -50,6 +50,10 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.TabIconsMode;
+import com.exteragram.messenger.utils.text.LocaleUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BotWebViewVibrationEffect;
 import org.telegram.messenger.BuildConfig;
@@ -158,7 +162,13 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
     LinearLayoutManager layoutManager;
     AnimatedTextView titleView;
     ActionBarAnimatedSubtitleOverlayContainer subtitleOverlayContainer;
-    ImageView telegramLogoView;
+    AnimatedTextView titleViewOut;
+    private ValueAnimator titleOverrideAnimator;
+    private float titleOverrideProgress = 1f;
+    private boolean titleOverrideForward = true;
+    private CharSequence dialogsTitleOverride;
+    private boolean dialogsEmojiStatusVisible = true;
+    private boolean dialogsEmojiStatusVisibleOut = true;
     ImageView emojiStatusView;
     AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable statusDrawable;
     boolean drawCircleForce;
@@ -321,24 +331,12 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         recyclerListView.setAdapter(adapter);
         addView(recyclerListView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, FAKE_TOP_PADDING, 0, 0));
 
-        titleView = new AnimatedTextView(getContext(), true, true, false);
-        titleView.setGravity(Gravity.LEFT);
-        titleView.setTextColor(getTextLogoColor());
-        titleView.setTypeface(AndroidUtilities.bold());
-        titleView.setPadding(0, dp(8), 0, dp(8));
-        titleView.setTextSize(dp(!AndroidUtilities.isTablet() && getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? 18 : 20));
-        titleView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
-        titleView.setFocusableInTouchMode(true);
-        addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        titleViewOut = createTitleView();
+        titleViewOut.setVisibility(View.GONE);
+        addView(titleViewOut, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
-        telegramLogoView = new ImageView(context);
-        telegramLogoView.setContentDescription(getString(R.string.AppName));
-        telegramLogoView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        telegramLogoView.setImageResource(R.drawable.telegram_logo_2);
-        telegramLogoView.setColorFilter(getTextLogoColor(), PorterDuff.Mode.MULTIPLY);
-        telegramLogoView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
-        telegramLogoView.setFocusableInTouchMode(true);
-        addView(telegramLogoView, LayoutHelper.createFrame(90, 22));
+        titleView = createTitleView();
+        addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         statusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(null, dp(26));
         statusDrawable.center = true;
@@ -903,23 +901,40 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             final float translationOffset = subtitleOverlayContainer.getTotalVisibility() * -dp(10);
 
             float offset = (titleView.getMeasuredHeight() - titleView.getTextHeight()) / 2f;
+            final float titleScale = lerp(1f, 0.95f, subtitleOverlayContainer.getTotalVisibility());
+            final float titleTranslationY = bottomY + dp(14) - offset + dp(FAKE_TOP_PADDING) - dp(6) * subtitleOverlayContainer.getTotalVisibility();
             titleView.setPivotX(0);
-            titleView.setScaleX(lerp(1f, 0.95f, subtitleOverlayContainer.getTotalVisibility()));
-            titleView.setScaleY(lerp(1f, 0.95f, subtitleOverlayContainer.getTotalVisibility()));
-            titleView.setTranslationY(bottomY + dp(14) - offset + dp(FAKE_TOP_PADDING) - dp(6) * subtitleOverlayContainer.getTotalVisibility());
+            titleView.setScaleX(titleScale);
+            titleView.setScaleY(titleScale);
+            titleView.setTranslationY(titleTranslationY);
             int cellWidth = dp(72);
-            lastViewRight += -cellWidth + getAvatarRight(cellWidth, collapsedProgress) + dp(12);
-            titleView.setTranslationX(lastViewRight);
+            lastViewRight += -cellWidth + getAvatarRight(cellWidth, collapsedProgress) + dp(16);
+            final float overrideShift = dp(10) * (titleOverrideForward ? -1 : 1);
+            titleView.setTranslationX(lastViewRight + (titleOverrideAnimator != null ? -overrideShift * (1f - titleOverrideProgress) : 0));
             titleView.getDrawable().setRightPadding(lastViewRight - dp(12) + actionBar.menu.getVisibleItemsMeasuredWidthWithAlpha() * progress);
+            titleView.setAlpha(titleOverrideProgress * progress);
 
-            telegramLogoView.setTranslationX(titleView.getTranslationX() + dp(1));
-            telegramLogoView.setTranslationY(bottomY + dp(14 + FAKE_TOP_PADDING + 4.333f) + translationOffset /*titleView.getTranslationY() + dpf2(37.33f)*/);
+            titleViewOut.setPivotX(0);
+            titleViewOut.setScaleX(titleScale);
+            titleViewOut.setScaleY(titleScale);
+            titleViewOut.setTranslationY(titleTranslationY);
+            if (titleOverrideAnimator != null) {
+                titleViewOut.setTranslationX(lastViewRight + overrideShift * titleOverrideProgress);
+                titleViewOut.getDrawable().setRightPadding(lastViewRight - dp(12) + actionBar.menu.getVisibleItemsMeasuredWidthWithAlpha() * progress);
+                titleViewOut.setAlpha((1f - titleOverrideProgress) * progress);
+                titleViewOut.setVisibility(View.VISIBLE);
+            } else {
+                titleViewOut.setAlpha(0f);
+                titleViewOut.setVisibility(View.GONE);
+            }
 
-            emojiStatusView.setTranslationX(titleView.getTranslationX() - dpf2(3.33f) + telegramLogoView.getMeasuredWidth());
+            final AnimatedTextView statusAnchor = isEmojiStatusFadingOut() ? titleViewOut : titleView;
+            emojiStatusView.setTranslationX(statusAnchor.getTranslationX() + statusAnchor.getDrawable().getCurrentWidth() * titleScale - dp(2));
             emojiStatusView.setTranslationY(bottomY + dp(14 - 11 + FAKE_TOP_PADDING + 4.333f) + translationOffset);
+            emojiStatusView.setAlpha(progress * getEmojiStatusAlpha());
 
             subtitleOverlayContainer.setTranslationX(titleView.getTranslationX());
-            subtitleOverlayContainer.setTranslationY(bottomY + dp(15 + FAKE_TOP_PADDING + 4.333f + 8));
+            subtitleOverlayContainer.setTranslationY(bottomY + dp(36.333f));
         }
 
         super.dispatchDraw(canvas);
@@ -951,7 +966,22 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             canvas.restore();
         }
 
+        drawActionBarHolidayEffect(canvas);
         canvas.restore();
+    }
+
+    private void drawActionBarHolidayEffect(Canvas canvas) {
+        if (actionBar == null || actionBar.getTitlesContainer() == null || actionBar.getTitlesContainer().getVisibility() == View.VISIBLE) {
+            return;
+        }
+        canvas.save();
+        canvas.translate(actionBar.getX() - getX(), actionBar.getY() - getY());
+        canvas.clipRect(0, 0, actionBar.getMeasuredWidth(), actionBar.getMeasuredHeight());
+        final boolean invalidateHoliday = actionBar.drawHolidayEffect(canvas);
+        canvas.restore();
+        if (invalidateHoliday) {
+            invalidate();
+        }
     }
 
     private LinearGradient ellipsizeGradient;
@@ -981,7 +1011,9 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        titleView.setTextSize(dp(!AndroidUtilities.isTablet() && getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? 18 : 20));
+        final float titleTextSize = dp(!AndroidUtilities.isTablet() && getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? 18 : 20);
+        titleView.setTextSize(titleTextSize);
+        titleViewOut.setTextSize(titleTextSize);
         currentCellWidth = dp(ITEM_WIDTH);
         AndroidUtilities.rectTmp.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
         super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(dp(85 + FAKE_TOP_PADDING), MeasureSpec.EXACTLY));
@@ -1124,10 +1156,10 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         int color = getTextColor();
 
         titleView.setTextColor(getTextLogoColor());
+        titleViewOut.setTextColor(getTextLogoColor());
         if (subtitleOverlayContainer != null) {
             subtitleOverlayContainer.updateColors();
         }
-        telegramLogoView.setColorFilter(getTextLogoColor(), PorterDuff.Mode.MULTIPLY);
         AndroidUtilities.forEachViews(recyclerListView, view -> {
             StoryCell cell = (StoryCell) view;
             cell.invalidate();
@@ -1241,6 +1273,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
     EllipsizeSpanAnimator ellipsizeSpanAnimator = new EllipsizeSpanAnimator(this);
 
     public void setTitleOverlayText(String titleOverlayText, int textId) {
+        cancelTitleOverrideAnimation();
         final CharSequence subtitleToSet;
         if (textId == R.string.ConnectingToProxyWithDots) {
             subtitleToSet = AndroidUtilities.replaceArrows(getString(R.string.TitleSetupProxy), true, dp(8f / 3f), dp(2));
@@ -1272,6 +1305,8 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             overlayTextId = 0;
             titleView.setText(currentTitle, !LocaleController.isRTL);
         }
+        titleViewOut.setText(null, false);
+        titleViewOut.setVisibility(View.GONE);
 
         animatorHasTitleText.setValue(hasOverlayText, true);
         if (hasEllipsizedText) {
@@ -1327,6 +1362,111 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
 
     public void setActionBar(ActionBar actionBar) {
         this.actionBar = actionBar;
+    }
+
+    public void setDialogsEmojiStatusVisible(boolean visible) {
+        dialogsEmojiStatusVisibleOut = dialogsEmojiStatusVisible;
+        dialogsEmojiStatusVisible = visible || ExteraConfig.getTabIcons() != TabIconsMode.ICONS_ONLY;
+        invalidate();
+    }
+
+    private boolean isEmojiStatusFadingOut() {
+        return titleOverrideAnimator != null && !dialogsEmojiStatusVisible && dialogsEmojiStatusVisibleOut;
+    }
+
+    private float getEmojiStatusAlpha() {
+        if (hasOverlayText) {
+            return 0f;
+        }
+        if (isEmojiStatusFadingOut()) {
+            return 1f - titleOverrideProgress;
+        }
+        if (dialogsEmojiStatusVisible) {
+            return titleOverrideProgress;
+        }
+        return 0f;
+    }
+
+    public void setDialogsTitleOverride(CharSequence title, boolean animated) {
+        setDialogsTitleOverride(title, animated, true);
+    }
+
+    public void setDialogsTitleOverride(CharSequence title, boolean animated, boolean forward) {
+        if (ExteraConfig.getTabIcons() != TabIconsMode.ICONS_ONLY) {
+            title = null;
+        }
+        dialogsTitleOverride = title;
+        if (type != TYPE_DIALOGS) {
+            return;
+        }
+        currentTitle = getDialogsMainTitle();
+        if (hasOverlayText) {
+            return;
+        }
+        final CharSequence oldText = titleView.getText();
+        cancelTitleOverrideAnimation();
+        if (!animated || TextUtils.equals(oldText, currentTitle)) {
+            titleView.setText(currentTitle, false);
+            invalidate();
+            return;
+        }
+        titleOverrideForward = forward;
+        titleOverrideProgress = 0f;
+        titleViewOut.setText(oldText, false);
+        titleViewOut.setVisibility(View.VISIBLE);
+        titleViewOut.setAlpha(MathUtils.clamp(Math.min(collapsedProgress, collapsedProgress2), 0, 1));
+        titleView.setText(currentTitle, false);
+        titleOverrideAnimator = ValueAnimator.ofFloat(0f, 1f);
+        titleOverrideAnimator.addUpdateListener(animation -> {
+            titleOverrideProgress = (float) animation.getAnimatedValue();
+            invalidate();
+        });
+        titleOverrideAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (titleOverrideAnimator == animation) {
+                    titleOverrideAnimator = null;
+                    titleOverrideProgress = 1f;
+                    titleViewOut.setText(null, false);
+                    titleViewOut.setVisibility(View.GONE);
+                }
+                invalidate();
+            }
+        });
+        titleOverrideAnimator.setDuration(350);
+        titleOverrideAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+        titleOverrideAnimator.start();
+    }
+
+    private AnimatedTextView createTitleView() {
+        AnimatedTextView textView = new AnimatedTextView(getContext(), true, true, false);
+        textView.setGravity(Gravity.LEFT);
+        textView.setTextColor(getTextLogoColor());
+        textView.setEllipsizeByGradient(true);
+        textView.setTypeface(AndroidUtilities.bold());
+        textView.setPadding(0, dp(8), 0, dp(8));
+        textView.setTextSize(dp(!AndroidUtilities.isTablet() && getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? 18 : 20));
+        textView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        textView.setFocusableInTouchMode(true);
+        return textView;
+    }
+
+    private void cancelTitleOverrideAnimation() {
+        if (titleOverrideAnimator != null) {
+            titleOverrideAnimator.cancel();
+            titleOverrideAnimator = null;
+        }
+        titleOverrideProgress = 1f;
+        if (titleViewOut != null) {
+            titleViewOut.setText(null, false);
+            titleViewOut.setAlpha(0f);
+            titleViewOut.setVisibility(View.GONE);
+        }
+    }
+
+    private CharSequence getDialogsMainTitle() {
+        final CharSequence title = !TextUtils.isEmpty(dialogsTitleOverride) ? dialogsTitleOverride : LocaleUtils.getActionBarTitle();
+        return !TextUtils.isEmpty(title) ? Emoji.replaceEmoji(title, titleView.getPaint().getFontMetricsInt(), false) : title;
     }
 
     public float overscrollProgress() {
@@ -1472,8 +1612,8 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             }
             createTextView();
             addView(textViewContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-            avatarImage.setRoundRadius(dp(48) / 2);
-            crossfadeToAvatarImage.setRoundRadius(dp(48) / 2);
+            avatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(48));
+            crossfadeToAvatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(48));
         }
 
         private void createTextView() {
@@ -1486,8 +1626,8 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             textView.setMaxLines(1);
 
             textViewContainer.addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 1, 0, 1, 0));
-            avatarImage.setRoundRadius(dp(48) / 2);
-            crossfadeToAvatarImage.setRoundRadius(dp(48) / 2);
+            avatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(48));
+            crossfadeToAvatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(48));
         }
 
         public void setDialogId(long dialogId) {
@@ -1648,7 +1788,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             params.originalAvatarRect.set(x, y, x + finalSize, y + finalSize);
             params.additionalInset = dpf2(1.33f) * progressToCollapsed;
             avatarImage.setAlpha(1f);
-            avatarImage.setRoundRadius((int) radius);
+            avatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(finalSize, true));
 
             cx = x + radius;
             cy = y + radius;
@@ -1658,7 +1798,9 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
                 backgroundPaint.setColor(getThemedColor(Theme.key_actionBarDefaultArchived));
             }
             if (progressToCollapsed != 0) {
-                canvas.drawCircle(cx, cy, radius + dpf2(1.5f), backgroundPaint);
+                final float backgroundRadius = radius + dpf2(1.5f);
+                final float backgroundCorners = ExteraConfig.getAvatarCorners(radius * 2, true) + dpf2(1.5f);
+                canvas.drawRoundRect(cx - backgroundRadius, cy - backgroundRadius, cx + backgroundRadius, cy + backgroundRadius, backgroundCorners, backgroundCorners, backgroundPaint);
             }
 
             canvas.save();
@@ -2133,7 +2275,10 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             return;
         }
         Long emojiStatusId = UserObject.getEmojiStatusDocumentId(user);
-        if (emojiStatusId != null) {
+        if (ExteraConfig.getHideActionBarStatus() || !UserConfig.getInstance(currentAccount).isPremium()) {
+            statusDrawable.set((Drawable) null, animated);
+            statusDrawable.setParticles(false, animated);
+        } else if (emojiStatusId != null) {
             final boolean isCollectible = user.emoji_status instanceof TLRPC.TL_emojiStatusCollectible;
             statusDrawable.set(emojiStatusId, animated);
             statusDrawable.setParticles(isCollectible, animated);
@@ -2178,22 +2323,18 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
 
     private void checkUi_titleVisibility() {
         final float progress = MathUtils.clamp(Math.min(collapsedProgress, collapsedProgress2), 0, 1);
-        final float titleVisibility = animatorHasTitleText.getFloatValue();
-        final float logoVisibility = 1f - titleVisibility;
-        final float titleAlpha = titleVisibility * progress;
-        final float logoAlpha = logoVisibility * progress;
 
         if (titleView != null) {
-            titleView.setAlpha(titleAlpha);
-            titleView.setVisibility(titleAlpha > 0 ? VISIBLE : GONE);
+            titleView.setAlpha(progress);
+            titleView.setVisibility(progress > 0 ? VISIBLE : GONE);
         }
-        if (telegramLogoView != null) {
-            telegramLogoView.setAlpha(logoAlpha);
-            telegramLogoView.setVisibility(logoAlpha > 0 ? VISIBLE : GONE);
+        if (titleViewOut != null && titleOverrideAnimator == null) {
+            titleViewOut.setAlpha(progress);
+            titleViewOut.setVisibility(progress > 0 ? VISIBLE : GONE);
         }
         if (emojiStatusView != null) {
-            emojiStatusView.setAlpha(logoAlpha);
-            emojiStatusView.setVisibility(logoAlpha > 0 ? VISIBLE : GONE);
+            emojiStatusView.setAlpha(getEmojiStatusAlpha() * progress);
+            emojiStatusView.setVisibility(progress > 0 ? VISIBLE : GONE);
         }
         if (subtitleOverlayContainer != null) {
             subtitleOverlayContainer.setAlpha(progress);

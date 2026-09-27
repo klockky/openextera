@@ -1,5 +1,7 @@
 package org.telegram.ui.Components.Reactions;
 
+import com.exteragram.messenger.utils.chats.GlassMenuHelper;
+
 import static org.telegram.ui.ChatActivity.MODE_DEFAULT;
 
 import android.animation.Animator;
@@ -131,6 +133,9 @@ public class ChatSelectionReactionMenuOverlay extends FrameLayout {
             reactionsContainerLayout.setClipChildren(false);
             reactionsContainerLayout.setClipToPadding(false);
             addView(reactionsContainerLayout, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 70 + mPadding, Gravity.RIGHT));
+            if (GlassMenuHelper.isEnabled(parentFragment.getCurrentAccount(), parentFragment.getResourceProvider())) {
+                GlassMenuHelper.applyToReactions(parentFragment.getGlassBackgroundDrawableFactory(), parentFragment.getResourceProvider(), reactionsContainerLayout);
+            }
         }
     }
 

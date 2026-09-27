@@ -10,6 +10,7 @@ import android.graphics.drawable.Drawable;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
+import android.text.TextUtils;
 import android.view.View;
 
 import androidx.core.graphics.ColorUtils;
@@ -44,6 +45,9 @@ public class UnreadCounterTextView extends View {
     int panelBackgroundColor;
     int counterColor;
     CharSequence lastText;
+    private int horizontalPadding;
+    private boolean singleLine = true;
+    private int maxLines = 1;
 
     int textColorKey = Theme.key_chat_fieldOverlayText;
 
@@ -56,6 +60,44 @@ public class UnreadCounterTextView extends View {
         layoutPaint.setTypeface(AndroidUtilities.bold());
     }
 
+    public void setHorizontalPadding(int padding) {
+        horizontalPadding = padding;
+        invalidate();
+    }
+
+    public void setSingleLine(boolean singleLine) {
+        this.singleLine = singleLine;
+        if (singleLine) {
+            maxLines = 1;
+        }
+        requestLayout();
+    }
+
+    public void setMaxLines(int maxLines) {
+        this.maxLines = maxLines;
+        if (maxLines > 1) {
+            singleLine = false;
+        }
+        requestLayout();
+    }
+
+    private void measureLayoutTextWidth(CharSequence text) {
+        if (singleLine) {
+            layoutTextWidth = (int) Math.ceil(layoutPaint.measureText(text, 0, text.length()));
+        } else {
+            final int maxWidth = AndroidUtilities.displaySize.x - horizontalPadding * 2;
+            layoutTextWidth = 0;
+            StaticLayout layout = new StaticLayout(text, layoutPaint, maxWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, true);
+            for (int i = 0; i < Math.min(layout.getLineCount(), maxLines); i++) {
+                layoutTextWidth = Math.max(layoutTextWidth, (int) Math.ceil(layout.getLineWidth(i)));
+            }
+        }
+    }
+
+    private StaticLayout createTextLayout(CharSequence text, int width) {
+        return StaticLayoutEx.createStaticLayout(text, layoutPaint, width, Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false, TextUtils.TruncateAt.END, width, maxLines, false);
+    }
+
     public void setText(CharSequence text, boolean animatedFromBottom) {
         if (lastText == text) {
             return;
@@ -65,9 +107,9 @@ public class UnreadCounterTextView extends View {
         textLayoutOut = textLayout;
         iconOut = icon;
         layoutPaint.setTypeface(AndroidUtilities.bold());
-        layoutTextWidth = (int) Math.ceil(layoutPaint.measureText(text, 0, text.length()));
+        measureLayoutTextWidth(text);
         icon = null;
-        textLayout = new StaticLayout(text, layoutPaint, layoutTextWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, true);
+        textLayout = createTextLayout(text, layoutTextWidth);
         setContentDescription(text);
         invalidate();
 
@@ -87,28 +129,40 @@ public class UnreadCounterTextView extends View {
     }
 
     public void setText(CharSequence text) {
+        if (lastText == text) {
+            return;
+        }
+        lastText = text;
         layoutPaint.setTypeface(AndroidUtilities.bold());
-        layoutTextWidth = (int) Math.ceil(layoutPaint.measureText(text, 0, text.length()));
+        measureLayoutTextWidth(text);
         icon = null;
-        textLayout = new StaticLayout(text, layoutPaint, layoutTextWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, true);
+        textLayout = createTextLayout(text, layoutTextWidth);
         setContentDescription(text);
         invalidate();
     }
 
     public void setTextInfo(CharSequence text) {
+        if (lastText == text) {
+            return;
+        }
+        lastText = text;
         layoutPaint.setTypeface(null);
-        layoutTextWidth = (int) Math.ceil(layoutPaint.measureText(text, 0, text.length()));
+        measureLayoutTextWidth(text);
         icon = null;
-        textLayout = new StaticLayout(text, layoutPaint, layoutTextWidth + 1, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, true);
+        textLayout = createTextLayout(text, layoutTextWidth + 1);
         setContentDescription(text);
         invalidate();
     }
 
     public void setTextInfo(Drawable icon, CharSequence text) {
+        if (lastText == text) {
+            return;
+        }
+        lastText = text;
         layoutPaint.setTypeface(null);
-        layoutTextWidth = (int) Math.ceil(layoutPaint.measureText(text, 0, text.length()));
+        measureLayoutTextWidth(text);
         this.icon = icon;
-        textLayout = new StaticLayout(text, layoutPaint, layoutTextWidth + 1, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, true);
+        textLayout = createTextLayout(text, layoutTextWidth + 1);
         setContentDescription(text);
         invalidate();
     }
@@ -119,6 +173,18 @@ public class UnreadCounterTextView extends View {
         if (selectableBackground != null) {
             selectableBackground.setState(getDrawableState());
         }
+    }
+
+    @Override
+    public void drawableHotspotChanged(float x, float y) {
+        super.drawableHotspotChanged(x, y);
+        if (selectableBackground != null) {
+            selectableBackground.setHotspot(x, y);
+        }
+    }
+
+    public CharSequence getText() {
+        return lastText;
     }
 
     @Override

@@ -52,6 +52,9 @@ import androidx.annotation.NonNull;
 import androidx.collection.LongSparseArray;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import org.telegram.ui.recyclerview.LinearSmoothScrollerCustom;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -359,7 +362,7 @@ public class StoryPrivacyBottomSheet extends BottomSheet implements Notification
 //                            AndroidUtilities.shakeViewSpring(view, shiftDp = -shiftDp);
 //                            BotWebViewVibrationEffect.APP_ERROR.vibrate();
                             try {
-                                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                                performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_TAP), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                             } catch (Throwable ignore) {}
                             new AlertDialog.Builder(getContext(), resourcesProvider)
                                 .setTitle(getString(R.string.GroupTooLarge))
@@ -3023,10 +3026,10 @@ public class StoryPrivacyBottomSheet extends BottomSheet implements Notification
             super(context);
             this.resourcesProvider = resourcesProvider;
 
-            avatarDrawable.setRoundRadius(AndroidUtilities.dp(40));
+            avatarDrawable.setRoundRadius(ExteraConfig.getAvatarCorners(40));
 
             imageView = new BackupImageView(context);
-            imageView.setRoundRadius(AndroidUtilities.dp(20));
+            imageView.setRoundRadius(ExteraConfig.getAvatarCorners(40));
             addView(imageView);
 
             titleTextView = new SimpleTextView(context);
@@ -3138,7 +3141,7 @@ public class StoryPrivacyBottomSheet extends BottomSheet implements Notification
             dialogId = user == null ? 0 : user.id;
 
             avatarDrawable.setInfo(user);
-            imageView.setRoundRadius(dp(20));
+            imageView.setRoundRadius(ExteraConfig.getAvatarCorners(40));
             imageView.setForUserOrChat(user, avatarDrawable);
 
             CharSequence text = UserObject.getUserName(user);
@@ -3162,7 +3165,7 @@ public class StoryPrivacyBottomSheet extends BottomSheet implements Notification
             dialogId = chat == null ? 0 : -chat.id;
 
             avatarDrawable.setInfo(chat);
-            imageView.setRoundRadius(dp(ChatObject.isForum(chat) ? 12 : 20));
+            imageView.setRoundRadius(ExteraConfig.getAvatarCorners(40, false, ChatObject.isForum(chat)));
             imageView.setForUserOrChat(chat, avatarDrawable);
 
             CharSequence text = chat.title;
@@ -3284,7 +3287,7 @@ public class StoryPrivacyBottomSheet extends BottomSheet implements Notification
             checkBox.setVisibility(View.GONE);
             radioButton.setVisibility(needCheck ? View.VISIBLE : View.GONE);
             imageView.setImageDrawable(avatarDrawable);
-            imageView.setRoundRadius(dp(20));
+            imageView.setRoundRadius(ExteraConfig.getAvatarCorners(40));
         }
 
         private void setSubtitle(CharSequence text) {

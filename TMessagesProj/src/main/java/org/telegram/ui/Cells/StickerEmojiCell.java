@@ -8,6 +8,8 @@
 
 package org.telegram.ui.Cells;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
@@ -99,6 +101,7 @@ public class StickerEmojiCell extends FrameLayout implements NotificationCenter.
             }
         };
         imageView.setAspectFit(true);
+        imageView.setRoundRadius(ExteraConfig.getStickerShape() == 0 ? 0 : AndroidUtilities.dp(4));
         imageView.setAllowLoadingOnAttachedOnly(true);
         imageView.setLayerNum(1);
 

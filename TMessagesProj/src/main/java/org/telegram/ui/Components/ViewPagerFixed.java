@@ -43,6 +43,8 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.LinearSmoothScroller;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.utils.AppUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
 import org.telegram.messenger.Emoji;
@@ -688,7 +690,7 @@ public class ViewPagerFixed extends FrameLayout {
                 velX = velocityTracker.getXVelocity();
                 velY = velocityTracker.getYVelocity();
                 if (!startedTracking) {
-                    if (Math.abs(velX) >= 3000 && Math.abs(velX) > Math.abs(velY)) {
+                    if (Math.abs(velX) >= AppUtils.getSwipeVelocity() && Math.abs(velX) > Math.abs(velY)) {
                         prepareForMoving(ev, velX < 0);
                     }
                 }
@@ -700,7 +702,7 @@ public class ViewPagerFixed extends FrameLayout {
                 float x = viewPages[0].getX();
                 tabsAnimation = new AnimatorSet();
                 if (additionalOffset != 0) {
-                    if (Math.abs(velX) > 1500) {
+                    if (Math.abs(velX) > AppUtils.getSwipeVelocity()) {
                         backAnimation = animatingForward ? velX > 0 : velX < 0;
                     } else {
                         if (animatingForward) {
@@ -714,7 +716,7 @@ public class ViewPagerFixed extends FrameLayout {
                         }
                     }
                 } else {
-                    backAnimation = Math.abs(x) < viewPages[0].getMeasuredWidth() / 3.0f && (Math.abs(velX) < 3500 || Math.abs(velX) < Math.abs(velY));
+                    backAnimation = Math.abs(x) < viewPages[0].getMeasuredWidth() / 3.0f && (Math.abs(velX) < AppUtils.getSwipeVelocity() || Math.abs(velX) < Math.abs(velY));
                 }
                 float distToMove;
                 float dx = 0;

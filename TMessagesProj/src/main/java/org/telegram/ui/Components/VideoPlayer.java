@@ -35,6 +35,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import androidx.annotation.OptIn;
+
+import com.exteragram.messenger.ExteraConfig;
 import androidx.media3.common.C;
 import androidx.media3.common.VideoListener;
 import androidx.media3.common.audio.AudioProcessor;
@@ -52,6 +54,7 @@ import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.SeekParameters;
 import androidx.media3.common.Tracks;
+import androidx.media3.common.text.CueGroup;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.exoplayer.audio.AudioSink;
@@ -144,6 +147,12 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
 
         }
         default void onSeekFinished(AnalyticsListener.EventTime eventTime) {
+
+        }
+        default void onAudioTrackChanged(int state) {
+
+        }
+        default void onCues(CueGroup cueGroup) {
 
         }
     }
@@ -300,6 +309,7 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
     }
 
     public void preparePlayerLoop(Uri videoUri, String videoType, Uri audioUri, String audioType) {
+        setAudioTrackState(0);
         this.videoQualities = null;
         this.videoQualityToSelect = null;
         this.videoUri = videoUri;
@@ -391,9 +401,49 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
     }
 
     private ExternalSubtitle currentExternalSubtitle;
+    private long currentVideoByteOffset;
+    private volatile int audioTrackState = 0;
 
     public void setExternalSubtitle(ExternalSubtitle subtitle) {
         currentExternalSubtitle = subtitle;
+    }
+
+    public boolean reloadCurrentSource() {
+        if (player == null) {
+            return false;
+        }
+        if (videoQualities != null) {
+            setSelectedQuality(false, videoQualityToSelect);
+            return true;
+        }
+        if (videoUri == null) {
+            return false;
+        }
+        final boolean playWhenReady = getPlayWhenReady();
+        final long position = Math.max(0, getCurrentPosition());
+        if (loopingMediaSource && audioUri != null && audioPlayer != null) {
+            MediaSource videoSource = new LoopingMediaSource(mediaSourceFromUri(videoUri, currentVideoByteOffset, videoType));
+            MediaSource audioSource = new LoopingMediaSource(mediaSourceFromUri(audioUri, 0, audioType, false));
+            player.setMediaSource(videoSource, false);
+            player.prepare();
+            audioPlayer.setMediaSource(audioSource, false);
+            audioPlayer.prepare();
+            if (position > 0) {
+                player.seekTo(position);
+                audioPlayer.seekTo(position);
+            }
+            setPlayWhenReady(playWhenReady);
+            activePlayers.add(playerId);
+            return true;
+        }
+        player.setMediaSource(mediaSourceFromUri(videoUri, currentVideoByteOffset, videoType), false);
+        player.prepare();
+        if (position > 0) {
+            player.seekTo(position);
+        }
+        setPlayWhenReady(playWhenReady);
+        activePlayers.add(playerId);
+        return true;
     }
 
     private MediaSource maybeWrapWithExternalSubtitle(MediaSource mediaSource) {
@@ -408,12 +458,14 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
     }
 
     public void preparePlayer(Uri uri, String type, int priority, long videoByteOffset) {
+        setAudioTrackState(0);
         this.videoQualities = null;
         this.videoQualityToSelect = null;
         this.videoUri = uri;
         this.videoType = type;
         this.audioUri = null;
         this.audioType = null;
+        this.currentVideoByteOffset = videoByteOffset;
         this.loopingMediaSource = false;
         this.autoIsOriginal = false;
         this.currentStreamIsHls = false;
@@ -430,6 +482,7 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
     }
 
     public void preparePlayer(ArrayList<Quality> qualities, Quality select) {
+        setAudioTrackState(0);
         this.videoQualities = qualities;
         this.videoQualityToSelect = select;
         this.videoUri = null;
@@ -459,6 +512,11 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
     }
 
     public static Quality getSavedQuality(ArrayList<Quality> qualities, long did, int mid) {
+        if (ExteraConfig.getPreferOriginalQuality()) {
+            for (Quality q : qualities) {
+                if (q.original) return q;
+            }
+        }
         final SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("media_saved_pos", Activity.MODE_PRIVATE);
         final String setting = preferences.getString(did + "_" + mid + "q2", "");
         if (TextUtils.isEmpty(setting)) return null;
@@ -1622,6 +1680,24 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
         delegate = videoPlayerDelegate;
     }
 
+    public int getAudioTrackState() {
+        return audioTrackState;
+    }
+
+    public boolean hasAudioTrack() {
+        return audioTrackState == 1;
+    }
+
+    private void setAudioTrackState(int state) {
+        if (audioTrackState == state) {
+            return;
+        }
+        audioTrackState = state;
+        if (delegate != null) {
+            delegate.onAudioTrackChanged(state);
+        }
+    }
+
     public void setAudioVisualizerDelegate(AudioVisualizerDelegate audioVisualizerDelegate) {
         this.audioVisualizerDelegate = audioVisualizerDelegate;
     }
@@ -1690,7 +1766,7 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
     @Override
     public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
         maybeReportPlayerState();
-        if (playWhenReady && playbackState == Player.STATE_READY && !isMuted() && shouldPauseOther) {
+        if (playWhenReady && playbackState == Player.STATE_READY && !isMuted() && shouldPauseOther && hasAudioTrack()) {
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.playerDidStartPlaying, this);
         }
         if (!videoPlayerReady && playbackState == Player.STATE_READY) {
@@ -1709,6 +1785,18 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
     public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, @Player.DiscontinuityReason int reason) {
         if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
             repeatCount++;
+        }
+    }
+
+    @Override
+    public void onCues(@NonNull CueGroup cueGroup) {
+        Player.Listener.super.onCues(cueGroup);
+        if (delegate != null) {
+            AndroidUtilities.runOnUIThread(() -> {
+                if (delegate != null) {
+                    delegate.onCues(cueGroup);
+                }
+            });
         }
     }
 
@@ -1768,7 +1856,7 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
                         play();
                     }
                 }
-            } else {
+            } else if (delegate != null) {
                 delegate.onError(this, error);
             }
         });
@@ -2021,6 +2109,13 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
     @Override
     public void onTracksChanged(Tracks tracks) {
         Player.Listener.super.onTracksChanged(tracks);
+        if (mixedAudio) {
+            setAudioTrackState(1);
+        } else if (tracks.getGroups().isEmpty()) {
+            setAudioTrackState(0);
+        } else {
+            setAudioTrackState(tracks.isTypeSelected(C.TRACK_TYPE_AUDIO) ? 1 : 2);
+        }
         if (onQualityChangeListener != null) {
             AndroidUtilities.runOnUIThread(onQualityChangeListener);
         }

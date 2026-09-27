@@ -53,6 +53,11 @@ import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.badges.BadgesController;
+import com.exteragram.messenger.utils.chats.ChatUtils;
+import com.exteragram.messenger.utils.system.VibratorUtils;
+
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DocumentObject;
@@ -256,6 +261,16 @@ public class ContentPreviewViewer {
         }
 
         default void setAsEmojiStatus(TLRPC.Document document, Integer until) {
+        }
+
+        default void setAsBadge(TLRPC.Document document) {
+        }
+
+        default boolean needShowEmojiSet(TLRPC.Document document) {
+            return false;
+        }
+
+        default void showEmojiSet(TLRPC.Document document) {
         }
 
         default boolean needCopy(TLRPC.Document document) {
@@ -521,7 +536,7 @@ public class ContentPreviewViewer {
                     popupWindow.showAtLocation(containerView, 0, (int) ((containerView.getMeasuredWidth() - previewMenu.getMeasuredWidth()) / 2f), y);
 
                     try {
-                        containerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        runLongPressHaptic(containerView);
                     } catch (Exception ignored) {}
 
                     if (moveY != 0) {
@@ -716,7 +731,7 @@ public class ContentPreviewViewer {
                     menuVisible = true;
                     containerView.invalidate();
                     try {
-                        containerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        runLongPressHaptic(containerView);
                     } catch (Exception ignored) {}
                     return;
                 }
@@ -739,6 +754,11 @@ public class ContentPreviewViewer {
                         items.add(LocaleController.getString(R.string.Schedule));
                         icons.add(R.drawable.msg_autodelete);
                         actions.add(3);
+                    }
+                    if (MessageObject.isStickerDocument(currentDocument)) {
+                        items.add(LocaleController.getString(R.string.SaveToGallery));
+                        icons.add(R.drawable.msg_gallery);
+                        actions.add(10);
                     }
                     if (delegate.needRemove()) {
                         items.add(LocaleController.getString(R.string.ImportStickersRemoveMenu));
@@ -819,6 +839,9 @@ public class ContentPreviewViewer {
                             MediaDataController.getInstance(currentAccount).addRecentSticker(MediaDataController.TYPE_IMAGE, parentObject, currentDocument, (int) (System.currentTimeMillis() / 1000), true);
                         } else if (actions.get(which) == 5) {
                             delegate.remove(importingSticker);
+                        } else if (actions.get(which) == 10) {
+                            ChatUtils.getInstance().saveStickerToGallery(parentActivity, currentDocument, result ->
+                                    NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, 10));
                         } else if (actions.get(which) == 7) {
                             delegate.editSticker(currentDocument);
                         } else if (actions.get(which) == 8) {
@@ -892,7 +915,7 @@ public class ContentPreviewViewer {
                 popupWindow.showAtLocation(containerView, 0, (int) ((containerView.getMeasuredWidth() - previewMenu.getMeasuredWidth()) / 2f), y);
 
                 try {
-                    containerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    runLongPressHaptic(containerView);
                 } catch (Exception ignored) {}
             } else if (currentContentType == CONTENT_TYPE_EMOJI && delegate != null) {
                 ArrayList<CharSequence> items = new ArrayList<>();
@@ -916,10 +939,25 @@ public class ContentPreviewViewer {
                         actions.add(2);
                     }
                 }
+                if (BadgesController.INSTANCE.canChangeBadge()) {
+                    items.add(LocaleController.getString(R.string.SetAsBadge));
+                    icons.add(R.drawable.extera_outline);
+                    actions.add(77);
+                }
                 if (delegate.needCopy(currentDocument)) {
                     items.add(LocaleController.getString(R.string.CopyEmojiPreview));
                     icons.add(R.drawable.msg_copy);
                     actions.add(3);
+                }
+                if (delegate.needShowEmojiSet(currentDocument)) {
+                    items.add(LocaleController.getString(R.string.ViewEmojiSet));
+                    icons.add(R.drawable.msg_media);
+                    actions.add(11);
+                }
+                if (ChatUtils.getInstance().isEmoji(currentDocument)) {
+                    items.add(LocaleController.getString(R.string.SaveToGallery));
+                    icons.add(R.drawable.msg_gallery);
+                    actions.add(10);
                 }
                 if (delegate.needRemoveFromRecent(currentDocument)) {
                     items.add(LocaleController.getString(R.string.RemoveFromRecent));
@@ -955,8 +993,15 @@ public class ContentPreviewViewer {
                         delegate.setAsEmojiStatus(currentDocument, null);
                     } else if (action == 2) {
                         delegate.setAsEmojiStatus(null, null);
+                    } else if (action == 77) {
+                        delegate.setAsBadge(currentDocument);
                     } else if (action == 3) {
                         delegate.copyEmoji(currentDocument);
+                    } else if (action == 11) {
+                        delegate.showEmojiSet(currentDocument);
+                    } else if (action == 10) {
+                        ChatUtils.getInstance().saveStickerToGallery(parentActivity, currentDocument, result ->
+                                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, 11));
                     } else if (action == 4) {
                         delegate.removeFromRecent(currentDocument);
                     } else if (action == 5) {
@@ -1007,7 +1052,7 @@ public class ContentPreviewViewer {
                 ActionBarPopupWindow.startAnimation(previewMenu);
 
                 try {
-                    containerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    runLongPressHaptic(containerView);
                 } catch (Exception ignored) {}
 
                 if (moveY != 0) {
@@ -1049,6 +1094,16 @@ public class ContentPreviewViewer {
                     items.add(LocaleController.getString(R.string.AddACaption));
                     icons.add(R.drawable.outline_caption_24);
                     actions.add(11);
+                }
+
+                boolean canSaveGif = currentDocument != null && MessageObject.isNewGifDocument(currentDocument);
+                if (!canSaveGif && inlineResult != null && inlineResult.content != null) {
+                    canSaveGif = MessageObject.isNewGifDocument(WebFile.createWithWebDocument(inlineResult.content));
+                }
+                if (canSaveGif) {
+                    items.add(LocaleController.getString(R.string.SaveToGallery));
+                    icons.add(R.drawable.msg_gallery);
+                    actions.add(10);
                 }
 
                 boolean canDelete;
@@ -1098,6 +1153,9 @@ public class ContentPreviewViewer {
                         Object parent = parentObject;
                         ContentPreviewViewerDelegate stickerPreviewViewerDelegate = delegate;
                         AlertsCreator.createScheduleDatePickerDialog(parentActivity, stickerPreviewViewerDelegate.getDialogId(), (notify, scheduleDate, scheduleRepeatPeriod) -> stickerPreviewViewerDelegate.sendGif(document != null ? document : result, parent, notify, scheduleDate, scheduleRepeatPeriod), resourcesProvider);
+                    } else if (actions.get(which) == 10) {
+                        ChatUtils.getInstance().saveGifToGallery(parentActivity, currentDocument, inlineResult, result ->
+                                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, 12));
                     } else if (actions.get(which) == 11) {
                         delegate.addCaptionToGif(currentDocument != null ? currentDocument : inlineResult, parentObject, true, 0, 0);
                     }
@@ -1145,7 +1203,7 @@ public class ContentPreviewViewer {
                 popupWindow.showAtLocation(containerView, 0, (int) ((containerView.getMeasuredWidth() - previewMenu.getMeasuredWidth()) / 2f), y);
 
                 try {
-                    containerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    runLongPressHaptic(containerView);
                 } catch (Exception ignored) {}
 
                 if (moveY != 0) {
@@ -1497,14 +1555,23 @@ public class ContentPreviewViewer {
     VibrationEffect vibrationEffect;
 
     protected void runSmoothHaptic() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            final Vibrator vibrator = (Vibrator) containerView.getContext().getSystemService(Context.VIBRATOR_SERVICE);
+        if (ExteraConfig.getInAppVibration() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (vibrationEffect == null) {
                 long[] vibrationWaveFormDurationPattern = {0, 2};
                 vibrationEffect = VibrationEffect.createWaveform(vibrationWaveFormDurationPattern, -1);
             }
-            vibrator.cancel();
-            vibrator.vibrate(vibrationEffect);
+            VibratorUtils.vibrateEffect(vibrationEffect);
+        }
+    }
+
+    protected void runLongPressHaptic(View view) {
+        if (view == null || !ExteraConfig.getInAppVibration()) {
+            return;
+        }
+        try {
+            view.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.LONG_PRESS),
+                    HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING | HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+        } catch (Exception ignored) {
         }
     }
 
@@ -1643,7 +1710,7 @@ public class ContentPreviewViewer {
                     }
                     if (opened) {
                         try {
-                            currentPreviewCell.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                            runLongPressHaptic(currentPreviewCell);
                         } catch (Exception ignored) {}
                         if (delegate != null) {
                             delegate.resetTouch();
@@ -1725,6 +1792,7 @@ public class ContentPreviewViewer {
             }
         };
         containerView.setFocusable(false);
+        containerView.setHapticFeedbackEnabled(ExteraConfig.getInAppVibration());
         windowView.addView(containerView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT));
         containerView.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_POINTER_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {

@@ -64,6 +64,8 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
@@ -2262,6 +2264,7 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
         private final float lockScale = .875f;
         private final Drawable lock;
         private final PremiumGradient.PremiumGradientTools gradientTools;
+        private int foregroundColor = Integer.MIN_VALUE;
 
         public LevelLock(Context context, int lvl, Theme.ResourcesProvider resourcesProvider) {
             this(context, false, lvl, resourcesProvider);
@@ -2271,7 +2274,6 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
             this.resourcesProvider = resourcesProvider;
             text = new Text(LocaleController.formatPluralString(plus ? "BoostLevelPlus" : "BoostLevel", lvl), 12, AndroidUtilities.bold());
             lock = context.getResources().getDrawable(R.drawable.mini_switch_lock).mutate();
-            lock.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
             gradientTools = new PremiumGradient.PremiumGradientTools(Theme.key_premiumGradient1, Theme.key_premiumGradient2, -1, -1, -1, resourcesProvider);
         }
 
@@ -2290,9 +2292,14 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
                     (int) (left + dp(3.33f) + lock.getIntrinsicWidth() * lockScale),
                     (int) (cy + lock.getIntrinsicHeight() * lockScale / 2f)
             );
+            final int color = Theme.isCurrentThemeMonet(resourcesProvider) ? Theme.getColor(Theme.key_chats_actionIcon, resourcesProvider) : Color.WHITE;
+            if (foregroundColor != color) {
+                foregroundColor = color;
+                lock.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+            }
             lock.draw(canvas);
 
-            text.draw(canvas, left + dp(3.66f) + lock.getIntrinsicWidth() * lockScale, cy, Color.WHITE, 1f);
+            text.draw(canvas, left + dp(3.66f) + lock.getIntrinsicWidth() * lockScale, cy, color, 1f);
         }
 
         @Override
@@ -2739,7 +2746,7 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
                         }
                         if (closePaint == null) {
                             closePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                            closePaint.setColor(0xffffffff);
+                            closePaint.setColor(Theme.isCurrentThemeMonet() ? Theme.getColor(Theme.key_chats_actionIcon) : 0xffffffff);
                             closePaint.setStyle(Paint.Style.STROKE);
                             closePaint.setStrokeCap(Paint.Cap.ROUND);
                         }
@@ -3572,12 +3579,12 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
                     1.0f
             );
 
-            imageReceiver.setRoundRadius(isForum ? dp(18) : dp(54));
+            imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(rectF.width(), true, isForum));
             imageReceiver.setImageCoords(rectF);
             imageReceiver.draw(canvas);
 
             final float r = rectF.width() / 2f + dp(4);
-            final float rr = dp(isForum ? 22 : 58);
+            final float rr = ExteraConfig.getAvatarCorners(2 * r, true, isForum);
             canvas.drawRoundRect(
                     rectF.centerX() - r,
                     rectF.centerY() - r,

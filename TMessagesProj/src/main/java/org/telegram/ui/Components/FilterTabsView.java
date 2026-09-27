@@ -20,11 +20,14 @@ import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -53,6 +56,10 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.LinearSmoothScroller;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.TabIconsMode;
+import com.exteragram.messenger.utils.ui.FolderIcons;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
@@ -99,6 +106,9 @@ public class FilterTabsView extends FrameLayout {
     public interface FilterTabsViewDelegate {
         void onPageSelected(Tab tab, boolean forward);
 
+        default void onTabSelected(Tab tab, boolean forward, boolean animated) {
+        }
+
         void onPageScrolled(float progress);
 
         void onSamePageSelected();
@@ -119,7 +129,9 @@ public class FilterTabsView extends FrameLayout {
     public class Tab {
         public int id;
         public CharSequence title;
+        public CharSequence realTitle;
         public int titleWidth;
+        public int iconWidth;
         public int counter;
         public boolean isDefault;
         public boolean isLocked;
@@ -127,14 +139,18 @@ public class FilterTabsView extends FrameLayout {
 
         public String emoticon;
 
-        public Tab(int i, CharSequence title, boolean noanimate) {
+        public Tab(int i, CharSequence title, String emoticon, boolean noanimate) {
             this.id = i;
-            this.title = title;
+            this.title = ExteraConfig.getTabIcons() != TabIconsMode.ICONS_ONLY ? title : "";
+            this.realTitle = title;
             this.noanimate = noanimate;
+            this.emoticon = emoticon;
         }
 
         public int getWidth(boolean store) {
+            iconWidth = FolderIcons.getTotalIconWidth();
             int width = titleWidth = (int) Math.ceil(HintView2.measureCorrectly(title, textPaint));
+            width += iconWidth;
             int c;
             if (store) {
                 c = delegate.getTabCounter(id);
@@ -163,19 +179,20 @@ public class FilterTabsView extends FrameLayout {
         }
 
         public boolean setTitle(String newTitle, ArrayList<TLRPC.MessageEntity> newEntities, boolean noanimate) {
-            if (TextUtils.equals(title, newTitle)) {
+            if (TextUtils.equals(realTitle, newTitle)) {
                 return false;
             }
+            realTitle = newTitle;
             title = new SpannableStringBuilder(newTitle);
             title = Emoji.replaceEmoji(title, textPaint.getFontMetricsInt(), false);
 //            MessageObject.addEntitiesToText(title, newEntities, false, false, false, true);
             title = MessageObject.replaceAnimatedEmoji(title, newEntities, textPaint.getFontMetricsInt());
+            title = ExteraConfig.getTabIcons() != TabIconsMode.ICONS_ONLY ? title : "";
             this.noanimate = noanimate;
             return true;
         }
     }
 
-    private static final float TAB_PADDING_WIDTH = 24;
     private static final float TAB_INTERNAL_PADDING = 12.5f;
     private static final float TAB_COUNTER_HEIGHT = 17.333f;
 
@@ -237,8 +254,43 @@ public class FilterTabsView extends FrameLayout {
         private float rotation;
         private float progressToLocked;
 
+        private Drawable icon;
+        private String currentEmoticon;
+        private Drawable iconAnimateInDrawable;
+        private Drawable iconAnimateOutDrawable;
+        String lastEmoticon;
+        float lastIconX;
+        float animateFromIconX;
+        boolean animateIconX;
+        private boolean animateIconChange;
+        private int lastIconWidth;
+        private int animateFromIconWidth;
+        private boolean animateIconWidth;
+
         public TabView(Context context) {
             super(context);
+        }
+
+        private ColorMatrixColorFilter createColorFilterWithAlpha(int color, float alpha) {
+            return new ColorMatrixColorFilter(new float[] {
+                0, 0, 0, 0, Color.red(color),
+                0, 0, 0, 0, Color.green(color),
+                0, 0, 0, 0, Color.blue(color),
+                0, 0, 0, ((int) (alpha * 255)) / 255f, 0
+            });
+        }
+
+        private float getCurrentIconAlpha() {
+            if (!animateIconWidth) {
+                return currentTab.iconWidth > 0 ? 1f : 0f;
+            }
+            if (currentTab.iconWidth > 0 && animateFromIconWidth == 0) {
+                return changeProgress;
+            }
+            if (currentTab.iconWidth == 0 && animateFromIconWidth > 0) {
+                return 1f - changeProgress;
+            }
+            return 1f;
         }
 
         public void setTab(Tab tab, int position) {
@@ -275,6 +327,8 @@ public class FilterTabsView extends FrameLayout {
             animateCounterChange = false;
             animateTextChange = false;
             animateTextX = false;
+            animateIconX = false;
+            animateIconChange = false;
             animateTabWidth = false;
             if (changeAnimator != null) {
                 changeAnimator.removeAllListeners();
@@ -291,7 +345,7 @@ public class FilterTabsView extends FrameLayout {
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            int w = currentTab.getWidth(false) + dp(TAB_PADDING_WIDTH) + additionalTabWidth;
+            int w = currentTab.getWidth(false) + FolderIcons.getPaddingTab() + additionalTabWidth;
             setMeasuredDimension(w, MeasureSpec.getSize(heightMeasureSpec));
         }
 
@@ -388,8 +442,13 @@ public class FilterTabsView extends FrameLayout {
             }
 
             tabCounterVisible = (countWidth != 0 && !animateCounterRemove) ? (counterText != null ? 1.0f : editingStartAnimationProgress) : 0;
-            tabWidth = currentTab.titleWidth + ((countWidth != 0 && !animateCounterRemove) ? countWidth + dp(-2 * (counterText != null ? 1.0f : editingStartAnimationProgress)) : 0);
-            float textX = (getMeasuredWidth() - tabWidth) / 2f;
+            final int counterPart = (countWidth != 0 && !animateCounterRemove) ? countWidth + dp(-2 * (counterText != null ? 1.0f : editingStartAnimationProgress)) : 0;
+            if (ExteraConfig.getTabIcons() != TabIconsMode.ICONS_ONLY) {
+                tabWidth = currentTab.iconWidth + currentTab.titleWidth + counterPart;
+            } else {
+                tabWidth = currentTab.iconWidth + counterPart;
+            }
+            float textX = (getMeasuredWidth() - tabWidth) / 2f + currentTab.iconWidth;
             if (animateTextX) {
                 textX = textX * changeProgress + animateFromTextX * (1f - changeProgress);
             }
@@ -439,6 +498,45 @@ public class FilterTabsView extends FrameLayout {
                     canvas.translate(textX + textOffsetX, (getMeasuredHeight() - textHeight) / 2f + 1);
                     textLayout.draw(canvas);
                     AnimatedEmojiSpan.drawAnimatedEmojis(canvas, textLayout, textLayoutEmojis, 0, null, computeVerticalScrollOffset() - dp(6), computeVerticalScrollOffset() + computeVerticalScrollExtent(), 0, 1.0f, emojiColorFilter);
+                    canvas.restore();
+                }
+            }
+
+            int iconX = 0;
+            final float iconAlpha = getCurrentIconAlpha();
+            if (iconAlpha > 0) {
+                final int iconSize = FolderIcons.getIconWidth();
+                if (!TextUtils.equals(currentTab.emoticon, currentEmoticon)) {
+                    currentEmoticon = currentTab.emoticon;
+                    icon = getResources().getDrawable(FolderIcons.getTabIcon(currentTab.emoticon)).mutate();
+                    icon.setBounds(new Rect(0, 0, iconSize, iconSize));
+                }
+                final int color = textPaint.getColor();
+                iconX = (int) ((getMeasuredWidth() - tabWidth) / 2f);
+                if (animateIconX) {
+                    iconX = (int) (iconX * changeProgress + animateFromIconX * (1f - changeProgress));
+                }
+                final int iconY = (int) ((getMeasuredHeight() - iconSize) / 2f);
+                if (animateIconChange) {
+                    if (iconAnimateOutDrawable != null) {
+                        canvas.save();
+                        canvas.translate(iconX, iconY);
+                        iconAnimateOutDrawable.setColorFilter(createColorFilterWithAlpha(color, (1f - changeProgress) * iconAlpha));
+                        iconAnimateOutDrawable.draw(canvas);
+                        canvas.restore();
+                    }
+                    if (iconAnimateInDrawable != null) {
+                        canvas.save();
+                        canvas.translate(iconX, iconY);
+                        iconAnimateInDrawable.setColorFilter(createColorFilterWithAlpha(color, changeProgress * iconAlpha));
+                        iconAnimateInDrawable.draw(canvas);
+                        canvas.restore();
+                    }
+                } else {
+                    canvas.save();
+                    canvas.translate(iconX, iconY);
+                    icon.setColorFilter(createColorFilterWithAlpha(color, iconAlpha));
+                    icon.draw(canvas);
                     canvas.restore();
                 }
             }
@@ -556,13 +654,16 @@ public class FilterTabsView extends FrameLayout {
                 canvas.restore();
             }
 
+            lastEmoticon = currentEmoticon;
             lastTextX = textX;
+            lastIconX = iconX;
             lastTabCount = currentTab.counter;
             lastTitleLayout = textLayout;
             lastTitle = currentText;
             lastTitleWidth = currentTab.titleWidth;
             lastCountWidth = countWidth;
             lastCounterWidth = counterWidth;
+            lastIconWidth = currentTab.iconWidth;
             lastTabWidth = tabWidth;
             lastWidth = getMeasuredWidth();
 
@@ -584,9 +685,9 @@ public class FilterTabsView extends FrameLayout {
                     lockDrawableColor = unactiveColor;
                     lockDrawable.setColorFilter(new PorterDuffColorFilter(unactiveColor, PorterDuff.Mode.MULTIPLY));
                 }
-                int iconX = (int) ((getMeasuredWidth() - lockDrawable.getIntrinsicWidth()) / 2f + locIconXOffset);
+                int lockIconX = (int) ((getMeasuredWidth() - lockDrawable.getIntrinsicWidth()) / 2f + locIconXOffset);
                 int iconY = getMeasuredHeight() - dp(12);
-                lockDrawable.setBounds(iconX, iconY, iconX + lockDrawable.getIntrinsicWidth(), iconY + lockDrawable.getIntrinsicHeight());
+                lockDrawable.setBounds(lockIconX, iconY, lockIconX + lockDrawable.getIntrinsicWidth(), iconY + lockDrawable.getIntrinsicHeight());
                 if (progressToLocked != 1f) {
                     canvas.save();
                     canvas.scale(progressToLocked, progressToLocked, lockDrawable.getBounds().centerX(), lockDrawable.getBounds().centerY());
@@ -657,8 +758,19 @@ public class FilterTabsView extends FrameLayout {
             } else {
                 countWidth = 0;
             }
-            int tabWidth = currentTab.titleWidth + (countWidth != 0 ? countWidth + dp(6 * (counterText != null ? 1.0f : editingStartAnimationProgress)) : 0);
-            int textX = (getMeasuredWidth() - tabWidth) / 2;
+            if (currentTab.iconWidth != lastIconWidth) {
+                animateIconWidth = true;
+                animateFromIconWidth = lastIconWidth;
+                changed = true;
+            }
+            final int counterPart = countWidth != 0 ? countWidth + dp(6 * (counterText != null ? 1.0f : editingStartAnimationProgress)) : 0;
+            int tabWidth;
+            if (ExteraConfig.getTabIcons() != TabIconsMode.ICONS_ONLY) {
+                tabWidth = currentTab.titleWidth + currentTab.iconWidth + counterPart;
+            } else {
+                tabWidth = currentTab.iconWidth + counterPart;
+            }
+            int textX = (getMeasuredWidth() - tabWidth) / 2 + currentTab.iconWidth;
 
             if (textX != lastTextX) {
                 animateTextX = true;
@@ -717,6 +829,27 @@ public class FilterTabsView extends FrameLayout {
                 }
             }
 
+            if (ExteraConfig.getTabIcons() != TabIconsMode.TITLES_ONLY) {
+                final float iconX = (int) ((getMeasuredWidth() - tabWidth) / 2f);
+                if (iconX != lastIconX) {
+                    animateIconX = true;
+                    animateFromIconX = lastIconX;
+                    changed = true;
+                }
+                if (lastEmoticon != null && !TextUtils.equals(currentTab.emoticon, lastEmoticon)) {
+                    final int iconSize = FolderIcons.getIconWidth();
+                    final Rect bounds = new Rect(0, 0, iconSize, iconSize);
+                    iconAnimateOutDrawable = getResources().getDrawable(FolderIcons.getTabIcon(lastEmoticon)).mutate();
+                    iconAnimateInDrawable = getResources().getDrawable(FolderIcons.getTabIcon(currentTab.emoticon)).mutate();
+                    iconAnimateOutDrawable.setBounds(bounds);
+                    iconAnimateInDrawable.setBounds(bounds);
+                    iconAnimateOutDrawable.setTint(textPaint.getColor());
+                    iconAnimateInDrawable.setTint(textPaint.getColor());
+                    animateIconChange = true;
+                    changed = true;
+                }
+            }
+
             if (tabWidth != lastTabWidth || getMeasuredWidth() != lastWidth) {
                 animateTabWidth = true;
                 animateFromTabWidth = lastTabWidth;
@@ -747,10 +880,13 @@ public class FilterTabsView extends FrameLayout {
 
         public void clearTransitionParams() {
             animateChange = false;
+            animateIconWidth = false;
             animateTabCounter = false;
             animateCounterChange = false;
             animateTextChange = false;
             animateTextX = false;
+            animateIconX = false;
+            animateIconChange = false;
             animateTabWidth = false;
             changeAnimator = null;
             invalidate();
@@ -833,6 +969,7 @@ public class FilterTabsView extends FrameLayout {
     private int aBackgroundColorKey = -1;
 
     private int prevLayoutWidth;
+    private int oldAnimatedTab = -1;
 
     private boolean invalidated;
 
@@ -950,6 +1087,7 @@ public class FilterTabsView extends FrameLayout {
                 return super.canHighlightChildAt(child, x, y);
             }
         };
+        listView.setOverScrollMode(OVER_SCROLL_NEVER);
         listView.setClipChildren(false);
         itemAnimator = new DefaultItemAnimator() {
 
@@ -1100,7 +1238,7 @@ public class FilterTabsView extends FrameLayout {
         });
         ItemTouchHelper itemTouchHelper = new ItemTouchHelper(new TouchHelperCallback());
         itemTouchHelper.attachToRecyclerView(listView);
-        listViewPaddingH = Math.max(0, dp(23.5f - TAB_PADDING_WIDTH / 2f));
+        listViewPaddingH = Math.max(0, dp(23.5f) - FolderIcons.getPaddingTab() / 2);
         listView.setPadding(listViewPaddingH, 0, listViewPaddingH, 0);
         listView.setClipToPadding(false);
         listView.setDrawSelectorBehind(true);
@@ -1114,7 +1252,7 @@ public class FilterTabsView extends FrameLayout {
             }
             TabView tabView = (TabView) view;
             if (isEditing) {
-                if (position != 0) {
+                if (position != 0 || ExteraConfig.getHideAllChats()) {
                     int side = dp(6);
                     if (tabView.rect.left - side < x && tabView.rect.right + side > x) {
                         delegate.onDeletePressed(tabView.currentTab.id);
@@ -1165,6 +1303,9 @@ public class FilterTabsView extends FrameLayout {
     }
 
     public void scrollToTab(Tab tab, int position) {
+        if (currentPosition == position && selectedTabId == tab.id) {
+            return;
+        }
         if (tab.isLocked) {
             if (delegate != null) {
                 delegate.onPageSelected(tab, false);
@@ -1192,8 +1333,10 @@ public class FilterTabsView extends FrameLayout {
 
         if (delegate != null) {
             delegate.onPageSelected(tab, scrollingForward);
+            delegate.onTabSelected(tab, scrollingForward, true);
+            oldAnimatedTab = currentPosition;
         }
-        scrollToChild(position);
+        scrollToChild(position, true);
     }
 
     public void selectFirstTab() {
@@ -1243,7 +1386,13 @@ public class FilterTabsView extends FrameLayout {
         positionToWidth.clear();
         positionToCount.clear();
         positionToX.clear();
+        positionToStableId.clear();
         allTabsWidth = 0;
+        currentPosition = 0;
+        selectedTabId = -1;
+        previousPosition = 0;
+        previousId = -1;
+        scrollingToChild = -1;
     }
 
     public boolean hasTab(int id) {
@@ -1267,32 +1416,11 @@ public class FilterTabsView extends FrameLayout {
         isStaticAllChats = staticAllChats;
     }
 
-    public void addTab(int id, int stableId, String text, String emoticon, ArrayList<TLRPC.MessageEntity> entities, boolean noanimate, boolean isDefault, boolean isLocked) {
-        // TODO(openextera): lite measures/draws the folder icon (emoticon) in the tab — stage 2
-        addTab(id, stableId, text, entities, noanimate, isDefault, isLocked);
-        tabs.get(tabs.size() - 1).emoticon = emoticon;
-    }
-
     public void addTab(int id, int stableId, String text, ArrayList<TLRPC.MessageEntity> entities, boolean noanimate, boolean isDefault, boolean isLocked) {
-        int position = tabs.size();
-        if (position == 0 && selectedTabId == -1) {
-            selectedTabId = id;
-        }
-        positionToId.put(position, id);
-        positionToStableId.put(position, stableId);
-        idToPosition.put(id, position);
-        if (selectedTabId != -1 && selectedTabId == id) {
-            currentPosition = position;
-        }
-
-        Tab tab = new Tab(id, text(text, entities), noanimate);
-        tab.isDefault = isDefault;
-        tab.isLocked = isLocked;
-        allTabsWidth += tab.getWidth(true) + dp(TAB_PADDING_WIDTH);
-        tabs.add(tab);
+        addTab(id, stableId, text, null, entities, noanimate, isDefault, isLocked);
     }
 
-    public void addTab(int id, int stableId, CharSequence text, boolean noanimate, boolean isDefault, boolean isLocked) {
+    public void addTab(int id, int stableId, String text, String emoticon, ArrayList<TLRPC.MessageEntity> entities, boolean noanimate, boolean isDefault, boolean isLocked) {
         int position = tabs.size();
         if (position == 0 && selectedTabId == -1) {
             selectedTabId = id;
@@ -1304,10 +1432,10 @@ public class FilterTabsView extends FrameLayout {
             currentPosition = position;
         }
 
-        Tab tab = new Tab(id, text, noanimate);
+        Tab tab = new Tab(id, text(text, entities), emoticon, noanimate);
         tab.isDefault = isDefault;
         tab.isLocked = isLocked;
-        allTabsWidth += tab.getWidth(true) + dp(TAB_PADDING_WIDTH);
+        allTabsWidth += tab.getWidth(true) + FolderIcons.getPaddingTab();
         tabs.add(tab);
     }
 
@@ -1325,6 +1453,10 @@ public class FilterTabsView extends FrameLayout {
     public void finishAddingTabs(boolean animated) {
         listView.setItemAnimator(animated ? itemAnimator : null);
         adapter.notifyDataSetChanged();
+        if (currentPosition >= 0 && currentPosition < tabs.size()) {
+            delegate.onTabSelected(tabs.get(currentPosition), false, false);
+        }
+        oldAnimatedTab = currentPosition;
     }
 
     public void setColors(int line, int active, int unactive, int selector, int background) {
@@ -1396,7 +1528,7 @@ public class FilterTabsView extends FrameLayout {
             positionToWidth.put(a, tabWidth);
             positionToCount.put(a, tabs.get(a).counter);
             positionToX.put(a, xOffset + additionalTabWidth / 2);
-            xOffset += tabWidth + dp(TAB_PADDING_WIDTH) + additionalTabWidth;
+            xOffset += tabWidth + FolderIcons.getPaddingTab() + additionalTabWidth;
         }
     }
 
@@ -1486,10 +1618,10 @@ public class FilterTabsView extends FrameLayout {
                     float prevH = positionToCount.get(idx1) != 0 ? 1 : 0;
                     float newH = positionToCount.get(idx2) != 0 ? 1 : 0;
                     if (additionalTabWidth != 0) {
-                        indicatorX = lerp(prevX, newX, animatingIndicatorProgress) + dp(TAB_PADDING_WIDTH / 2f);
+                        indicatorX = lerp(prevX, newX, animatingIndicatorProgress) + FolderIcons.getPaddingTab() / 2f;
                     } else {
                         int x = positionToX.get(position);
-                        indicatorX = lerp(prevX, newX, animatingIndicatorProgress) - (x - holder.itemView.getLeft()) + dp(TAB_PADDING_WIDTH / 2f);
+                        indicatorX = lerp(prevX, newX, animatingIndicatorProgress) - (x - holder.itemView.getLeft()) + FolderIcons.getPaddingTab() / 2f;
                     }
                     indicatorWidth = lerp(prevW, newW, animatingIndicatorProgress);
                     counterVisible = lerp(prevH, newH, animatingIndicatorProgress);
@@ -1558,14 +1690,26 @@ public class FilterTabsView extends FrameLayout {
         if (!tabs.isEmpty()) {
             final int width = MeasureSpec.getSize(widthMeasureSpec) - listViewPaddingH * 2;
             Tab firstTab = findDefaultTab();
-            if (firstTab != null) {
-                firstTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
-                int tabWidth = firstTab.getWidth(false);
-                firstTab.setTitle(allTabsWidth > width ? LocaleController.getString(R.string.FilterAllChatsShort) : LocaleController.getString(R.string.FilterAllChats), null, false);
-                int trueTabsWidth = allTabsWidth - tabWidth;
-                trueTabsWidth += firstTab.getWidth(false);
+            if (firstTab != null || ExteraConfig.getHideAllChats()) {
+                if (!ExteraConfig.getHideAllChats()) {
+                    int otherTabsWidth = 0;
+                    for (int i = 0; i < tabs.size(); i++) {
+                        Tab tab = tabs.get(i);
+                        if (tab != firstTab) {
+                            otherTabsWidth += tab.getWidth(true) + FolderIcons.getPaddingTab();
+                        }
+                    }
+                    String title = LocaleController.getString(R.string.FilterAllChats);
+                    firstTab.setTitle(title, null, false);
+                    int firstTabWidth = firstTab.getWidth(true) + FolderIcons.getPaddingTab();
+                    if (!isStaticAllChats && firstTabWidth + otherTabsWidth > width) {
+                        title = LocaleController.getString(R.string.FilterAllChatsShort);
+                    }
+                    firstTab.setTitle(title, null, false);
+                    allTabsWidth = otherTabsWidth + firstTab.getWidth(true) + FolderIcons.getPaddingTab();
+                }
                 int prevWidth = additionalTabWidth;
-                additionalTabWidth = trueTabsWidth < width ? (width - trueTabsWidth) / tabs.size() : 0;
+                additionalTabWidth = allTabsWidth < width ? (width - allTabsWidth) / tabs.size() : 0;
                 if (prevWidth != additionalTabWidth) {
                     ignoreLayout = true;
                     RecyclerView.ItemAnimator animator = listView.getItemAnimator();
@@ -1599,11 +1743,19 @@ public class FilterTabsView extends FrameLayout {
     }
 
     private void scrollToChild(int position) {
+        scrollToChild(position, true);
+    }
+
+    private void scrollToChild(int position, boolean smooth) {
         if (tabs.isEmpty() || scrollingToChild == position || position < 0 || position >= tabs.size()) {
             return;
         }
         scrollingToChild = position;
-        listView.smoothScrollToPosition(position);
+        if (smooth) {
+            listView.smoothScrollToPosition(position);
+        } else {
+            listView.scrollToPosition(position);
+        }
     }
 
     @Override
@@ -1646,7 +1798,15 @@ public class FilterTabsView extends FrameLayout {
         listView.invalidateViews();
         listView.invalidate();
         invalidate();
-        scrollToChild(position);
+        scrollToChild(position, progress < 1.0f);
+
+        if (progress >= 0.5f && oldAnimatedTab != position || progress <= 0.5f && oldAnimatedTab != currentPosition) {
+            if (manualScrollingToPosition != currentPosition) {
+                final int selected = progress < 0.5f ? currentPosition : position;
+                delegate.onTabSelected(tabs.get(selected), currentPosition < selected, true);
+                oldAnimatedTab = selected;
+            }
+        }
 
         if (progress >= 1.0f) {
             manualScrollingToPosition = -1;
@@ -1730,12 +1890,8 @@ public class FilterTabsView extends FrameLayout {
                 invalidated = true;
                 requestLayout();
                 allTabsWidth = 0;
-                final FilterTabsView.Tab defaultTab = findDefaultTab();
-                if (defaultTab != null) {
-                    defaultTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
-                }
                 for (int b = 0; b < N; b++) {
-                    allTabsWidth += tabs.get(b).getWidth(true) + dp(TAB_PADDING_WIDTH);
+                    allTabsWidth += tabs.get(b).getWidth(true) + FolderIcons.getPaddingTab();
                 }
                 break;
             }
@@ -1766,12 +1922,8 @@ public class FilterTabsView extends FrameLayout {
                 adapter.notifyDataSetChanged();
             }
             allTabsWidth = 0;
-            final FilterTabsView.Tab defaultTab = findDefaultTab();
-            if (defaultTab != null) {
-                defaultTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
-            }
             for (int b = 0, N = tabs.size(); b < N; b++) {
-                allTabsWidth += tabs.get(b).getWidth(true) + dp(TAB_PADDING_WIDTH);
+                allTabsWidth += tabs.get(b).getWidth(true) + FolderIcons.getPaddingTab();
             }
         }
     }
@@ -1828,6 +1980,21 @@ public class FilterTabsView extends FrameLayout {
                 return;
             }
             ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(UserConfig.selectedAccount).getDialogFilters();
+            if (ExteraConfig.getHideAllChats()) {
+                int defaultIndex = 0;
+                for (int i = 0; i < filters.size(); i++) {
+                    if (filters.get(i).isDefault()) {
+                        defaultIndex = i;
+                        break;
+                    }
+                }
+                if (idx1 >= defaultIndex) {
+                    idx1++;
+                }
+                if (idx2 >= defaultIndex) {
+                    idx2++;
+                }
+            }
             MessagesController.DialogFilter filter1 = filters.get(idx1);
             MessagesController.DialogFilter filter2 = filters.get(idx2);
             int temp = filter1.order;
@@ -1926,7 +2093,7 @@ public class FilterTabsView extends FrameLayout {
 
         @Override
         public int getMovementFlags(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-            if (MessagesController.getInstance(UserConfig.selectedAccount).premiumFeaturesBlocked() && (!isEditing || (viewHolder.getAdapterPosition() == 0 && tabs.get(0).isDefault && !UserConfig.getInstance(UserConfig.selectedAccount).isPremium()))) {
+            if (!ExteraConfig.getHideAllChats() && (!isEditing || (viewHolder.getAdapterPosition() == 0 && tabs.get(0).isDefault && !UserConfig.getInstance(UserConfig.selectedAccount).isPremium()))) {
                 return makeMovementFlags(0, 0);
             }
             return makeMovementFlags(ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT, 0);
@@ -1934,7 +2101,7 @@ public class FilterTabsView extends FrameLayout {
 
         @Override
         public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder source, @NonNull RecyclerView.ViewHolder target) {
-            if (MessagesController.getInstance(UserConfig.selectedAccount).premiumFeaturesBlocked() && ((source.getAdapterPosition() == 0 || target.getAdapterPosition() == 0) && !UserConfig.getInstance(UserConfig.selectedAccount).isPremium())) {
+            if (!ExteraConfig.getHideAllChats() && ((source.getAdapterPosition() == 0 || target.getAdapterPosition() == 0) && !UserConfig.getInstance(UserConfig.selectedAccount).isPremium())) {
                 return false;
             }
             adapter.swapElements(source.getAdapterPosition(), target.getAdapterPosition());

@@ -287,7 +287,7 @@ public class MessagePreviewParams {
                     message.reply_to.quote_text = replyQuote.getText();
                     message.reply_to.flags |= 64;
 
-                    message.reply_to.quote_entities = replyQuote.getEntities();
+                    message.reply_to.quote_entities = replyQuote.getFilteredEntities();
                     if (message.reply_to.quote_entities != null) {
                         message.reply_to.flags |= 128;
                     }

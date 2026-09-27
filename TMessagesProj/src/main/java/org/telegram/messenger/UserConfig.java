@@ -18,6 +18,8 @@ import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.SerializedData;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_account;
+import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.Components.BulletinFactory;
 
 import java.util.Arrays;
 
@@ -62,6 +64,7 @@ public class UserConfig extends BaseController {
     public boolean syncContacts = true;
     public boolean suggestContacts = true;
     public boolean showCallsTab;
+    public boolean showContactsTab = true;
     public boolean hasSecureData;
     public int loginTime;
     public TLRPC.TL_help_termsOfService unacceptedTermsOfService;
@@ -161,6 +164,7 @@ public class UserConfig extends BaseController {
                     editor.putInt("loginTime", loginTime);
                     editor.putBoolean("syncContacts", syncContacts);
                     editor.putBoolean("showCallsTab", showCallsTab);
+                    editor.putBoolean("showContactsTab", showContactsTab);
                     editor.putBoolean("suggestContacts", suggestContacts);
                     editor.putBoolean("hasSecureData", hasSecureData);
                     editor.putBoolean("notificationsSettingsLoaded4", notificationsSettingsLoaded);
@@ -313,6 +317,7 @@ public class UserConfig extends BaseController {
             loginTime = preferences.getInt("loginTime", currentAccount);
             syncContacts = preferences.getBoolean("syncContacts", true);
             showCallsTab = preferences.getBoolean("showCallsTab", false);
+            showContactsTab = preferences.getBoolean("showContactsTab", true);
             suggestContacts = preferences.getBoolean("suggestContacts", true);
             hasSecureData = preferences.getBoolean("hasSecureData", false);
             notificationsSettingsLoaded = preferences.getBoolean("notificationsSettingsLoaded4", false);
@@ -485,6 +490,7 @@ public class UserConfig extends BaseController {
         contactsReimported = true;
         syncContacts = true;
         showCallsTab = false;
+        showContactsTab = true;
         suggestContacts = true;
         unreadDialogsLoaded = true;
         hasValidDialogLoadIds = true;
@@ -569,6 +575,23 @@ public class UserConfig extends BaseController {
             showCallsTab = show;
             saveConfig(false);
         }
+    }
+
+    public void setShowContactsTab(BaseFragment fragment, boolean show) {
+        if (show == showContactsTab) {
+            return;
+        }
+        showContactsTab = show;
+        saveConfig(false);
+        getNotificationCenter().postNotificationName(NotificationCenter.contactsTabVisibleToggled);
+        (fragment != null ? BulletinFactory.of(fragment) : BulletinFactory.global()).createSimpleBulletin(
+            R.raw.contact_check,
+            LocaleController.getString(show ? R.string.ContactsTabWasShownTitle : R.string.ContactsTabWasHiddenTitle),
+            LocaleController.getString(R.string.UndoNoCaps),
+            5000,
+            true,
+            () -> getUserConfig().setShowContactsTab(fragment, !show)
+        ).setDuration(5000).show();
     }
 
     public boolean isPremium() {

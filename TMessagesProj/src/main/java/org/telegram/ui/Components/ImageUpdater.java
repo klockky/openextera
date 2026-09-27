@@ -8,6 +8,8 @@
 
 package org.telegram.ui.Components;
 
+import com.exteragram.messenger.utils.system.SystemUtils;
+
 import android.Manifest;
 import android.app.Activity;
 import android.app.Dialog;
@@ -721,16 +723,13 @@ public class ImageUpdater implements NotificationCenter.NotificationCenterDelega
             return;
         }
         final Activity activity = parentFragment.getParentActivity();
-        if (Build.VERSION.SDK_INT >= 33 && activity != null) {
-            if (activity.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED || activity.checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
-                activity.requestPermissions(new String[]{Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO}, BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE_FOR_AVATAR);
-                return;
+        if (activity != null && (canSelectVideo ? !SystemUtils.isImagesAndVideoPermissionGranted() : !SystemUtils.isImagesPermissionGranted())) {
+            if (canSelectVideo) {
+                SystemUtils.requestImagesAndVideoPermission(activity, BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE_FOR_AVATAR);
+            } else {
+                SystemUtils.requestImagesPermission(activity, BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE_FOR_AVATAR);
             }
-        } else if (Build.VERSION.SDK_INT >= 23 && activity != null) {
-            if (activity.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                activity.requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE_FOR_AVATAR);
-                return;
-            }
+            return;
         }
         PhotoAlbumPickerActivity fragment = new PhotoAlbumPickerActivity(canSelectVideo ? PhotoAlbumPickerActivity.SELECT_TYPE_AVATAR_VIDEO : PhotoAlbumPickerActivity.SELECT_TYPE_AVATAR, false, false, null);
         fragment.setAllowSearchImages(searchAvailable);

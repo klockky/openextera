@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.BatteryManager;
 import android.os.Build;
+import android.os.PowerManager;
 
 import androidx.annotation.RequiresApi;
 import androidx.core.math.MathUtils;
@@ -90,6 +91,7 @@ public class LiteMode {
     private static int BATTERY_HIGH = 10;
 
     private static int powerSaverLevel;
+    private static boolean powerSaverFollowSystem;
     private static boolean lastPowerSaverApplied;
 
     private static int value;
@@ -104,7 +106,14 @@ public class LiteMode {
             loadPreference();
         }
         if (!ignorePowerSaving && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            if (getBatteryLevel() <= powerSaverLevel && powerSaverLevel > 0) {
+            if (powerSaverFollowSystem) {
+                if (isSystemPowerSaveMode()) {
+                    if (!lastPowerSaverApplied) {
+                        onPowerSaverApplied(lastPowerSaverApplied = true);
+                    }
+                    return PRESET_POWER_SAVER;
+                }
+            } else if (getBatteryLevel() <= powerSaverLevel && powerSaverLevel > 0) {
                 if (!lastPowerSaverApplied) {
                     onPowerSaverApplied(lastPowerSaverApplied = true);
                 }
@@ -282,11 +291,12 @@ public class LiteMode {
             onFlagsUpdate(prevValue, value);
         }
         powerSaverLevel = preferences.getInt("lite_mode_battery_level", batteryDefaultValue);
+        powerSaverFollowSystem = preferences.getBoolean("lite_mode_battery_follow_system", false);
         loaded = true;
     }
 
     public static void savePreference() {
-        MessagesController.getGlobalMainSettings().edit().putInt("lite_mode6", value).putInt("lite_mode_battery_level", powerSaverLevel).apply();
+        MessagesController.getGlobalMainSettings().edit().putInt("lite_mode6", value).putInt("lite_mode_battery_level", powerSaverLevel).putBoolean("lite_mode_battery_follow_system", powerSaverFollowSystem).apply();
     }
 
     public static int getPowerSaverLevel() {
@@ -302,6 +312,24 @@ public class LiteMode {
 
         // check power saver applied
         getValue(false);
+    }
+
+    public static boolean isPowerSaverFollowSystem() {
+        if (!loaded) {
+            loadPreference();
+        }
+        return powerSaverFollowSystem;
+    }
+
+    public static void setPowerSaverFollowSystem(boolean follow) {
+        powerSaverFollowSystem = follow;
+        savePreference();
+        getValue(false);
+    }
+
+    private static boolean isSystemPowerSaveMode() {
+        PowerManager powerManager = (PowerManager) ApplicationLoader.applicationContext.getSystemService(Context.POWER_SERVICE);
+        return powerManager != null && powerManager.isPowerSaveMode();
     }
 
     public static boolean isPowerSaverApplied() {

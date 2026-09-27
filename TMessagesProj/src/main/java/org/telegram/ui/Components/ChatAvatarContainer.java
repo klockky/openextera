@@ -37,6 +37,8 @@ import android.widget.ImageView;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 
+import com.exteragram.messenger.utils.ui.ChatHeaderUiHelper;
+
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -80,6 +82,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     public boolean allowDrawStories;
     private Integer storiesForceState;
     private int avatarSizeInDp = 42;
+    private boolean avatarIsForum;
     public BackupImageView avatarImageView;
     private boolean avatarImageIsHidden;
     private SimpleTextView titleTextView;
@@ -263,7 +266,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             }
         }
         avatarImageView.setContentDescription(getString(R.string.AccDescrProfilePicture));
-        avatarImageView.setRoundRadius(dp(21));
+        setAvatarRadius(false);
         addView(avatarImageView);
         if (avatarClickable) {
             final TLRPC.Chat chat = parentFragment != null ? parentFragment.getCurrentChat() : null;
@@ -665,8 +668,9 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         final int width = MeasureSpec.getSize(widthMeasureSpec);
-        final int availableWidth = width - dp((avatarImageView.getVisibility() == VISIBLE ? 54 : 0) + 16);
-        avatarImageView.measure(MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY));
+        final int availableWidth = width - dp((avatarImageView.getVisibility() == VISIBLE ? avatarSizeInDp + 12 : 0) + 16);
+        int avatarSizePx = ChatHeaderUiHelper.getAvatarSizePx(avatarSizeInDp);
+        avatarImageView.measure(MeasureSpec.makeMeasureSpec(avatarSizePx, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(avatarSizePx, MeasureSpec.EXACTLY));
         titleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(24 + 8), MeasureSpec.AT_MOST));
         if (subtitleTextView != null) {
             subtitleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
@@ -691,7 +695,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         }
         SimpleTextView titleTextLargerCopyView = this.titleTextLargerCopyView.get();
         if (titleTextLargerCopyView != null) {
-            int largerAvailableWidth = largerWidth - dp((avatarImageView.getVisibility() == VISIBLE ? 54 : 0) + 16);
+            int largerAvailableWidth = largerWidth - dp((avatarImageView.getVisibility() == VISIBLE ? avatarSizeInDp + 12 : 0) + 16);
             titleTextLargerCopyView.measure(MeasureSpec.makeMeasureSpec(largerAvailableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(24), MeasureSpec.AT_MOST));
         }
         lastWidth = width;
@@ -768,11 +772,26 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         final int actionBarHeight = ActionBar.getCurrentActionBarHeight();
-        final int viewTop = (actionBarHeight - avatarImageView.getMeasuredHeight() - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0);
-        final int subtitleTop = viewTop + dp(glassMode ? 23.66f : 24);
+        boolean material3 = ChatHeaderUiHelper.isMaterial3ChatHeaderStyle();
+        int avatarInset = ChatHeaderUiHelper.getAvatarInsetPx();
+        int avatarLeftOffset = material3 ? 0 : dp(1);
+        int textOffset = 0;
+        if (!material3 && glassMode && getParent() instanceof ActionBar) {
+            int pillLeft = ((ActionBar) getParent()).getGlassMiddlePillChildLeft(avatarImageView.getMeasuredWidth());
+            if (pillLeft >= 0) {
+                int desiredLeft = pillLeft - getLeft() - leftPadding - avatarInset;
+                textOffset = desiredLeft - avatarLeftOffset;
+                avatarLeftOffset = desiredLeft;
+            }
+        }
+        final int viewTop = (actionBarHeight - avatarImageView.getMeasuredHeight() - avatarInset * 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0);
+        final int subtitleTop = viewTop + dp(material3 ? (glassMode ? 26.66f : 27f) : (glassMode ? 23.66f : 24f));
 
-        avatarImageView.layout(1 + leftPadding, 1 + viewTop, 1 + leftPadding + avatarImageView.getMeasuredWidth(), 1 + viewTop + avatarImageView.getMeasuredHeight());
-        int l = leftPadding + (avatarImageView.getVisibility() == VISIBLE ? dp(glassMode ? 49.66f : 55) : dp(glassMode ? 13 : 1)) + rightAvatarPadding;
+        int avatarLeft = avatarLeftOffset + avatarInset + leftPadding;
+        int avatarTop = viewTop + avatarInset;
+        avatarImageView.layout(avatarLeft, avatarTop, avatarLeft + avatarImageView.getMeasuredWidth(), avatarTop + avatarImageView.getMeasuredHeight());
+        float textInsetDp = material3 ? avatarSizeInDp + (glassMode ? 10.66f : 12f) : (glassMode ? 49.66f : 55f);
+        int l = leftPadding + (avatarImageView.getVisibility() == VISIBLE ? dp(textInsetDp) + textOffset : dp((glassMode ? 12 : 0) + avatarInset)) + rightAvatarPadding;
         SimpleTextView titleTextLargerCopyView = this.titleTextLargerCopyView.get();
         if (getSubtitleTextView().getVisibility() != GONE) {
             titleTextView.layout(l, viewTop + dp(1.66f) - titleTextView.getPaddingTop(), l + titleTextView.getMeasuredWidth(), viewTop + titleTextView.getTextHeight() + dp(1.66f) - titleTextView.getPaddingTop() + titleTextView.getPaddingBottom());
@@ -815,6 +834,23 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         if (subtitleTextLargerCopyView != null) {
             subtitleTextLargerCopyView.layout(l, subtitleTop, l + subtitleTextLargerCopyView.getMeasuredWidth(), subtitleTop + subtitleTextLargerCopyView.getTextHeight());
         }
+    }
+
+    public int getGlassPillContentLeft(int pillHeight) {
+        final int contentLeft;
+        final int left;
+        if (!hasVisibleAvatar() || avatarImageView.getMeasuredWidth() == 0) {
+            contentLeft = dp(3);
+            left = leftPadding;
+        } else {
+            if (ChatHeaderUiHelper.isMaterial3ChatHeaderStyle()) {
+                contentLeft = dp(3);
+            } else {
+                contentLeft = Math.round((pillHeight - avatarImageView.getMeasuredWidth()) / 2f);
+            }
+            left = avatarImageView.getLeft();
+        }
+        return contentLeft - left;
     }
 
     public void setLeftPadding(int value) {
@@ -936,8 +972,15 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     public void setAvatarSizeInDp(int sizeDp) {
         if (avatarSizeInDp != sizeDp) {
             avatarSizeInDp = sizeDp;
-            // TODO(openextera): lite also recalculates the avatar round radius via ChatHeaderUiHelper (stage 2)
+            setAvatarRadius(avatarIsForum);
             requestLayout();
+        }
+    }
+
+    private void setAvatarRadius(boolean forum) {
+        avatarIsForum = forum;
+        if (avatarImageView != null) {
+            avatarImageView.setRoundRadius(ChatHeaderUiHelper.getAvatarRadius(avatarSizeInDp, forum));
         }
     }
 
@@ -1394,7 +1437,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         avatarDrawable.setInfo(currentAccount, chat);
         if (avatarImageView != null) {
             avatarImageView.setForUserOrChat(chat, avatarDrawable);
-            avatarImageView.setRoundRadius(ChatObject.isForum(chat) ? dp(ChatObject.hasStories(chat) ? 11 : 16) : dp(21));
+            setAvatarRadius(ChatObject.isForum(chat));
         }
     }
 
@@ -1502,7 +1545,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 avatarImageView.setAnimatedEmojiDrawable(null);
                 ForumUtilities.setMonoForumAvatar(currentAccount, chat, avatarDrawable, avatarImageView);
             }
-            avatarImageView.setRoundRadius(dp(21));
+            setAvatarRadius(false);
         } else if (chat != null) {
             avatarDrawable.setScaleSize(1f);
             avatarDrawable.setInfo(currentAccount, chat);
@@ -1510,7 +1553,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             if (avatarImageView != null) {
                 avatarImageView.setAnimatedEmojiDrawable(null);
                 avatarImageView.setForUserOrChat(chat, avatarDrawable);
-                avatarImageView.setRoundRadius(chat.forum ? dp(ChatObject.hasStories(chat) ? 11 : 16) : dp(21));
+                setAvatarRadius(chat.forum);
             }
         }
     }
@@ -1743,7 +1786,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             width = Math.max(width, subtitleTextView.getExactWidthIncludeDrawables());
         }
         if (hasVisibleAvatar()) {
-            width += dp(52 + 18);
+            width += dp(avatarSizeInDp + 16 + ChatHeaderUiHelper.getGlassPillExtraRightPaddingDp());
         } else {
             width += dp(34);
         }

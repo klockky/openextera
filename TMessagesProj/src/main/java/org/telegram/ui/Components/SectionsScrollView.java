@@ -16,6 +16,8 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.ShadowSectionCell;
@@ -30,7 +32,7 @@ public class SectionsScrollView extends ScrollView {
     private Theme.ResourcesProvider resourcesProvider;
     private LinearLayout contentView;
 
-    private float sectionRadius = dp(16);
+    private float sectionRadius;
     private float[] sectionRadiusTop, sectionRadiusBottom;
 
     public static boolean isSectionView(View view) {
@@ -51,6 +53,7 @@ public class SectionsScrollView extends ScrollView {
         boolean enableTopPadding
     ) {
         super(context);
+        sectionRadius = dp(ExteraConfig.getSectionRadiusDp());
         this.resourcesProvider = resourcesProvider;
         this.contentView = content;
         setWillNotDraw(false);
@@ -58,16 +61,16 @@ public class SectionsScrollView extends ScrollView {
         contentView.setPadding(dp(12), dp(enableTopPadding ? 12 : 4), dp(12), dp(12));
 
         this.sectionRadiusTop = new float[] {
-            dp(16), dp(16),
-            dp(16), dp(16),
+            sectionRadius, sectionRadius,
+            sectionRadius, sectionRadius,
             0, 0,
             0, 0
         };
         this.sectionRadiusBottom = new float[] {
             0, 0,
             0, 0,
-            dp(16), dp(16),
-            dp(16), dp(16)
+            sectionRadius, sectionRadius,
+            sectionRadius, sectionRadius
         };
     }
 

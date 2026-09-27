@@ -16,7 +16,8 @@ import android.text.Spannable;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.MotionEvent;
-import android.widget.EditText;
+
+import com.exteragram.messenger.components.ReceiveContentEditText;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
@@ -29,7 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 
-public class EditTextEffects extends EditText {
+public class EditTextEffects extends ReceiveContentEditText {
     private final static int SPOILER_TIMEOUT = 10000;
 
     private List<SpoilerEffect> spoilers = new ArrayList<>();
@@ -337,7 +338,8 @@ public class EditTextEffects extends EditText {
         if (drawAnimatedEmojiDrawables && animatedEmojiDrawables != null) {
             canvas.save();
             canvas.translate(getPaddingLeft(), 0);
-            AnimatedEmojiSpan.drawAnimatedEmojis(canvas, getLayout(), animatedEmojiDrawables, 0, spoilers, computeVerticalScrollOffset() - AndroidUtilities.dp(6), computeVerticalScrollOffset() + computeVerticalScrollExtent(), 0, 1f, animatedEmojiColorFilter);
+            final int drawScrollY = getDrawScrollY();
+            AnimatedEmojiSpan.drawAnimatedEmojis(canvas, getLayout(), animatedEmojiDrawables, 0, spoilers, drawScrollY - AndroidUtilities.dp(6), drawScrollY + computeVerticalScrollExtent(), 0, 1f, animatedEmojiColorFilter);
             canvas.restore();
         }
         canvas.restore();
@@ -363,7 +365,7 @@ public class EditTextEffects extends EditText {
                 canvas.restore();
             }
 
-            rect.set(0, (int) (getScrollY() - super.getExtendedPaddingTop() - offsetY), getWidth(), (int) (getMeasuredHeight() + getScrollY() + super.getExtendedPaddingBottom() - offsetY));
+            rect.set(0, (int) (getDrawScrollY() - super.getExtendedPaddingTop() - offsetY), getWidth(), (int) (getMeasuredHeight() + getDrawScrollY() + super.getExtendedPaddingBottom() - offsetY));
             canvas.save();
             canvas.clipRect(rect);
             canvas.translate(spoilerPaddingLeft, 0);
@@ -388,6 +390,10 @@ public class EditTextEffects extends EditText {
             lastLayout = getLayout();
             lastTextLength = newTextLength;
         }
+    }
+
+    public int getDrawScrollY() {
+        return computeVerticalScrollOffset();
     }
 
     protected int emojiCacheType() {

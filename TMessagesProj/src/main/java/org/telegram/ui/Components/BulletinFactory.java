@@ -136,11 +136,16 @@ public final class BulletinFactory {
 
     public enum FileType {
 
+        STICKER("StickerSavedHint", R.string.StickerSavedHint, Icon.SAVED_TO_GALLERY),
+        EMOJI("EmojiSavedHint", R.string.EmojiSavedHint, Icon.SAVED_TO_GALLERY),
+
         PHOTO("PhotoSavedHint", R.string.PhotoSavedHint, Icon.SAVED_TO_GALLERY),
         PHOTOS("PhotosSavedHint", Icon.SAVED_TO_GALLERY),
 
         VIDEO("VideoSavedHint", R.string.VideoSavedHint, Icon.SAVED_TO_GALLERY),
         VIDEOS("VideosSavedHint", Icon.SAVED_TO_GALLERY),
+
+        GIF_TO_GALLERY("GifGallerySavedHint", R.string.GifGallerySavedHint, Icon.SAVED_TO_GALLERY),
 
         LIVEPHOTO("LivePhotoSavedHint", R.string.LivePhotoSavedHint, Icon.SAVED_TO_GALLERY),
         LIVEPHOTOS("LivePhotosSavedHint", Icon.SAVED_TO_GALLERY),
