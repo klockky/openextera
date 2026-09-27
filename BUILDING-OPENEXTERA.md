@@ -115,6 +115,17 @@ The first build compiles the native library (`libtmessages.49.so`) for four ABIs
 a while. Give Gradle enough memory (`org.gradle.jvmargs` in `gradle.properties`, 8 GB by
 default; `-Dorg.gradle.jvmargs=-Xmx4g` works for dependency-only tasks).
 
+### GitHub Actions
+
+`.github/workflows/android.yml` builds an arm64 debug APK on every push and pull request,
+and can also be started from the repository's **Actions** tab. Download the APK from the
+completed run's **Artifacts** section. The artifact is kept for 14 days.
+
+To make the CI APK able to log in, add your own Telegram API credentials under the
+repository's **Settings → Secrets and variables → Actions** as `OPENEXTERA_APP_ID` and
+`OPENEXTERA_APP_HASH`. Without them the build succeeds with the documented empty defaults,
+but the app cannot log in. Never put exteraGram's credentials in these secrets.
+
 The `Dockerfile` in the repository root builds the release APK and bundles in a clean
 environment.
 

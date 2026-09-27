@@ -1,0 +1,64 @@
+name: Android APK
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-arm64-debug:
+    name: Build arm64 debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source and submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.2.12479018" \
+            "cmake;3.22.1"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build arm64 debug APK
+        env:
+          OPENEXTERA_APP_ID: ${{ secrets.OPENEXTERA_APP_ID }}
+          OPENEXTERA_APP_HASH: ${{ secrets.OPENEXTERA_APP_HASH }}
+        run: >-
+          ./gradlew --no-daemon --continue --max-workers=2
+          -Dorg.gradle.jvmargs='-Xmx4g -XX:MaxMetaspaceSize=1g'
+          -Pkotlin.compiler.execution.strategy=in-process
+          -Popenextera.abis=arm64-v8a
+          :TMessagesProj_App:assembleAfatDebug
+
+      - name: Name APK
+        run: cp TMessagesProj_App/build/outputs/apk/afat/debug/app.apk OpenExtera-12.10.5-arm64-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenExtera-12.10.5-arm64-debug-${{ github.run_number }}
+          path: OpenExtera-12.10.5-arm64-debug.apk
+          if-no-files-found: error
+          retention-days: 14
