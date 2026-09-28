@@ -39,6 +39,9 @@ import androidx.core.app.NotificationCompat;
 
 import androidx.media3.common.C;
 
+import com.exteragram.messenger.icons.IconManager;
+import com.exteragram.messenger.utils.AppUtils;
+
 import org.telegram.messenger.audioinfo.AudioInfo;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
@@ -449,7 +452,7 @@ public class MusicPlayerService extends Service implements NotificationCenter.No
                 mediaStyle.setShowActionsInCompactView(0);
             }
             Notification.Builder bldr = new Notification.Builder(this);
-            bldr.setSmallIcon(R.drawable.player)
+            bldr.setSmallIcon(IconManager.getNotificationSystemIcon())
                     .setOngoing(isPlaying)
                     .setContentTitle(contentTitle)
                     .setContentText(contentText)
@@ -460,6 +463,9 @@ public class MusicPlayerService extends Service implements NotificationCenter.No
                     .setCategory(Notification.CATEGORY_TRANSPORT)
                     .setPriority(Notification.PRIORITY_MAX)
                     .setStyle(mediaStyle);
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                bldr.setColor(AppUtils.getNotificationColor());
+            }
             if (Build.VERSION.SDK_INT >= 26) {
                 NotificationsController.checkOtherNotificationsChannel();
                 bldr.setChannelId(NotificationsController.OTHER_NOTIFICATIONS_CHANNEL);

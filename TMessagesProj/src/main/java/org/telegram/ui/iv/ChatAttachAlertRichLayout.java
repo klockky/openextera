@@ -1,5 +1,7 @@
 package org.telegram.ui.iv;
 
+import com.exteragram.messenger.utils.text.LocaleUtils;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.getString;
 
@@ -1189,7 +1191,11 @@ public class ChatAttachAlertRichLayout extends ChatAttachAlert.AttachAlertLayout
 
     private void createEmojiView() {
         if (emojiView != null) return;
-        emojiView = new EmojiView(parentAlert.baseFragment, true, false, false, getContext(), true, null, parentAlert.sizeNotifierFrameLayout, true, resourcesProvider, false);
+        ChatActivity chatActivity = parentAlert.baseFragment instanceof ChatActivity ? (ChatActivity) parentAlert.baseFragment : null;
+        TLRPC.ChatFull chatInfo = chatActivity != null ? chatActivity.getCurrentChatInfo() : null;
+        boolean allowLocalPremiumEmojis = LocaleUtils.canUseLocalPremiumEmojis(currentAccount);
+        emojiView = new EmojiView(parentAlert.baseFragment, true, false, false, getContext(), true, chatInfo, parentAlert.sizeNotifierFrameLayout, true, resourcesProvider, false, false, allowLocalPremiumEmojis);
+        emojiView.allowEmojisForNonPremium(allowLocalPremiumEmojis, false);
         emojiView.setVisibility(GONE);
         emojiView.fixBottomTabContainerTranslation = false;
         emojiView.setBottomInset(AndroidUtilities.navigationBarHeight);

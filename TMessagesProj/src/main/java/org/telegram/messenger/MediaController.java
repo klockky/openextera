@@ -82,6 +82,8 @@ import androidx.media3.extractor.jpeg.MotionPhotoDescription;
 import androidx.media3.extractor.jpeg.XmpMotionPhotoDescriptionParser;
 
 import org.telegram.ui.AspectRatioFrameLayout;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.system.SystemUtils;
 import com.google.android.gms.cast.MediaMetadata;
 import com.google.android.gms.common.images.WebImage;
 
@@ -515,7 +517,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
         public Boolean highQuality;
         public boolean isHighQuality() {
             if (highQuality == null)
-                return SharedConfig.photoHighQualityDefault;
+                return ExteraConfig.getAlwaysSendInHD() || SharedConfig.photoHighQualityDefault;
             return highQuality;
         }
 
@@ -1306,14 +1308,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             Cursor cursor = null;
             try {
                 final Context context = ApplicationLoader.applicationContext;
-                if (
-                    Build.VERSION.SDK_INT >= 33 && (
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED ||
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
-                    ) ||
-                    context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-                ) {
+                if (SystemUtils.isImagesPermissionGranted()) {
                     cursor = MediaStore.Images.Media.query(context.getContentResolver(), MediaStore.Images.Media.EXTERNAL_CONTENT_URI, new String[]{"COUNT(_id)"}, null, null, null);
                     if (cursor != null) {
                         if (cursor.moveToNext()) {
@@ -1330,14 +1325,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             }
             try {
                 final Context context = ApplicationLoader.applicationContext;
-                if (
-                    Build.VERSION.SDK_INT >= 33 && (
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED ||
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
-                    ) ||
-                    context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-                ) {
+                if (SystemUtils.isVideoPermissionGranted()) {
                     cursor = MediaStore.Images.Media.query(context.getContentResolver(), MediaStore.Video.Media.EXTERNAL_CONTENT_URI, new String[]{"COUNT(_id)"}, null, null, null);
                     if (cursor != null) {
                         if (cursor.moveToNext()) {
@@ -1518,6 +1506,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                 NotificationCenter.getInstance(a).addObserver(MediaController.this, NotificationCenter.musicListLoaded);
                 NotificationCenter.getGlobalInstance().addObserver(MediaController.this, NotificationCenter.playerDidStartPlaying);
             }
+            NotificationCenter.getGlobalInstance().addObserver(MediaController.this, NotificationCenter.stopAllHeavyOperations);
         });
 
         mediaProjections = new String[]{
@@ -1977,10 +1966,16 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             VideoPlayer p = (VideoPlayer) args[0];
             if (!isCurrentPlayer(p)) {
                 MessageObject message = getPlayingMessageObject();
-                if(message != null && isPlayingMessage(message) && !isMessagePaused() && (message.isMusic() || message.isVoice())){
+                boolean wasPlaying = message != null && isPlayingMessage(message) && !isMessagePaused() && (message.isMusic() || message.isVoice());
+                if (wasPlaying && message.isMusic() && !SharedConfig.pauseMusicOnMedia) {
+                    return;
+                }
+                if (wasPlaying) {
                     wasPlayingAudioBeforePause = true;
                 }
                 pauseMessage(message);
+            } else if (!LaunchActivity.isResumed) {
+                pauseInBackgroundIfNeeded();
             }
         } else if (id == NotificationCenter.musicListLoaded) {
             if (currentSavedMusicList != null && args[0] == currentSavedMusicList) {
@@ -2009,6 +2004,19 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                     NotificationCenter.getInstance(playingMessageObject.currentAccount).postNotificationName(NotificationCenter.moreMusicDidLoad, addedCount);
                 }
             }
+        } else if (id == NotificationCenter.stopAllHeavyOperations) {
+            if (args.length > 0 && args[0] instanceof Integer && (Integer) args[0] == 4096 && !LaunchActivity.isResumed) {
+                pauseInBackgroundIfNeeded();
+            }
+        }
+    }
+
+    private void pauseInBackgroundIfNeeded() {
+        MessageObject message = getPlayingMessageObject();
+        if (message != null && ((message.isVoice() && ExteraConfig.getPauseOnMinimizeVoice())
+                || (message.isRoundVideo() && ExteraConfig.getPauseOnMinimizeRound()))
+                && isPlayingMessage(message) && !isMessagePaused()) {
+            pauseMessage(message);
         }
     }
 
@@ -2025,30 +2033,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
     }
 
     private boolean forbidRaiseToListen() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                AudioDeviceInfo[] devices = NotificationsController.audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-                for (AudioDeviceInfo device : devices) {
-                    final int type = device.getType();
-                    if ((
-                        type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                        type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                        type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
-                        type == AudioDeviceInfo.TYPE_BLE_SPEAKER ||
-                        type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                        type == AudioDeviceInfo.TYPE_WIRED_HEADSET
-                    ) && device.isSink()) {
-                        return true;
-                    }
-                }
-                return false;
-            } else {
-                return NotificationsController.audioManager.isWiredHeadsetOn() || NotificationsController.audioManager.isBluetoothA2dpOn() || NotificationsController.audioManager.isBluetoothScoOn();
-            }
-        } catch (Exception e) {
-            FileLog.e(e);
-        }
-        return false;
+        return SystemUtils.hasExternalAudioOutput(NotificationsController.audioManager);
     }
 
     @Override
@@ -5525,13 +5510,20 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                         uri = saveFileInternal(type, sourceFile, null);
                         result = uri != null;
                     } else {
+                        String customSavePath = ExteraConfig.getCustomSavePath();
                         File destFile;
                         if (type == 0) {
-                            destFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Telegram");
+                            destFile = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                            if (!TextUtils.isEmpty(customSavePath)) {
+                                destFile = new File(destFile, customSavePath);
+                            }
                             destFile.mkdirs();
                             destFile = new File(destFile, AndroidUtilities.generateFileName(0, FileLoader.getFileExtension(sourceFile)));
                         } else if (type == 1) {
-                            destFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Telegram");
+                            destFile = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                            if (!TextUtils.isEmpty(customSavePath)) {
+                                destFile = new File(destFile, customSavePath);
+                            }
                             destFile.mkdirs();
                             destFile = new File(destFile, AndroidUtilities.generateFileName(1, FileLoader.getFileExtension(sourceFile)));
                         } else {
@@ -5541,7 +5533,9 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                             } else {
                                 dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
                             }
-                            dir = new File(dir, "Telegram");
+                            if (!TextUtils.isEmpty(customSavePath)) {
+                                dir = new File(dir, customSavePath);
+                            }
                             dir.mkdirs();
                             destFile = new File(dir, name);
                             if (destFile.exists()) {
@@ -5819,6 +5813,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
     private static Uri saveFileInternal(int type, File sourceFile, String filename) {
         try {
             int selectedType = type;
+            String customSavePath = ExteraConfig.getCustomSavePath();
             ContentValues contentValues = new ContentValues();
             String extension = FileLoader.getFileExtension(sourceFile);
             String mimeType = null;
@@ -5839,7 +5834,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                     filename = AndroidUtilities.generateFileName(0, extension);
                 }
                 uriToInsert = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-                File dirDest = new File(Environment.DIRECTORY_PICTURES, "Telegram");
+                File dirDest = TextUtils.isEmpty(customSavePath) ? new File(Environment.DIRECTORY_PICTURES) : new File(Environment.DIRECTORY_PICTURES, customSavePath);
                 contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
                 contentValues.put(MediaStore.Images.Media.DISPLAY_NAME, filename);
                 contentValues.put(MediaStore.Images.Media.MIME_TYPE, mimeType);
@@ -5847,7 +5842,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                 if (filename == null) {
                     filename = AndroidUtilities.generateFileName(1, extension);
                 }
-                File dirDest = new File(Environment.DIRECTORY_MOVIES, "Telegram");
+                File dirDest = TextUtils.isEmpty(customSavePath) ? new File(Environment.DIRECTORY_MOVIES) : new File(Environment.DIRECTORY_MOVIES, customSavePath);
                 contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
                 uriToInsert = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
                 contentValues.put(MediaStore.Video.Media.DISPLAY_NAME, filename);
@@ -5855,7 +5850,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                 if (filename == null) {
                     filename = sourceFile.getName();
                 }
-                File dirDest = new File(Environment.DIRECTORY_DOWNLOADS, "Telegram");
+                File dirDest = TextUtils.isEmpty(customSavePath) ? new File(Environment.DIRECTORY_DOWNLOADS) : new File(Environment.DIRECTORY_DOWNLOADS, customSavePath);
                 contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
                 uriToInsert = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
                 contentValues.put(MediaStore.Downloads.DISPLAY_NAME, filename);
@@ -5863,7 +5858,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                 if (filename == null) {
                     filename = sourceFile.getName();
                 }
-                File dirDest = new File(Environment.DIRECTORY_MUSIC, "Telegram");
+                File dirDest = TextUtils.isEmpty(customSavePath) ? new File(Environment.DIRECTORY_MUSIC) : new File(Environment.DIRECTORY_MUSIC, customSavePath);
                 contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
                 uriToInsert = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
                 contentValues.put(MediaStore.Audio.Media.DISPLAY_NAME, filename);
@@ -6146,15 +6141,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             Cursor cursor = null;
             try {
                 final Context context = ApplicationLoader.applicationContext;
-                if (
-                    Build.VERSION.SDK_INT < 23 ||
-                    Build.VERSION.SDK_INT < 33 && context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED ||
-                    Build.VERSION.SDK_INT >= 33 && (
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED ||
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
-                    )
-                ) {
+                if (SystemUtils.isImagesPermissionGranted()) {
                     cursor = MediaStore.Images.Media.query(context.getContentResolver(), MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projectionPhotos, null, null, (Build.VERSION.SDK_INT > 28 ? MediaStore.Images.Media.DATE_MODIFIED : MediaStore.Images.Media.DATE_TAKEN) + " DESC");
                     if (cursor != null) {
                         int imageIdColumn = cursor.getColumnIndex(MediaStore.Images.Media._ID);
@@ -6242,15 +6229,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             try {
 
                 final Context context = ApplicationLoader.applicationContext;
-                if (
-                    Build.VERSION.SDK_INT < 23 ||
-                    Build.VERSION.SDK_INT < 33 && context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED ||
-                    Build.VERSION.SDK_INT >= 33 && (
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED ||
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
-                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
-                    )
-                ) {
+                if (SystemUtils.isVideoPermissionGranted()) {
                     cursor = MediaStore.Images.Media.query(ApplicationLoader.applicationContext.getContentResolver(), MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projectionVideo, null, null, (Build.VERSION.SDK_INT > 28 ? MediaStore.Video.Media.DATE_MODIFIED : MediaStore.Video.Media.DATE_TAKEN) + " DESC");
                     if (cursor != null) {
                         int imageIdColumn = cursor.getColumnIndex(MediaStore.Video.Media._ID);

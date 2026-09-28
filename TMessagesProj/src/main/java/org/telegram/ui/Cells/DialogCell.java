@@ -8,6 +8,9 @@
 
 package org.telegram.ui.Cells;
 
+import com.exteragram.messenger.AvatarCornerType;
+import com.exteragram.messenger.ExteraConfig;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
 import static org.telegram.messenger.LocaleController.getString;
@@ -490,6 +493,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private boolean[] drawSpoiler = new boolean[3];
 
     public ImageReceiver avatarImage = new ImageReceiver(this);
+    private final AvatarSpan messageAvatarSpan;
     private PhotoBubbleClip bubbleClip;
     private AvatarDrawable avatarDrawable = new AvatarDrawable();
     private boolean animatingArchiveAvatar;
@@ -692,7 +696,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         Theme.createDialogsResources(context);
         drawMonoforumAvatar = false;
         drawCommunityAvatar = false;
-        avatarImage.setRoundRadius(dp(26));
+        avatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(forceThreeLines || SharedConfig.useThreeLinesLayout ? 56f : 52f));
         for (int i = 0; i < thumbImage.length; ++i) {
             thumbImage[i] = new ImageReceiver(this);
             thumbImage[i].ignoreNotifications = true;
@@ -713,6 +717,8 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         emojiStatus = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(emojiStatusView, dp(22));
         botVerification = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(this, dp(17));
         avatarImage.setAllowLoadingOnAttachedOnly(true);
+        messageAvatarSpan = new AvatarSpan(this, currentAccount, 18);
+        messageAvatarSpan.needDrawShadow = false;
     }
 
     @Override
@@ -1554,7 +1560,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 draftVoice = false;
                 needEmoji = true;
                 updateMessageThumbs();
-                messageNameString = ChatObject.isMonoForum(chat) ? null : AndroidUtilities.escape(getMessageNameString());
+                messageNameString = addSenderAvatar(ChatObject.isMonoForum(chat) ? null : AndroidUtilities.escape(getMessageNameString()), message);
                 if (ChatObject.isMonoForum(chat)) {
                     messageNameString = null;
                     if (messageFormatType == 1) {
@@ -1807,6 +1813,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                                         messageNameString = nameSpannableString;
                                     }
                                 }
+                                messageNameString = addSenderAvatar(messageNameString, message);
                                 checkMessage = false;
                                 SpannableStringBuilder stringBuilder = getMessageStringFormatted(messageFormatType, restrictionReason, messageNameString, false);
 
@@ -2943,6 +2950,24 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         updateThumbsPosition();
     }
 
+    private CharSequence addSenderAvatar(CharSequence name, MessageObject messageObject) {
+        if (!ExteraConfig.getSenderMiniAvatars() || messageObject == null || TextUtils.isEmpty(name)) {
+            return name;
+        }
+        long senderId = messageObject.getFromChatId();
+        if (senderId == UserConfig.getInstance(currentAccount).getClientUserId()) {
+            return name;
+        }
+        messageAvatarSpan.setDialogId(senderId);
+        SpannableStringBuilder result = new SpannableStringBuilder("A ");
+        result.setSpan(messageAvatarSpan, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        int spacerStart = result.length();
+        result.append(' ');
+        result.setSpan(new FixedWidthSpan(dp(1)), spacerStart, result.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        result.append(name);
+        return result;
+    }
+
     public void setTitleOverride(String s) {
         titleOverride = s;
     }
@@ -3220,7 +3245,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             }
             drawMonoforumAvatar = false;
             drawCommunityAvatar = false;
-            avatarImage.setRoundRadius(dp(26));
+            avatarImage.setRoundRadius(ExteraConfig.getAvatarCorners(useForceThreeLines || SharedConfig.useThreeLinesLayout ? 56f : 52f));
             drawUnmute = false;
         } else {
             int oldUnreadCount = unreadCount;
@@ -3668,11 +3693,11 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             if (drawMonoforumAvatar) {
                 avatarRadius = 1;
             } else if (drawCommunityAvatar) {
-                avatarRadius = dp(12);
-            } else if (chat != null && chat.forum && currentDialogFolderId == 0 && !useFromUserAsAvatar || !isSavedDialog && user != null && user.self && MessagesController.getInstance(currentAccount).savedViewAsChats) {
-                avatarRadius = dp(16);
+                avatarRadius = ExteraConfig.getAvatarCorners(48f, false, AvatarCornerType.COMMUNITY);
             } else {
-                avatarRadius = dp(28);
+                boolean forumAvatar = chat != null && chat.forum && currentDialogFolderId == 0 && !useFromUserAsAvatar
+                    || !isSavedDialog && user != null && user.self && MessagesController.getInstance(currentAccount).savedViewAsChats;
+                avatarRadius = ExteraConfig.getAvatarCorners(useForceThreeLines || SharedConfig.useThreeLinesLayout ? 56f : 52f, false, forumAvatar);
             }
 
             avatarImage.setRoundRadius(avatarRadius);
@@ -5065,18 +5090,19 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 boolean isOnline = isOnline();
                 wasDrawnOnline = isOnline;
                 if (isOnline || onlineProgress != 0) {
-                    int top = (int) (storyParams.originalAvatarRect.bottom - dp(useForceThreeLines || SharedConfig.useThreeLinesLayout ? 6 : 8));
-                    int left;
-                    if (LocaleController.isRTL) {
-                        left = (int) (storyParams.originalAvatarRect.left + dp(useForceThreeLines || SharedConfig.useThreeLinesLayout ? 10 : 6));
-                    } else {
-                        left = (int) (storyParams.originalAvatarRect.right - dp(useForceThreeLines || SharedConfig.useThreeLinesLayout ? 10 : 6));
-                    }
+                    float outerRadius = ExteraConfig.getOnlineDotOuterRadius();
+                    float innerRadius = ExteraConfig.getOnlineDotInnerRadius();
+                    float horizontalOffset = ExteraConfig.getOnlineDotOffset(dp(6), outerRadius);
+                    float verticalOffset = ExteraConfig.getOnlineDotOffset(dp(8), outerRadius);
+                    float top = storyParams.originalAvatarRect.bottom - verticalOffset;
+                    float left = LocaleController.isRTL
+                        ? storyParams.originalAvatarRect.left + horizontalOffset
+                        : storyParams.originalAvatarRect.right - horizontalOffset;
 
                     Theme.dialogs_onlineCirclePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
-                    canvas.drawCircle(left, top, dp(7) * onlineProgress, Theme.dialogs_onlineCirclePaint);
+                    canvas.drawCircle(left, top, outerRadius * onlineProgress, Theme.dialogs_onlineCirclePaint);
                     Theme.dialogs_onlineCirclePaint.setColor(Theme.getColor(Theme.key_chats_onlineCircle, resourcesProvider));
-                    canvas.drawCircle(left, top, dp(5) * onlineProgress, Theme.dialogs_onlineCirclePaint);
+                    canvas.drawCircle(left, top, innerRadius * onlineProgress, Theme.dialogs_onlineCirclePaint);
                     if (isOnline) {
                         if (onlineProgress < 1.0f) {
                             onlineProgress += 16f / 150.0f;

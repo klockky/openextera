@@ -41,6 +41,20 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Configure FCM for debug build
+        id: firebase
+        env:
+          OPENEXTERA_GOOGLE_SERVICES_JSON_B64: ${{ secrets.OPENEXTERA_GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          if [ -n "$OPENEXTERA_GOOGLE_SERVICES_JSON_B64" ]; then
+            mkdir -p TMessagesProj_App/src/debug
+            printf '%s' "$OPENEXTERA_GOOGLE_SERVICES_JSON_B64" | base64 --decode > TMessagesProj_App/src/debug/google-services.json
+            echo "fcm=enabled" >> "$GITHUB_OUTPUT"
+          else
+            echo "fcm=disabled" >> "$GITHUB_OUTPUT"
+            echo "FCM configuration is absent; building without push notifications."
+          fi
+
       - name: Build arm64 debug APK
         env:
           OPENEXTERA_APP_ID: ${{ secrets.OPENEXTERA_APP_ID }}
@@ -58,7 +72,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: OpenExtera-12.10.5-arm64-debug-${{ github.run_number }}
+          name: OpenExtera-12.10.5-arm64-debug-${{ steps.firebase.outputs.fcm }}-${{ github.run_number }}
           path: OpenExtera-12.10.5-arm64-debug.apk
           if-no-files-found: error
           retention-days: 14

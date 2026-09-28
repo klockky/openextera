@@ -42,6 +42,7 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.ui.ChatActivity;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.DialogCell;
@@ -155,7 +156,10 @@ public class MessagesSearchAdapter extends RecyclerListView.SelectionAdapter imp
 
         searchResultMessages.clear();
         messageIds.clear();
-        ArrayList<MessageObject> searchResults = searchType == 0 ? MediaDataController.getInstance(currentAccount).getFoundMessageObjects() : HashtagSearchController.getInstance(currentAccount).getMessages(searchType);
+        // Feed messages are rendered by ChatActivity's chat adapter. This adapter is only its empty-state view.
+        ArrayList<MessageObject> searchResults = searchType == ChatActivity.SEARCH_FEED ? new ArrayList<>()
+                : searchType == ChatActivity.SEARCH_THIS_CHAT ? MediaDataController.getInstance(currentAccount).getFoundMessageObjects()
+                : HashtagSearchController.getInstance(currentAccount).getMessages(searchType);
         for (int i = 0; i < searchResults.size(); ++i) {
             MessageObject m = searchResults.get(i);
             if ((!m.hasValidGroupId() || m.isPrimaryGroupMessage) && !messageIds.contains(m.getId())) {
@@ -168,7 +172,9 @@ public class MessagesSearchAdapter extends RecyclerListView.SelectionAdapter imp
         final int oldFlickerCount = flickerCount;
 
         loadedCount = searchResultMessages.size();
-        if (searchType != 0) {
+        if (searchType == ChatActivity.SEARCH_FEED) {
+            flickerCount = 0;
+        } else if (searchType != ChatActivity.SEARCH_THIS_CHAT) {
             boolean hasMore = !HashtagSearchController.getInstance(currentAccount).isEndReached(searchType);
             flickerCount = hasMore && loadedCount != 0 ? Utilities.clamp(HashtagSearchController.getInstance(currentAccount).getCount(searchType) - loadedCount, 3, 0) : 0;
         } else {

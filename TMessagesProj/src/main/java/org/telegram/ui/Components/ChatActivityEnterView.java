@@ -114,9 +114,22 @@ import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
 import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.IconPackType;
 import com.exteragram.messenger.VideoMessagesCamera;
 import com.exteragram.messenger.ai.AiConfig;
 import com.exteragram.messenger.ai.AiController;
+import com.exteragram.messenger.ai.network.backend.OnDeviceAvailability;
+import com.exteragram.messenger.ai.ui.AiResponseAlert;
+import com.exteragram.messenger.ai.ui.activities.AiPreferencesActivity;
+import com.exteragram.messenger.ai.ui.activities.EditServiceActivity;
+import com.exteragram.messenger.components.ActionRow;
+import com.exteragram.messenger.components.ChatActivityEnterViewStaticIconView;
+import com.exteragram.messenger.components.TranslateBeforeSendWrapper;
+import com.exteragram.messenger.icons.IconManager;
+import com.exteragram.messenger.math.inline.InlineMathController;
+import com.exteragram.messenger.translator.TranslatorUtils;
+import com.exteragram.messenger.utils.system.SystemUtils;
+import com.exteragram.messenger.utils.text.LocaleUtils;
 
 import org.telegram.ui.iv.RichEditorListView;
 import org.telegram.ui.recyclerview.ChatListItemAnimator;
@@ -610,7 +623,7 @@ public class ChatActivityEnterView extends FrameLayout implements
     private ActionBarPopupWindow sendPopupWindow;
     private ActionBarPopupWindow.ActionBarPopupWindowLayout sendPopupLayout;
     private ImageView cancelBotButton;
-    private ChatActivityEnterViewAnimatedIconView emojiButton;
+    private View emojiButton;
     private ImageView deleteRichDraftButton;
     @Nullable
     private ImageView expandStickersButton;
@@ -622,7 +635,7 @@ public class ChatActivityEnterView extends FrameLayout implements
     private TimerView recordTimerView;
     private FrameLayout audioVideoButtonContainer;
     private boolean audioVideoButtonContainerForbidden;
-    private ChatActivityEnterViewAnimatedIconView audioVideoSendButton;
+    private View audioVideoSendButton;
     private boolean isInVideoMode;
     @Nullable
     private FrameLayout recordPanel;
@@ -2751,23 +2764,28 @@ public class ChatActivityEnterView extends FrameLayout implements
         frameLayout.setClipChildren(false);
         textFieldContainer.addView(frameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM, 0, 0, DEFAULT_HEIGHT, 0));
 
-        emojiButton = new ChatActivityEnterViewAnimatedIconView(context) {
-            @Override
-            protected void onDraw(Canvas canvas) {
-                super.onDraw(canvas);
-                if (getTag() != null && attachLayout != null && !emojiViewVisible && !MediaDataController.getInstance(currentAccount).getUnreadStickerSets().isEmpty() && dotPaint != null) {
-                    int x = getWidth() / 2 + dp(4 + 5);
-                    int y = getHeight() / 2 - dp(13 - 5);
-                    canvas.drawCircle(x, y, dp(5), dotPaint);
-
+        if (IconManager.INSTANCE.isBasePackOnly(IconPackType.DEFAULT)) {
+            emojiButton = new ChatActivityEnterViewAnimatedIconView(context) {
+                @Override
+                protected void onDraw(Canvas canvas) {
+                    super.onDraw(canvas);
+                    drawEmojiUnreadDot(canvas, this);
                 }
-            }
-        };
+            };
+        } else {
+            emojiButton = new ChatActivityEnterViewStaticIconView(context, this) {
+                @Override
+                protected void onDraw(Canvas canvas) {
+                    super.onDraw(canvas);
+                    drawEmojiUnreadDot(canvas, this);
+                }
+            };
+        }
         emojiButton.setContentDescription(getString(R.string.AccDescrEmojiButton));
         emojiButton.setFocusable(true);
         int padding = dp(7.5f);
         emojiButton.setPadding(padding, padding, padding, padding);
-        emojiButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.SRC_IN));
+        setInputIconColorFilter(emojiButton, new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.SRC_IN));
         emojiButton.setBackground(Theme.createInsetRoundRectDrawable(getThemedColor(Theme.key_listSelector), dp(19), dp(1), dp(3)));
         emojiButton.setOnClickListener(v -> {
             if (adjustPanLayoutHelper != null && adjustPanLayoutHelper.animationInProgress()) {
@@ -3496,21 +3514,29 @@ public class ChatActivityEnterView extends FrameLayout implements
         cameraOutline = getResources().getDrawable(R.drawable.input_video).mutate();
         cameraOutline.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.MULTIPLY));
 
-        audioVideoSendButton = new ChatActivityEnterViewAnimatedIconView(context, 24) {
-            private final Rect tmpRectF = new Rect();
-            @Override
-            public void draw(@NonNull Canvas canvas) {
-                if (audioVideoButtonContainerForbidden) {
-                    tmpRectF.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
-                    tmpRectF.inset(dp(7.5f), dp(7.5f));
-                    Drawable d = getCurrentState() == State.VIDEO ? cameraOutline : micOutline;
-                    d.setBounds(tmpRectF);
-                    d.draw(canvas);
-                } else {
-                    super.draw(canvas);
+        if (IconManager.INSTANCE.isBasePackOnly(IconPackType.DEFAULT)) {
+            audioVideoSendButton = new ChatActivityEnterViewAnimatedIconView(context, 24) {
+                @Override
+                public void draw(@NonNull Canvas canvas) {
+                    if (audioVideoButtonContainerForbidden) {
+                        drawForbiddenAudioVideoIcon(canvas, this, getCurrentState() == State.VIDEO);
+                    } else {
+                        super.draw(canvas);
+                    }
                 }
-            }
-        };
+            };
+        } else {
+            audioVideoSendButton = new ChatActivityEnterViewStaticIconView(context, this, 24) {
+                @Override
+                public void draw(@NonNull Canvas canvas) {
+                    if (audioVideoButtonContainerForbidden) {
+                        drawForbiddenAudioVideoIcon(canvas, this, getCurrentState() == State.VIDEO);
+                    } else {
+                        super.draw(canvas);
+                    }
+                }
+            };
+        }
         audioVideoSendButton.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
 //        audioVideoSendButton.setFocusable(true);
 //        audioVideoSendButton.setAccessibilityDelegate(mediaMessageButtonsDelegate);
@@ -4856,6 +4882,115 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     private ActionBarMenuSubItem actionScheduleButton;
+
+    private void addAiSendOptions(ItemOptions options) {
+        if (parentFragment == null || messageEditText == null || TextUtils.isEmpty(messageEditText.getText())) {
+            return;
+        }
+        if (!AiController.canUseAI()) {
+            if (AiConfig.getPreferences().getBoolean("ai_hint_hidden", false)) {
+                return;
+            }
+            FrameLayout hint = new FrameLayout(getContext());
+            TextView hintText = new TextView(getContext());
+            hintText.setText(getString(R.string.TapToAddApiKey));
+            hintText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            hintText.setTextColor(getThemedColor(Theme.key_actionBarDefaultSubmenuItem));
+            hintText.setPadding(dp(16), dp(10), dp(44), dp(10));
+            hintText.setOnClickListener(v -> {
+                if (messageSendPreview != null) {
+                    messageSendPreview.dismiss(false);
+                    messageSendPreview = null;
+                }
+                parentFragment.presentFragment(new EditServiceActivity());
+            });
+            hint.addView(hintText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            ImageView close = new ImageView(getContext());
+            close.setImageResource(R.drawable.miniplayer_close);
+            close.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_actionBarDefaultSubmenuItemIcon), PorterDuff.Mode.MULTIPLY));
+            close.setScaleType(ImageView.ScaleType.CENTER);
+            close.setOnClickListener(v -> {
+                AiConfig.getEditor().putBoolean("ai_hint_hidden", true).apply();
+                hint.setVisibility(View.GONE);
+            });
+            hint.addView(close, LayoutHelper.createFrame(36, 36, Gravity.RIGHT | Gravity.CENTER_VERTICAL));
+            options.addView(hint);
+            return;
+        }
+
+        OnDeviceAvailability.warmup();
+        options.addView(new ActionRow(getContext(), resourcesProvider, Arrays.asList(
+            new ActionRow.ActionItem(R.drawable.ai_chat, true, v -> {
+                if (messageSendPreview != null) {
+                    messageSendPreview.dismiss(false);
+                    messageSendPreview = null;
+                }
+                AndroidUtilities.runOnUIThread(() -> {
+                    if (parentFragment == null || messageEditText == null) {
+                        return;
+                    }
+                    if (keyboardVisible) {
+                        closeKeyboard();
+                    } else if (isPopupShowing()) {
+                        hidePopup(false);
+                    }
+                    AiResponseAlert.showAlert(parentFragment, parentFragment.getClient(), messageEditText.getText().toString(),
+                        AiConfig.getSaveHistory(), false, null, () -> parentFragment.dimBehindView(false), this::insertAiResponse).setDimBehind(true);
+                }, 150);
+            }),
+            new ActionRow.ActionItem(R.drawable.msg_settings, true, v -> {
+                if (messageSendPreview != null) {
+                    messageSendPreview.dismiss(false);
+                    messageSendPreview = null;
+                }
+                if (keyboardVisible) {
+                    closeKeyboard();
+                }
+                AndroidUtilities.runOnUIThread(() -> parentFragment.presentFragment(new AiPreferencesActivity()), 250);
+            }),
+            new ActionRow.ActionItem(R.drawable.msg_delete, AiConfig.getSaveHistory(), v -> {
+                if (messageSendPreview != null) {
+                    messageSendPreview.dismiss(false);
+                    messageSendPreview = null;
+                }
+                AiController.clearHistory(parentFragment, resourcesProvider, true);
+            })
+        )), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 56));
+    }
+
+    private void translateBeforeSend() {
+        if (parentFragment == null || messageEditText == null || TextUtils.isEmpty(messageEditText.getText())) {
+            return;
+        }
+        if (messageSendPreview != null) {
+            messageSendPreview.dismiss(false);
+            messageSendPreview = null;
+        }
+        final AlertDialog progressDialog = new AlertDialog(getContext(), AlertDialog.ALERT_TYPE_SPINNER, resourcesProvider);
+        progressDialog.showDelayed(150);
+        CharSequence[] text = {messageEditText.getText()};
+        TranslatorUtils.translate(text[0], TranslatorUtils.getResolvedSendTargetLanguageCode(),
+            MediaDataController.getInstance(currentAccount).getEntities(text, true), new TranslatorUtils.TranslateCallback() {
+                @Override
+                public void onSuccess(TLRPC.TL_textWithEntities translated) {
+                    progressDialog.dismiss();
+                    if (messageEditText == null) {
+                        return;
+                    }
+                    SpannableStringBuilder result = SpannableStringBuilder.valueOf(translated.text);
+                    MessageObject.addEntitiesToText(result, translated.entities, true, true, false, true);
+                    messageEditText.setText(result);
+                    messageEditText.setSelection(result.length());
+                }
+
+                @Override
+                public void onFailed() {
+                    progressDialog.dismiss();
+                    BulletinFactory.of(parentFragment).createErrorBulletin(getString(R.string.TranslationFailedAlert2)).show();
+                }
+            });
+    }
+
     private boolean onSendLongClick(View view) {
         if (isInScheduleMode() || parentFragment != null && parentFragment.getChatMode() == ChatActivity.MODE_QUICK_REPLIES || animatorEphemeralMessageVisibility.getValue()) {
             return false;
@@ -5144,6 +5279,17 @@ public class ChatActivityEnterView extends FrameLayout implements
         }
 
         ItemOptions options = ItemOptions.makeOptions(this, resourcesProvider, sendButton);
+
+        addAiSendOptions(options);
+
+        if (containsSendMessage && audioToSend == null && messageEditText != null && !TextUtils.isEmpty(messageEditText.getText())) {
+            options.addView(new TranslateBeforeSendWrapper(getContext(), true, false, resourcesProvider) {
+                @Override
+                public void onClick() {
+                    translateBeforeSend();
+                }
+            });
+        }
 
         final boolean self = parentFragment != null && UserObject.isUserSelf(parentFragment.getCurrentUser());
         boolean scheduleButtonValue = parentFragment != null && parentFragment.canScheduleMessage();
@@ -5879,6 +6025,22 @@ public class ChatActivityEnterView extends FrameLayout implements
         }
         TLRPC.EncryptedChat encryptedChat = parentFragment != null ? parentFragment.getCurrentEncryptedChat() : null;
         messageEditText.setAllowTextEntitiesIntersection(supportsSendingNewEntities());
+        messageEditText.setInlineMath(new InlineMathController(messageEditText, new InlineMathController.Delegate() {
+            @Override
+            public void runProgrammatic(Runnable runnable) {
+                innerTextChange = 2;
+                try {
+                    runnable.run();
+                } finally {
+                    innerTextChange = 0;
+                }
+            }
+
+            @Override
+            public int accentColor() {
+                return getThemedColor(Theme.key_chat_messagePanelCursor);
+            }
+        }));
         int flags = EditorInfo.IME_FLAG_NO_EXTRACT_UI;
         if (isKeyboardSupportIncognitoMode() && encryptedChat != null) {
             flags |= EditorInfoCompat.IME_FLAG_NO_PERSONALIZED_LEARNING;
@@ -6243,6 +6405,39 @@ public class ChatActivityEnterView extends FrameLayout implements
         return sendButton.getVisibility() == VISIBLE;
     }
 
+    private void drawEmojiUnreadDot(Canvas canvas, View button) {
+        if (button.getTag() != null && attachLayout != null && !emojiViewVisible
+                && !MediaDataController.getInstance(currentAccount).getUnreadStickerSets().isEmpty() && dotPaint != null) {
+            int x = button.getWidth() / 2 + dp(9);
+            int y = button.getHeight() / 2 - dp(8);
+            canvas.drawCircle(x, y, dp(5), dotPaint);
+        }
+    }
+
+    private void drawForbiddenAudioVideoIcon(Canvas canvas, View button, boolean video) {
+        Rect bounds = new Rect(0, 0, button.getMeasuredWidth(), button.getMeasuredHeight());
+        bounds.inset(dp(7.5f), dp(7.5f));
+        Drawable icon = video ? cameraOutline : micOutline;
+        icon.setBounds(bounds);
+        icon.draw(canvas);
+    }
+
+    private void setInputIconColorFilter(View button, ColorFilter filter) {
+        if (button instanceof ChatActivityEnterViewAnimatedIconView) {
+            ((ChatActivityEnterViewAnimatedIconView) button).setColorFilter(filter);
+        } else if (button instanceof ChatActivityEnterViewStaticIconView) {
+            ((ChatActivityEnterViewStaticIconView) button).setColorFilter(filter);
+        }
+    }
+
+    private void setInputIconState(View button, ChatActivityEnterViewAnimatedIconView.State state, boolean animated) {
+        if (button instanceof ChatActivityEnterViewAnimatedIconView) {
+            ((ChatActivityEnterViewAnimatedIconView) button).setState(state, animated);
+        } else if (button instanceof ChatActivityEnterViewStaticIconView) {
+            ((ChatActivityEnterViewStaticIconView) button).setState(ChatActivityEnterViewStaticIconView.State.valueOf(state.name()), animated);
+        }
+    }
+
     private void setRecordVideoButtonVisible(boolean visible, boolean animated) {
         if (audioVideoSendButton == null) {
             return;
@@ -6258,7 +6453,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             }
             preferences.edit().putBoolean(isChannel ? "currentModeVideoChannel" : "currentModeVideo", visible).apply();
         }
-        audioVideoSendButton.setState(isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, animated);
+        setInputIconState(audioVideoSendButton, isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, animated);
         audioVideoSendButton.setContentDescription(getString(isInVideoMode() ? R.string.AccDescrVideoMessage : R.string.AccDescrVoiceMessage));
         audioVideoButtonContainer.setContentDescription(getString(isInVideoMode() ? R.string.AccDescrVideoMessage : R.string.AccDescrVoiceMessage));
         audioVideoSendButton.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
@@ -6658,7 +6853,7 @@ public class ChatActivityEnterView extends FrameLayout implements
 
         audioVideoButtonContainer.setAlpha(audioVideoButtonContainerForbidden ? 0.5f : 1.0f);
         audioVideoButtonContainer.invalidate();
-        audioVideoSendButton.setColorFilter(new PorterDuffColorFilter(audioVideoButtonContainerForbidden ?
+        setInputIconColorFilter(audioVideoSendButton, new PorterDuffColorFilter(audioVideoButtonContainerForbidden ?
             getThemedColor(Theme.key_glass_defaultIcon) : Color.WHITE, PorterDuff.Mode.SRC_IN));
         audioVideoSendButton.invalidate();
         updateFieldHint(false);
@@ -7541,7 +7736,8 @@ public class ChatActivityEnterView extends FrameLayout implements
             return false;
         }
         final boolean isPremium = UserConfig.getInstance(currentAccount).isPremium();
-        if (!isPremium && UserConfig.getInstance(currentAccount).getClientUserId() != dialogId && message instanceof Spanned) {
+        if (!isPremium && UserConfig.getInstance(currentAccount).getClientUserId() != dialogId
+                && !LocaleUtils.canUseLocalPremiumEmojis(currentAccount) && message instanceof Spanned) {
             AnimatedEmojiSpan[] animatedEmojis = ((Spanned) message).getSpans(0, message.length(), AnimatedEmojiSpan.class);
             if (animatedEmojis != null) {
                 for (int i = 0; i < animatedEmojis.length; ++i) {
@@ -9183,7 +9379,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                     audioVideoSendButton.setScaleX(1f);
                     audioVideoSendButton.setScaleY(1f);
                     runningAnimationAudio.playTogether(ObjectAnimator.ofFloat(audioVideoButtonContainer, View.ALPHA, 1));
-                    audioVideoSendButton.setState(isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, true);
+                    setInputIconState(audioVideoSendButton, isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, true);
                 }
                 if (scheduledButton != null) {
                     runningAnimationAudio.playTogether(
@@ -9353,7 +9549,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                     messageEditText.setAlpha(0f);
 
                     if (audioVideoSendButton != null) {
-                        audioVideoSendButton.setState(isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, animated);
+                        setInputIconState(audioVideoSendButton, isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, animated);
                         audioVideoButtonContainer.setAlpha(1f);
                         audioVideoButtonContainer.setScaleX(1f);
                         audioVideoButtonContainer.setScaleY(1f);
@@ -9436,7 +9632,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                             ObjectAnimator.ofFloat(audioVideoButtonContainer, View.SCALE_X, 1),
                             ObjectAnimator.ofFloat(audioVideoButtonContainer, View.SCALE_Y, 1)
                         );
-                        audioVideoSendButton.setState(isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, true);
+                        setInputIconState(audioVideoSendButton, isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, true);
                     }
                     if (botCommandsMenuButton != null) {
                         iconsAnimator.playTogether(
@@ -9589,7 +9785,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                         iconsAnimator.playTogether(ObjectAnimator.ofFloat(audioVideoButtonContainer, View.ALPHA, 1));
                         iconsAnimator.playTogether(ObjectAnimator.ofFloat(audioVideoButtonContainer, View.SCALE_X, 1));
                         iconsAnimator.playTogether(ObjectAnimator.ofFloat(audioVideoButtonContainer, View.SCALE_Y, 1));
-                        audioVideoSendButton.setState(isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, true);
+                        setInputIconState(audioVideoSendButton, isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, true);
                     }
                     if (scheduledButton != null) {
                         iconsAnimator.playTogether(
@@ -9705,7 +9901,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                     audioVideoSendButton.setScaleX(1f);
                     audioVideoSendButton.setScaleY(1f);
                     iconsAnimator.playTogether(ObjectAnimator.ofFloat(audioVideoButtonContainer, View.ALPHA, 1));
-                    audioVideoSendButton.setState(isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, true);
+                    setInputIconState(audioVideoSendButton, isInVideoMode() ? ChatActivityEnterViewAnimatedIconView.State.VIDEO : ChatActivityEnterViewAnimatedIconView.State.VOICE, true);
                 }
                 if (attachLayout != null) {
                     if (attachButtonAnimator != null) {
@@ -10491,8 +10687,8 @@ public class ChatActivityEnterView extends FrameLayout implements
         if (botKeyboardView != null) {
             botKeyboardView.updateColors();
         }
-        audioVideoSendButton.setColorFilter(new PorterDuffColorFilter(audioVideoButtonContainerForbidden ? getThemedColor(Theme.key_glass_defaultIcon) : Color.WHITE, PorterDuff.Mode.SRC_IN));
-        emojiButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.SRC_IN));
+        setInputIconColorFilter(audioVideoSendButton, new PorterDuffColorFilter(audioVideoButtonContainerForbidden ? getThemedColor(Theme.key_glass_defaultIcon) : Color.WHITE, PorterDuff.Mode.SRC_IN));
+        setInputIconColorFilter(emojiButton, new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.SRC_IN));
         emojiButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector)));
         deleteRichDraftButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.SRC_IN));
         deleteRichDraftButton.setBackground(Theme.createInsetRoundRectDrawable(getThemedColor(Theme.key_listSelector), dp(19), dp(1), dp(3)));
@@ -11962,7 +12158,11 @@ public class ChatActivityEnterView extends FrameLayout implements
         if (emojiView != null) {
             return;
         }
-        emojiView = new EmojiView(parentFragment, allowAnimatedEmoji, true, true, getContext(), true, info, sizeNotifierLayout, shouldDrawBackground, resourcesProvider, emojiViewFrozen, windowInsetsInAppController != null) {
+        boolean allowLocalPremiumEmojis = LocaleUtils.canUseLocalPremiumEmojis(currentAccount);
+        boolean isSelf = dialog_id == UserConfig.getInstance(currentAccount).getClientUserId();
+        boolean hasChatEmojiSet = info != null && info.emojiset != null;
+        boolean showAnimatedEmoji = allowAnimatedEmoji && (isSelf || hasChatEmojiSet || allowLocalPremiumEmojis || UserConfig.getInstance(currentAccount).isPremium());
+        emojiView = new EmojiView(parentFragment, showAnimatedEmoji, true, true, getContext(), true, info, sizeNotifierLayout, shouldDrawBackground, resourcesProvider, emojiViewFrozen, windowInsetsInAppController != null, allowLocalPremiumEmojis) {
             @Override
             public void setTranslationY(float translationY) {
                 super.setTranslationY(translationY);
@@ -13113,7 +13313,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             nextIcon = ChatActivityEnterViewAnimatedIconView.State.SMILE;
         }
 
-        emojiButton.setState(nextIcon, animated);
+        setInputIconState(emojiButton, nextIcon, animated);
         onEmojiIconChanged(nextIcon);
     }
 
@@ -13533,7 +13733,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             boolean audio = (Boolean) args[1];
             isInVideoMode = !audio;
             if (audioVideoSendButton != null) {
-                audioVideoSendButton.setState(audio ? ChatActivityEnterViewAnimatedIconView.State.VOICE : ChatActivityEnterViewAnimatedIconView.State.VIDEO, true);
+                setInputIconState(audioVideoSendButton, audio ? ChatActivityEnterViewAnimatedIconView.State.VOICE : ChatActivityEnterViewAnimatedIconView.State.VIDEO, true);
             }
             if (!recordingAudioVideo) {
                 recordingAudioVideo = true;
@@ -14483,7 +14683,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             int ms = (int) (t % 1000L) / 10;
 
             if (isInVideoMode()) {
-                if (t >= 59500 && !stoppedInternal) {
+                if (t >= Math.max(0, SystemUtils.getRoundVideoMaxDurationMs() - 500) && !stoppedInternal) {
                     startedDraggingX = -1;
                     delegate.needStartRecordVideo(3, true, 0, 0, voiceOnce ? 0x7FFFFFFF : 0, effectId, 0);
                     sendButton.setEffect(effectId = 0);

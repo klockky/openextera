@@ -114,6 +114,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.AppUtils;
+
 import org.json.JSONObject;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
@@ -1218,14 +1221,14 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                     tracker.computeCurrentVelocity(1000);
                     float velX = tracker.getXVelocity();
                     float velY = tracker.getYVelocity();
-                    if ((sheet == null || !sheet.nestedVerticalScroll) && !startedTracking && velX >= 3500 && velX > Math.abs(velY)) {
+                    if ((sheet == null || !sheet.nestedVerticalScroll) && !startedTracking && velX >= AppUtils.getSwipeVelocity() && velX > Math.abs(velY)) {
                         prepareForMoving(event);
                     }
                     if (startedTracking) {
                         View movingView = movingPage ? pages[0] : containerView;
                         float x = !movingPage && sheet != null ? sheet.getBackProgress() * sheet.windowView.getWidth() : movingView.getX();
 
-                        final boolean backAnimation = x < movingView.getMeasuredWidth() * .3f && (velX < 2500 || velX < velY) || !lastWebviewAllowedScroll;
+                        final boolean backAnimation = x < movingView.getMeasuredWidth() * .3f && (velX < AppUtils.getSwipeVelocity() || velX < velY) || !lastWebviewAllowedScroll;
                         float distToMove;
                         AnimatorSet animatorSet = new AnimatorSet();
                         if (!backAnimation) {
@@ -1972,10 +1975,20 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
             adapter.isRtl = webPage.cached_page.rtl;
             adapter.currentPage = webPage;
 
+            ArrayList<TL_iv.PageBlock> blocks = webPage.cached_page.blocks;
+            if (!ExteraConfig.getTelegramAiInstantViewSummaries()) {
+                blocks = new ArrayList<>(webPage.cached_page.blocks.size());
+                for (TL_iv.PageBlock block : webPage.cached_page.blocks) {
+                    if (!isCocoonAiSummaryBlock(block)) {
+                        blocks.add(block);
+                    }
+                }
+            }
             int numBlocks = 0;
-            int count = webPage.cached_page.blocks.size();
+            int count = blocks.size();
             for (int a = 0; a < count; a++) {
-                TL_iv.PageBlock block = webPage.cached_page.blocks.get(a);
+                TL_iv.PageBlock block = blocks.get(a);
+                block.first = a == 0;
                 if (a == 0) {
                     block.first = true;
                     if (block instanceof TL_iv.pageBlockCover) {
@@ -1983,7 +1996,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                         TL_iv.RichText caption = getBlockCaption(pageBlockCover, 0);
                         TL_iv.RichText credit = getBlockCaption(pageBlockCover, 1);
                         if ((caption != null && !(caption instanceof TL_iv.textEmpty) || credit != null && !(credit instanceof TL_iv.textEmpty)) && count > 1) {
-                            TL_iv.PageBlock next = webPage.cached_page.blocks.get(1);
+                            TL_iv.PageBlock next = blocks.get(1);
                             if (next instanceof TL_iv.pageBlockChannel) {
                                 adapter.channelBlock = (TL_iv.pageBlockChannel) next;
                             }
@@ -3100,6 +3113,18 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
             return "";
         }
         return "";
+    }
+
+    private static boolean isCocoonAiSummaryBlock(TL_iv.PageBlock block) {
+        TL_iv.RichText caption;
+        if (block instanceof TL_iv.pageBlockBlockquote) {
+            caption = ((TL_iv.pageBlockBlockquote) block).caption;
+        } else if (block instanceof TL_iv.pageBlockBlockquoteBlocks) {
+            caption = ((TL_iv.pageBlockBlockquoteBlocks) block).caption;
+        } else {
+            return false;
+        }
+        return "Cocoon AI Summary".equalsIgnoreCase(getPlainText(caption).toString().trim());
     }
 
     public static String getUrl(TL_iv.RichText richText) {

@@ -339,7 +339,35 @@ public class Weather {
     private static State cacheValue;
 
     public static State getCached() {
+        if (cacheValue == null) {
+            try {
+                String key = PillStackConfig.getPreferences().getString("weatherCacheKey", null);
+                String value = PillStackConfig.getPreferences().getString("weatherCacheValue", null);
+                if (value != null) {
+                    cacheKey = key;
+                    cacheValue = ExteraConfig.getGSON().fromJson(value, State.class);
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
         return cacheValue;
+    }
+
+    private static void saveCache(String key, State state) {
+        if (state == null) {
+            return;
+        }
+        try {
+            cacheKey = key;
+            cacheValue = state;
+            PillStackConfig.getEditor()
+                .putString("weatherCacheKey", key)
+                .putString("weatherCacheValue", ExteraConfig.getGSON().toJson(state))
+                .apply();
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
     }
 
     static {
@@ -448,8 +476,9 @@ public class Weather {
         calendar.setTime(date);
         final long hours = calendar.getTimeInMillis() / 1_000L / 60L / 60L;
         final String key = Math.round(lat * 1000) + ":" + Math.round(lng * 1000) + "at" + hours;
-        if (cacheValue != null && TextUtils.equals(cacheKey, key)) {
-            whenFetched.run(cacheValue);
+        State cached = getCached();
+        if (cached != null && TextUtils.equals(cacheKey, key)) {
+            whenFetched.run(cached);
             return null;
         }
 
@@ -482,7 +511,7 @@ public class Weather {
                         try {
                             temp = Float.parseFloat(rr.description);
                         } catch (Exception e) {
-                            whenFetched.run(null);
+                            whenFetched.run(getCached());
                             return;
                         }
                         final State state = new State();
@@ -491,14 +520,13 @@ public class Weather {
                         state.emoji = emoji;
                         state.temperature = temp;
 
-                        cacheKey = key;
-                        cacheValue = state;
+                        saveCache(key, state);
 
                         whenFetched.run(state);
                         return;
                     }
                 }
-                whenFetched.run(null);
+                whenFetched.run(getCached());
             }));
         };
 
@@ -518,7 +546,7 @@ public class Weather {
                         return;
                     }
                 }
-                whenFetched.run(null);
+                whenFetched.run(getCached());
             }));
         } else {
             request.run();

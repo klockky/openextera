@@ -103,6 +103,9 @@ import com.exteragram.messenger.TabIconsMode;
 import com.exteragram.messenger.config.BottomNavigationBar;
 import com.exteragram.messenger.drawer.DrawerContainer;
 import com.exteragram.messenger.utils.AppUtils;
+import com.exteragram.messenger.components.TranslateBeforeSendWrapper;
+import com.exteragram.messenger.translator.TranslatorUtils;
+import com.exteragram.messenger.utils.system.VibratorUtils;
 import com.exteragram.messenger.utils.chats.MainMenuHelper;
 import com.exteragram.messenger.utils.text.LocaleUtils;
 import com.exteragram.messenger.utils.ui.AccountsUiHelper;
@@ -3645,7 +3648,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 protected void onDefaultTabMoved() {
                     if (!getMessagesController().premiumFeaturesBlocked()) {
                         try {
-                            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                            performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_PRESS), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                         } catch (Exception ignore) {}
                         topBulletin = BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(R.raw.filter_reorder, AndroidUtilities.replaceTags(LocaleController.formatString(R.string.LimitReachedReorderFolder, LocaleController.getString(R.string.FilterAllChats))), LocaleController.getString(R.string.PremiumMore), Bulletin.DURATION_PROLONG, () -> {
                             showDialog(new PremiumFeatureBottomSheet(DialogsActivity.this, PremiumPreviewFragment.PREMIUM_FEATURE_ADVANCED_CHAT_MANAGEMENT, true));
@@ -12231,7 +12234,47 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         final boolean onlyMyselfFinal = onlyMyself;
 
-        ItemOptions.makeOptions(this, view)
+        ItemOptions options = ItemOptions.makeOptions(this, view);
+        CharSequence fieldText = commentView != null ? commentView.getFieldText() : null;
+        if (!TextUtils.isEmpty(fieldText)) {
+            options.add(new TranslateBeforeSendWrapper(getContext(), true, false, getResourceProvider()) {
+                @Override
+                public void onClick() {
+                    options.dismiss();
+                    AlertDialog progressDialog = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER, getResourceProvider());
+                    progressDialog.showDelayed(150);
+                    CharSequence text = commentView != null ? commentView.getFieldText() : fieldText;
+                    TranslatorUtils.translate(text, TranslatorUtils.getResolvedSendTargetLanguageCode(),
+                            MediaDataController.getInstance(currentAccount).getEntities(new CharSequence[]{text}, true),
+                            new TranslatorUtils.TranslateCallback() {
+                                @Override
+                                public void onSuccess(TLRPC.TL_textWithEntities translated) {
+                                    try {
+                                        progressDialog.dismiss();
+                                    } catch (Exception ignore) {
+                                    }
+                                    if (commentView != null) {
+                                        SpannableStringBuilder result = SpannableStringBuilder.valueOf(translated.text);
+                                        MessageObject.addEntitiesToText(result, translated.entities, true, true, false, true);
+                                        commentView.setFieldText(result);
+                                        commentView.setSelection(result.length());
+                                    }
+                                }
+
+                                @Override
+                                public void onFailed() {
+                                    try {
+                                        progressDialog.dismiss();
+                                    } catch (Exception ignore) {
+                                    }
+                                    BulletinFactory.of(DialogsActivity.this)
+                                            .createErrorBulletin(LocaleController.getString(R.string.TranslationFailedAlert2)).show();
+                                }
+                            });
+                }
+            });
+        }
+        options
             .add(R.drawable.input_notify_off, getString(R.string.SendWithoutSound), () -> {
                 this.notify = false;
                 if (delegate == null || selectedDialogs.isEmpty()) {
@@ -12915,7 +12958,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             return;
         }
 
-        slideFragmentLite = SharedConfig.getDevicePerformanceClass() <= SharedConfig.PERFORMANCE_CLASS_AVERAGE || !LiteMode.isEnabled(LiteMode.FLAG_CHAT_SCALE);
+        slideFragmentLite = !ExteraConfig.getSpringSwipeback()
+                && (SharedConfig.getDevicePerformanceClass() <= SharedConfig.PERFORMANCE_CLASS_LOW
+                || !LiteMode.isEnabled(LiteMode.FLAG_CHAT_SCALE));
         slideFragmentProgress = progress;
         if (fragmentView != null) {
             fragmentView.invalidate();

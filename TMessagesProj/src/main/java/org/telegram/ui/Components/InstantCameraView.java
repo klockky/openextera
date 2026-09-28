@@ -52,6 +52,7 @@ import android.os.Message;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -68,6 +69,18 @@ import androidx.annotation.RequiresApi;
 import androidx.core.graphics.ColorUtils;
 
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.camera.core.Preview;
+
+import com.exteragram.messenger.CameraType;
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.VideoMessagesCamera;
+import com.exteragram.messenger.camera.CameraXSession;
+import com.exteragram.messenger.camera.CameraDebugUtils;
+import com.exteragram.messenger.camera.InstantCameraZoomSlider;
+import com.exteragram.messenger.camera.RoundVideoEncoder;
+import com.exteragram.messenger.debug.DebugConfig;
+import com.exteragram.messenger.debug.DebugOverlayView;
+import com.exteragram.messenger.utils.system.SystemUtils;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -103,6 +116,7 @@ import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorPro
 import org.telegram.ui.Components.voip.CellFlickerDrawable;
 import org.telegram.ui.Stories.recorder.DualCameraView;
 import org.telegram.ui.Stories.recorder.FlashViews;
+import org.telegram.ui.Stories.recorder.SliderView;
 import org.telegram.ui.Stories.recorder.StoryEntry;
 
 import java.io.File;
@@ -182,11 +196,16 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
     private Size aspectRatio = SharedConfig.roundCamera16to9 ? new Size(16, 9) : new Size(4, 3);
     private TextureView textureView;
     private BackupImageView textureOverlayView;
-    private final boolean useCamera2 = SharedConfig.isUsingCamera2(currentAccount);
+    private final boolean useCamera2 = ExteraConfig.getCameraType() == CameraType.CAMERA_2;
     private CameraSession cameraSession;
     private boolean bothCameras;
     private Camera2Session[] camera2Sessions = new Camera2Session[2];
     private Camera2Session camera2SessionCurrent;
+    private CameraXSession.CameraLifecycle camLifecycle;
+    private volatile CameraXSession cameraXSession;
+    private InstantCameraZoomSlider zoomSlider;
+    private ScaleGestureDetector scaleGestureDetector;
+    private float cameraZoom;
     private boolean needDrawFlickerStub;
 
     private boolean isCameraSessionInitiated() {
@@ -198,9 +217,10 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
     }
 
     public boolean isCameraReady() {
-        // TODO(openextera): stage2 incomplete — lite also checks cameraXSession.isReady() when
-        //  ExteraConfig.getCameraType() == CameraType.CAMERA_X; the CameraX round-video path is not ported yet.
-        return cameraReady && isCameraSessionInitiated() && cameraThread != null;
+        boolean sessionReady = ExteraConfig.getCameraType() == CameraType.CAMERA_X
+                ? cameraXSession != null && cameraXSession.isReady()
+                : isCameraSessionInitiated();
+        return cameraReady && sessionReady && cameraThread != null;
     }
 
     public void setFrontface(boolean frontface) {
@@ -299,8 +319,32 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         rect = new RectF();
 
         flashViews = new FlashViews(getContext(), null, this, null);
-        flashViews.setWarmth(.5f);
+        flashViews.setWarmth(ExteraConfig.getFlashWarmth());
+        flashViews.setIntensity(ExteraConfig.getFlashIntensity());
         addView(flashViews.backgroundView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL));
+
+        scaleGestureDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override
+            public boolean onScaleBegin(ScaleGestureDetector detector) {
+                cancelZoomAnimations();
+                zoomSlider.beginPinchZoomGesture();
+                return true;
+            }
+
+            @Override
+            public boolean onScale(ScaleGestureDetector detector) {
+                if (cameraXSession != null) {
+                    zoomSlider.scaleCameraXZoom((float) Math.pow(detector.getScaleFactor(), 2));
+                    cameraZoom = cameraXSession.getLinearZoom();
+                }
+                return true;
+            }
+
+            @Override
+            public void onScaleEnd(ScaleGestureDetector detector) {
+                finishZoom();
+            }
+        });
 
         cameraContainer = new InstantViewCameraContainer(context) {
             @Override
@@ -321,6 +365,12 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 outline.setOval(0, 0, textureViewSize, textureViewSize);
             }
         });
+        cameraContainer.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN && cameraXSession != null) {
+                cameraXSession.focusToPoint(event.getX(), event.getY(), view.getWidth(), view.getHeight());
+            }
+            return false;
+        });
         cameraContainer.setClipToOutline(true);
         cameraContainer.setWillNotDraw(false);
 
@@ -339,15 +389,22 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         switchCameraButton.setContentDescription(LocaleController.getString(R.string.AccDescrSwitchCamera));
         buttonsLayout.addView(switchCameraButton, LayoutHelper.createLinear(44, 44));
         switchCameraButton.setOnClickListener(v -> {
-            if (!cameraReady || !isCameraSessionInitiated() || cameraThread == null) {
+            if (!isCameraReady()) {
                 return;
             }
-            if (!bothCameras) {
+            boolean cameraXDual = ExteraConfig.getCameraType() == CameraType.CAMERA_X
+                    && cameraXSession != null && cameraXSession.isDualMode();
+            if (ExteraConfig.getCameraType() == CameraType.CAMERA_X && !cameraXDual) {
+                switchCameraX();
+            } else if (!bothCameras) {
                 switchCamera();
             }
             if (switchCameraDrawable != null) {
                 switchCameraDrawable.setCurrentFrame(0);
                 switchCameraDrawable.start();
+            }
+            if (ExteraConfig.getCameraType() == CameraType.CAMERA_X && !cameraXDual) {
+                return;
             }
             flipAnimationInProgress = true;
             ValueAnimator valueAnimator = ValueAnimator.ofFloat(0, 1f);
@@ -356,7 +413,11 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             final boolean[] didSwap = new boolean[1];
             Runnable doSwap = () -> {
                 if (bothCameras) {
-                    switchCamera();
+                    if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+                        switchCameraX();
+                    } else {
+                        switchCamera();
+                    }
                 }
             };
             cameraContainer.setCameraDistance(cameraContainer.getMeasuredHeight() * 8f);
@@ -399,6 +460,43 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             flashing = !flashing;
             updateFlash();
         });
+        flashButton.setOnLongClickListener(v -> {
+            if (!isFrontface || !isCameraReady()) {
+                return false;
+            }
+            boolean wasEnabled = flashing;
+            if (!wasEnabled) {
+                flashing = true;
+                updateFlash();
+            }
+            ItemOptions.makeOptions(this, resourcesProvider, flashButton)
+                    .addView(new SliderView(getContext(), 1)
+                            .setValue(ExteraConfig.getFlashWarmth())
+                            .setOnValueChange(value -> {
+                                ExteraConfig.setFlashWarmth(value);
+                                flashViews.setWarmth(value);
+                            }))
+                    .addSpaceGap()
+                    .addView(new SliderView(getContext(), 2)
+                            .setMinMax(0.5f, 1f)
+                            .setValue(ExteraConfig.getFlashIntensity())
+                            .setOnValueChange(value -> {
+                                ExteraConfig.setFlashIntensity(value);
+                                flashViews.setIntensity(value);
+                            }))
+                    .setOnDismiss(() -> {
+                        if (!wasEnabled) {
+                            flashing = false;
+                            updateFlash();
+                        }
+                    })
+                    .setDimAlpha(50)
+                    .setGravity(Gravity.RIGHT)
+                    .translate(dp(46), dp(4))
+                    .setBackgroundColor(0xbb1b1b1b)
+                    .show();
+            return true;
+        });
         updateFlash();
 
         if (!isNewDesign) {
@@ -437,6 +535,21 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         };
         addView(textureOverlayView, new LayoutParams(AndroidUtilities.roundPlayingMessageSize, AndroidUtilities.roundPlayingMessageSize, Gravity.CENTER));
 
+        zoomSlider = new InstantCameraZoomSlider(context, resourcesProvider);
+        zoomSlider.setOnCameraZoomChangeListener((zoom, fromSlider) -> {
+            if (fromSlider) {
+                cancelZoomAnimations();
+            }
+            cameraZoom = zoom;
+        });
+        zoomSlider.setOpenAlpha(0f);
+        addView(zoomSlider, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER));
+        if (DebugConfig.getDebugCameraMetrics()) {
+            DebugOverlayView overlay = new DebugOverlayView(context);
+            overlay.setDataSource(this::populateCameraDebugOverlay);
+            addView(overlay, DebugOverlayView.createLayoutParams());
+        }
+
         setVisibilityFromPause = false;
         setVisibility(INVISIBLE);
     }
@@ -446,6 +559,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         drawable.setPadding(dp(6));
         drawable.setRadius(dp(21));
         buttonsLayout.setBackground(drawable);
+        zoomSlider.setBlurBackground(factory.create(zoomSlider, colorProvider));
     }
 
     private Boolean wasFlashing;
@@ -461,7 +575,11 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             }
         }
 
-        if (useCamera2) {
+        if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+            if (cameraXSession != null && isCameraReady()) {
+                cameraXSession.setTorchEnabled(flashing && recording);
+            }
+        } else if (useCamera2) {
             if (camera2Sessions[1] != null) {
                 camera2Sessions[1].setFlash(flashing && !isFrontface && recording);
             }
@@ -508,6 +626,53 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         }
     }
 
+    private void populateCameraDebugOverlay(DebugOverlayView.ContentBuilder builder) {
+        builder.title("InstantCamera")
+                .kv("front", isFrontface).kv("recording", recording).kv("ready", cameraReady)
+                .kv("dual", bothCameras).kv("surface", surfaceIndex).kv("flash", flashing)
+                .kv("frontFlash", frontFlashing).kv("texture", cameraTextureAvailable)
+                .line("preview0=" + CameraDebugUtils.formatCameraSize(previewSize[0]))
+                .line("preview1=" + CameraDebugUtils.formatCameraSize(previewSize[1]))
+                .line("zoom.stops=" + CameraDebugUtils.formatZoomStops(zoomSlider.getToggleStops()))
+                .line("zoom.lenses=" + CameraDebugUtils.formatZoomStops(zoomSlider.getOpticalZoomRatios()));
+        if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+            builder.section("CameraX");
+            CameraXSession session = cameraXSession;
+            if (session == null) {
+                builder.line("session=null");
+                return;
+            }
+            builder.kv("cx.init", session.isInitiated()).kv("cx.ready", session.isReady())
+                    .kv("cx.dual", session.isDualMode()).kv("cx.front", session.isFrontface())
+                    .line("cx.zoom=" + CameraDebugUtils.safeCameraXZoomRatio(session) + " ["
+                            + CameraDebugUtils.safeCameraXMinZoomRatio(session) + ".."
+                            + CameraDebugUtils.safeCameraXMaxZoomRatio(session) + "]")
+                    .line("cx.fpsRanges=" + CameraDebugUtils.getCameraXSupportedFpsRanges(session))
+                    .line("bound=" + CameraDebugUtils.getCameraXBoundCameraList(session))
+                    .line("avail=" + CameraDebugUtils.getCameraXAvailableCameraList(session))
+                    .line("phys=" + CameraDebugUtils.getCameraXPhysicalCameraList(session));
+        } else if (useCamera2) {
+            builder.section("Camera2");
+            Camera2Session session = camera2SessionCurrent;
+            if (session == null) {
+                builder.line("session=null");
+                return;
+            }
+            builder.kv("c2.init", session.isInitiated()).kv("c2.flash", session.getFlash())
+                    .kv("c2.both", bothCameras)
+                    .line("c2.zoom=" + session.getZoom() + " [" + session.getMinZoom()
+                            + ".." + session.getMaxZoom() + "]")
+                    .line("c2.fpsRanges=" + CameraDebugUtils.getCamera2SupportedFpsRanges(session))
+                    .line("ids=" + CameraDebugUtils.getCamera2CameraList(getContext()));
+        } else {
+            builder.section("Camera1")
+                    .kv("c1.init", cameraSession != null && cameraSession.isInitied())
+                    .kv("c1.zoom", cameraZoom)
+                    .line("c1.fpsRanges=" + CameraDebugUtils.getLegacySupportedFpsRanges(cameraSession))
+                    .line("ids=" + CameraDebugUtils.getLegacyCameraList());
+        }
+    }
+
     private int internalPaddingBottom;
 
     public void setInternalPadding(int padding) {
@@ -530,6 +695,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 cameraContainer.getLayoutParams().width = cameraContainer.getLayoutParams().height = textureViewSize;
                 ((LayoutParams) muteImageView.getLayoutParams()).topMargin = textureViewSize / 2 - dp(24);
                 textureOverlayView.setRoundRadius(textureViewSize / 2);
+                zoomSlider.setTextureViewSize(textureViewSize);
                 cameraContainer.invalidateOutline();
             }
             updateTextureViewSize = false;
@@ -603,7 +769,11 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
     }
 
     public void destroy(boolean async) {
-        if (useCamera2) {
+        cancelZoomAnimations();
+        zoomSlider.unbindSession();
+        if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+            releaseCameraXSession();
+        } else if (useCamera2) {
             for (int a = 0; a < camera2Sessions.length; ++a) {
                 if (camera2Sessions[a] != null) {
                     camera2Sessions[a].destroy(async);
@@ -618,6 +788,19 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         }
     }
 
+    private void releaseCameraXSession() {
+        CameraXSession session = cameraXSession;
+        cameraXSession = null;
+        zoomSlider.unbindSession();
+        if (session != null) {
+            try {
+                session.closeCamera();
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         float x = cameraContainer.getX();
@@ -625,7 +808,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         rect.set(x - dp(8), y - dp(8), x + cameraContainer.getMeasuredWidth() + dp(8), y + cameraContainer.getMeasuredHeight() + dp(8));
         if (recording) {
             recordedTime = System.currentTimeMillis() - recordStartTime + recordPlusTime;
-            progress = Math.min(1f, recordedTime / 60000.0f);
+            progress = Math.min(1f, recordedTime / (float) SystemUtils.getRoundVideoMaxDurationMs());
             invalidate();
         }
 
@@ -647,6 +830,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         buttonsLayout.setAlpha(0.0f);
         cameraContainer.setAlpha(0.0f);
         textureOverlayView.setAlpha(0.0f);
+        zoomSlider.setOpenAlpha(0.0f);
         muteImageView.setAlpha(0.0f);
         muteImageView.setScaleX(1.0f);
         muteImageView.setScaleY(1.0f);
@@ -686,11 +870,19 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.audioRecordTooShort, recordingGuid, true, (int) recordedTime);
                 startAnimation(false, false);
                 MediaController.getInstance().requestRecordAudioFocus(false);
+            } else if (ExteraConfig.getCameraType() == CameraType.CAMERA_X && roundVideoEncoder != null) {
+                if (previewFile != null) {
+                    previewFile.delete();
+                }
+                previewFile = StoryEntry.makeCacheFile(currentAccount, true);
+                roundVideoEncoder.pause(previewFile);
             } else {
                 videoEncoder.pause();
             }
-        } else if (videoEncoder != null) {
-            videoEncoder.resume();
+        } else if (videoEncoder != null || roundVideoEncoder != null) {
+            if (videoEncoder != null) {
+                videoEncoder.resume();
+            }
             hideCamera(false);
             if (videoPlayer != null) {
                 videoPlayer.releasePlayer(true);
@@ -714,6 +906,8 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         if (textureView != null) {
             return;
         }
+
+        camLifecycle = new CameraXSession.CameraLifecycle();
 
         if (switchCameraDrawable == null) {
             switchCameraDrawable = new RLottieDrawable(R.raw.roundcamera_flip, buttonsSizePx, buttonsSizePx);
@@ -740,8 +934,8 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         cameraReady = false;
         selectedCamera = null;
         if (!fromPaused) {
-            if (!useCamera2) {
-                isFrontface = true;
+            if (ExteraConfig.getVideoMessagesCamera() != VideoMessagesCamera.ASK) {
+                isFrontface = ExteraConfig.getVideoMessagesCamera() == VideoMessagesCamera.FRONT;
             }
             updateFlash();
             recordedTime = 0;
@@ -789,7 +983,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             if (bothCameras) {
                 for (int a = 0; a < 2; ++a) {
                     if (camera2Sessions[a] == null) {
-                        camera2Sessions[a] = Camera2Session.create(a == 0, MessagesController.getInstance(UserConfig.selectedAccount).roundVideoSize, MessagesController.getInstance(UserConfig.selectedAccount).roundVideoSize);
+                        camera2Sessions[a] = Camera2Session.create(a == 0, SystemUtils.getRoundVideoResolution(), SystemUtils.getRoundVideoResolution());
                         if (camera2Sessions[a] != null) {
                             camera2Sessions[a].setRecordingVideo(true);
                             previewSize[a] = new Size(camera2Sessions[a].getPreviewWidth(), camera2Sessions[a].getPreviewHeight());
@@ -803,11 +997,24 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 }
                 if (camera2SessionCurrent == null) return;
             } else {
-                camera2SessionCurrent = camera2Sessions[isFrontface ? 0 : 1] = Camera2Session.create(isFrontface, MessagesController.getInstance(UserConfig.selectedAccount).roundVideoSize, MessagesController.getInstance(UserConfig.selectedAccount).roundVideoSize);
+                camera2SessionCurrent = camera2Sessions[isFrontface ? 0 : 1] = Camera2Session.create(isFrontface, SystemUtils.getRoundVideoResolution(), SystemUtils.getRoundVideoResolution());
                 if (camera2SessionCurrent == null) return;
                 camera2SessionCurrent.setRecordingVideo(true);
                 previewSize[0] = new Size(camera2SessionCurrent.getPreviewWidth(), camera2SessionCurrent.getPreviewHeight());
             }
+            surfaceIndex = bothCameras && !isFrontface ? 1 : 0;
+            bindCamera2ZoomSlider(camera2SessionCurrent);
+        } else if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+            bothCameras = CameraXSession.isRoundDualAvailable(getContext());
+            surfaceIndex = bothCameras && !isFrontface ? 1 : 0;
+            if (previewSize[0] == null) {
+                int resolution = SystemUtils.getRoundVideoResolution();
+                previewSize[0] = new Size(resolution, resolution);
+            }
+            previewSize[1] = previewSize[0];
+        } else {
+            bothCameras = false;
+            surfaceIndex = 0;
         }
         textureView = new TextureView(getContext());
         textureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
@@ -838,11 +1045,15 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
 
             @Override
             public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+                cancelZoomAnimations();
+                zoomSlider.unbindSession();
                 if (cameraThread != null) {
                     cameraThread.shutdown(0, true, 0, 0, 0, 0);
                     cameraThread = null;
                 }
-                if (useCamera2) {
+                if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+                    releaseCameraXSession();
+                } else if (useCamera2) {
                     for (int a = 0; a < camera2Sessions.length; ++a) {
                         if (camera2Sessions[a] != null) {
                             camera2Sessions[a].destroy(false);
@@ -909,6 +1120,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         });
         animatorSet.playTogether(
                 ObjectAnimator.ofFloat(buttonsLayout, View.ALPHA, open ? 1.0f : 0.0f),
+                ObjectAnimator.ofFloat(zoomSlider, InstantCameraZoomSlider.OPEN_ALPHA, open ? 1.0f : 0.0f),
                 ObjectAnimator.ofFloat(muteImageView, View.ALPHA, 0.0f),
                 ObjectAnimator.ofInt(paint, AnimationProperties.PAINT_ALPHA, open ? 255 : 0),
                 ObjectAnimator.ofFloat(cameraContainer, View.ALPHA, open ? 1.0f : 0.0f),
@@ -943,6 +1155,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
     private void updateTranslationY() {
         textureOverlayView.setTranslationY(animationTranslationY + panTranslationY);
         cameraContainer.setTranslationY(animationTranslationY + panTranslationY);
+        zoomSlider.setBaseTranslationY(animationTranslationY + panTranslationY);
     }
 
     public RectF getCameraRect() {
@@ -980,6 +1193,11 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             videoPlayer = null;
         }
         if (state == 4) {
+            if (roundVideoEncoder != null && recordedTime > 800) {
+                requestRoundEncoderStop(1, new SendOptions(notify, scheduleDate,
+                        scheduleRepeatPeriod, ttl, effectId, stars));
+                return;
+            }
             if (videoEncoder != null && recordedTime > 800) {
                 videoEncoder.stopRecording(VideoRecorder.ENCODER_SEND_SEND, new SendOptions(notify, scheduleDate, scheduleRepeatPeriod, ttl, effectId, stars));
                 return;
@@ -1002,7 +1220,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 long endTime = videoEditedInfo.endTime >= 0 ? videoEditedInfo.endTime : videoEditedInfo.estimatedDuration;
                 videoEditedInfo.estimatedDuration = endTime - startTime;
                 videoEditedInfo.estimatedSize = Math.max(1, (long) (size * (videoEditedInfo.estimatedDuration / totalDuration)));
-                videoEditedInfo.bitrate = 1000000;
+                videoEditedInfo.bitrate = SystemUtils.getRoundVideoBitrate() * 1024;
                 if (videoEditedInfo.startTime > 0) {
                     videoEditedInfo.startTime *= 1000;
                 }
@@ -1094,6 +1312,8 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             saveLastCameraBitmap();
             cameraThread.shutdown(0, true, 0, 0, 0, 0);
             cameraThread = null;
+        } else if (roundVideoEncoder != null) {
+            requestRoundEncoderStop(0, new SendOptions(true, 0, 0, 0, 0, 0));
         } else if (videoEncoder != null) {
             videoEncoder.stopRecording(VideoRecorder.ENCODER_SEND_CANCEL, new SendOptions(true, 0, 0, 0, 0, 0));
         }
@@ -1112,6 +1332,10 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
 
     public View getButtonsLayout() {
         return buttonsLayout;
+    }
+
+    public InstantCameraZoomSlider getZoomSlider() {
+        return zoomSlider;
     }
 
     public View getMuteImageView() {
@@ -1141,6 +1365,11 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
     }
 
     private void switchCamera() {
+        if (cameraThread == null) {
+            return;
+        }
+        cancelZoomAnimations();
+        zoomSlider.beginCameraSwitch();
         if (!(useCamera2 && bothCameras)) {
             saveLastCameraBitmap();
             if (lastBitmap != null) {
@@ -1150,10 +1379,12 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             }
         }
         isFrontface = !isFrontface;
+        rememberCameraSelection();
         updateFlash();
         if (useCamera2) {
             if (bothCameras) {
                 camera2SessionCurrent = camera2Sessions[isFrontface ? 0 : 1];
+                bindCamera2ZoomSlider(camera2SessionCurrent);
                 cameraThread.flipSurfaces();
                 return;
             } else {
@@ -1162,11 +1393,12 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                     camera2SessionCurrent = null;
                     camera2Sessions[isFrontface ? 1 : 0] = null;
                 }
-                camera2SessionCurrent = camera2Sessions[isFrontface ? 0 : 1] = Camera2Session.create(isFrontface, MessagesController.getInstance(UserConfig.selectedAccount).roundVideoSize, MessagesController.getInstance(UserConfig.selectedAccount).roundVideoSize);
+                camera2SessionCurrent = camera2Sessions[isFrontface ? 0 : 1] = Camera2Session.create(isFrontface, SystemUtils.getRoundVideoResolution(), SystemUtils.getRoundVideoResolution());
                 if (camera2SessionCurrent == null) return;
                 camera2SessionCurrent.setRecordingVideo(true);
                 previewSize[0] = new Size(camera2SessionCurrent.getPreviewWidth(), camera2SessionCurrent.getPreviewHeight());
                 cameraThread.setCurrentSession(camera2SessionCurrent);
+                bindCamera2ZoomSlider(camera2SessionCurrent);
             }
         } else {
             if (cameraSession != null) {
@@ -1180,10 +1412,57 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         cameraThread.reinitForNewCamera();
     }
 
+    private void switchCameraX() {
+        if (cameraThread == null || ExteraConfig.getCameraType() != CameraType.CAMERA_X) {
+            return;
+        }
+        cancelZoomAnimations();
+        zoomSlider.beginCameraSwitch();
+        boolean dual = cameraXSession != null && cameraXSession.isDualMode();
+        isFrontface = !isFrontface;
+        rememberCameraSelection();
+        updateFlash();
+        if (dual) {
+            cameraThread.flipSurfaces();
+        } else {
+            cameraReady = false;
+        }
+        if (cameraXSession != null) {
+            cameraXSession.switchCamera();
+            zoomSlider.bindSession(cameraXSession);
+            cameraThread.setOrientation();
+        } else {
+            cameraThread.reinitForNewCamera();
+        }
+    }
+
+    private void rememberCameraSelection() {
+        if (ExteraConfig.getRememberLastUsedCamera()
+                && ExteraConfig.getVideoMessagesCamera() != VideoMessagesCamera.ASK) {
+            ExteraConfig.setVideoMessagesCamera(isFrontface
+                    ? VideoMessagesCamera.FRONT : VideoMessagesCamera.REAR);
+        }
+    }
+
+    private void bindCamera2ZoomSlider(Camera2Session session) {
+        if (session == null) {
+            zoomSlider.unbindSession();
+            return;
+        }
+        cameraZoom = session.getZoom();
+        zoomSlider.bindSession(session);
+        session.whenDone(() -> {
+            if (camera2SessionCurrent == session && ExteraConfig.getCameraType() == CameraType.CAMERA_2) {
+                cameraZoom = session.getZoom();
+                zoomSlider.bindSession(session);
+            }
+        });
+    }
+
     // Old Camera1 API
     @Deprecated
     private boolean initCamera() {
-        if (useCamera2) {
+        if (useCamera2 || ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
             return true;
         }
         ArrayList<CameraInfo> cameraInfos = CameraController.getInstance().getCameras();
@@ -1342,7 +1621,36 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 FileLog.d("InstantCamera create camera session " + index);
             }
 
-            if (useCamera2) {
+            if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+                Preview.SurfaceProvider provider = CameraXSession.createSurfaceProvider(
+                        getContext(), surfaceTexture, (width, height) -> {
+                            CameraGLThread thread = cameraThread;
+                            if (thread != null) {
+                                thread.setCameraXPreviewSize(index, width, height);
+                            }
+                        });
+                if (index == 0) {
+                    CameraXSession session = new CameraXSession(camLifecycle, provider);
+                    cameraXSession = session;
+                    session.initCamera(getContext(), isFrontface, bothCameras, () -> {
+                        if (cameraXSession != session) {
+                            return;
+                        }
+                        boolean dual = session.isDualMode();
+                        if (!dual && bothCameras && surfaceIndex != 0 && cameraThread != null) {
+                            cameraThread.flipSurfaces();
+                        }
+                        bothCameras = dual;
+                        if (cameraThread != null) {
+                            cameraThread.setOrientation();
+                        }
+                        zoomSlider.bindSession(session);
+                        updateFlash();
+                    });
+                } else if (bothCameras && cameraXSession != null) {
+                    cameraXSession.setSecondSurfaceProvider(provider);
+                }
+            } else if (useCamera2) {
                 if (bothCameras) {
                     if (camera2Sessions[index] != null) {
                         camera2Sessions[index].open(surfaceTexture);
@@ -1387,6 +1695,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                             FileLog.d("InstantCamera camera initied");
                         }
                         cameraSession.setInitied();
+                        zoomSlider.bindSession(cameraSession, cameraZoom);
                         if (updateScale) {
                             if (cameraThread != null) {
                                 cameraThread.reinitForNewCamera();
@@ -1474,7 +1783,256 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         cameraFile = null;
     }
 
+    private int resolveEncoderFrameRate() {
+        if (!ExteraConfig.getExtendedFramesPerSecond()) {
+            return 30;
+        }
+        if (useCamera2 && camera2SessionCurrent != null) {
+            return camera2SessionCurrent.getRecordingFrameRate();
+        }
+        if (ExteraConfig.getCameraType() == CameraType.CAMERA_X && cameraXSession != null) {
+            return cameraXSession.getRecordingFrameRate();
+        }
+        return 30;
+    }
+
+    private int encoderFrameRate = 30;
     private VideoRecorder videoEncoder;
+    private volatile RoundVideoEncoder roundVideoEncoder;
+    private volatile File roundEncoderFile;
+    private int roundEncoderSend;
+    private SendOptions roundEncoderSendOptions;
+    private volatile boolean roundEncoderFinishRequested;
+    private boolean roundSentMedia;
+    private boolean roundVideoConvertFirstWrite;
+    private final ArrayList<Bitmap> roundKeyframeThumbs = new ArrayList<>();
+
+    private final RoundVideoEncoder.Callback roundEncoderCallback = new RoundVideoEncoder.Callback() {
+        @Override
+        public void onRecordingStarted(boolean resumed) {
+            if (cancelled) {
+                return;
+            }
+            try {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP,
+                        HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+            } catch (Exception ignore) {
+            }
+            AndroidUtilities.lockOrientation(delegate.getParentActivity());
+            recordPlusTime = resumed ? recordedTime : 0;
+            recordStartTime = System.currentTimeMillis();
+            recording = true;
+            updateFlash();
+            invalidate();
+            NotificationCenter.getInstance(currentAccount).postNotificationName(
+                    NotificationCenter.recordStarted, recordingGuid, false);
+        }
+
+        @Override
+        public void onAudioAmplitude(double amplitude) {
+            AndroidUtilities.runOnUIThread(() -> NotificationCenter.getInstance(currentAccount)
+                    .postNotificationName(NotificationCenter.recordProgressChanged, recordingGuid, amplitude));
+        }
+
+        @Override
+        public void onWriteData(long availableSize) {
+            File output = roundEncoderFile;
+            if (output != null) {
+                didWriteRoundData(output, availableSize, false);
+            }
+        }
+
+        @Override
+        public void onPaused(File preview) {
+            handleRoundEncoderPaused(preview);
+        }
+
+        @Override
+        public void onFinished(RoundVideoEncoder.FinishReason reason) {
+            handleRoundEncoderFinished(reason);
+        }
+    };
+
+    private void didWriteRoundData(File output, long availableSize, boolean last) {
+        String path = output.getAbsolutePath();
+        if (roundVideoConvertFirstWrite) {
+            FileLoader.getInstance(currentAccount).uploadFile(path, isSecretChat, false, 1,
+                    ConnectionsManager.FileTypeVideo, false);
+            roundVideoConvertFirstWrite = false;
+        }
+        FileLoader.getInstance(currentAccount).checkUploadNewDataAvailable(path, isSecretChat,
+                availableSize, last ? output.length() : 0);
+    }
+
+    private synchronized void requestRoundEncoderStop(int send, SendOptions options) {
+        RoundVideoEncoder encoder = roundVideoEncoder;
+        if (encoder == null || roundEncoderFinishRequested) {
+            return;
+        }
+        roundEncoderFinishRequested = true;
+        roundEncoderSend = send;
+        roundEncoderSendOptions = options;
+        if (send == 0) {
+            encoder.cancel();
+        } else {
+            encoder.stop();
+        }
+        AndroidUtilities.runOnUIThread(() -> NotificationCenter.getGlobalInstance()
+                .postNotificationName(NotificationCenter.startAllHeavyOperations, 512));
+    }
+
+    private VideoEditedInfo makeRoundVideoEditedInfo(File output) {
+        VideoEditedInfo info = videoEditedInfo;
+        if (info == null) {
+            info = new VideoEditedInfo();
+            info.startTime = -1;
+            info.endTime = -1;
+        }
+        info.roundVideo = true;
+        info.file = file;
+        info.encryptedFile = encryptedFile;
+        info.key = key;
+        info.iv = iv;
+        info.estimatedSize = Math.max(1, size);
+        info.framerate = encoderFrameRate;
+        info.resultWidth = info.originalWidth = SystemUtils.getRoundVideoResolution();
+        info.resultHeight = info.originalHeight = SystemUtils.getRoundVideoResolution();
+        info.originalPath = output.getAbsolutePath();
+        info.estimatedDuration = recordedTime;
+        return info;
+    }
+
+    private void handleRoundEncoderPaused(File preview) {
+        if (preview == null || cancelled) {
+            return;
+        }
+        videoEditedInfo = makeRoundVideoEditedInfo(preview);
+        setupVideoPlayer(preview);
+        NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.audioDidSent,
+                recordingGuid, videoEditedInfo, preview.getAbsolutePath(), roundKeyframeThumbs);
+    }
+
+    private void setupVideoPlayer(File output) {
+        videoPlayer = new VideoPlayer();
+        videoPlayer.setDelegate(new VideoPlayer.VideoPlayerDelegate() {
+            @Override
+            public void onStateChanged(boolean playWhenReady, int playbackState) {
+                if (videoPlayer != null && videoPlayer.isPlaying()
+                        && playbackState == ExoPlayer.STATE_ENDED && videoEditedInfo != null) {
+                    videoPlayer.seekTo(videoEditedInfo.startTime > 0 ? videoEditedInfo.startTime : 0);
+                }
+            }
+
+            @Override
+            public void onError(VideoPlayer player, Exception error) {
+                FileLog.e(error);
+            }
+
+            @Override
+            public void onVideoSizeChanged(int width, int height, int rotation, float pixelRatio) {
+            }
+
+            @Override
+            public void onRenderedFirstFrame() {
+            }
+        });
+        releaseCameraXSession();
+        videoPlayer.setTextureView(textureView);
+        videoPlayer.preparePlayer(Uri.fromFile(output), "other");
+        videoPlayer.play();
+        videoPlayer.setMute(true);
+        startProgressTimer();
+        AnimatorSet animation = new AnimatorSet();
+        animation.playTogether(
+                ObjectAnimator.ofFloat(buttonsLayout, View.ALPHA, 0),
+                ObjectAnimator.ofFloat(zoomSlider, InstantCameraZoomSlider.OPEN_ALPHA, 0),
+                ObjectAnimator.ofInt(paint, AnimationProperties.PAINT_ALPHA, 0),
+                ObjectAnimator.ofFloat(muteImageView, View.ALPHA, 1));
+        animation.setDuration(180);
+        animation.setInterpolator(new DecelerateInterpolator());
+        animation.start();
+    }
+
+    private void handleRoundEncoderFinished(RoundVideoEncoder.FinishReason reason) {
+        roundVideoEncoder = null;
+        int send = reason == RoundVideoEncoder.FinishReason.COMPLETED ? roundEncoderSend : 0;
+        SendOptions options = roundEncoderSendOptions;
+        roundEncoderSendOptions = null;
+        if (previewFile != null) {
+            previewFile.delete();
+            previewFile = null;
+        }
+        File output = roundEncoderFile;
+        roundEncoderFile = null;
+        if (send == 0 || output == null) {
+            if (output != null) {
+                FileLoader.getInstance(currentAccount).cancelFileUpload(output.getAbsolutePath(), false);
+            }
+            MediaController.getInstance().requestRecordAudioFocus(false);
+            if (reason == RoundVideoEncoder.FinishReason.FAILED && !cancelled) {
+                cancel(false);
+            }
+            return;
+        }
+        if (!roundSentMedia) {
+            roundSentMedia = true;
+            VideoEditedInfo info = makeRoundVideoEditedInfo(output);
+            if (info.needConvert()) {
+                file = null;
+                encryptedFile = null;
+                key = null;
+                iv = null;
+                long originalDuration = Math.max(1, info.estimatedDuration);
+                long start = Math.max(0, info.startTime);
+                long end = info.endTime >= 0 ? info.endTime : originalDuration;
+                info.estimatedDuration = end - start;
+                info.estimatedSize = Math.max(1, (long) (size * (info.estimatedDuration / (double) originalDuration)));
+                info.bitrate = SystemUtils.getRoundVideoBitrate() * 1024;
+                if (info.startTime > 0) info.startTime *= 1000;
+                if (info.endTime > 0) info.endTime *= 1000;
+                FileLoader.getInstance(currentAccount).cancelFileUpload(output.getAbsolutePath(), false);
+            }
+            info.file = file;
+            info.encryptedFile = encryptedFile;
+            info.key = key;
+            info.iv = iv;
+            videoEditedInfo = info;
+            if (send == 1) {
+                if (delegate.isInScheduleMode()) {
+                    AlertsCreator.createScheduleDatePickerDialog(delegate.getParentActivity(), delegate.getDialogId(),
+                            (notify, scheduleDate, scheduleRepeatPeriod) -> {
+                                sendRoundMedia(output, info, options, notify, scheduleDate, scheduleRepeatPeriod);
+                                startAnimation(false, false);
+                            }, () -> startAnimation(false, false), resourcesProvider);
+                } else {
+                    sendRoundMedia(output, info, options, options == null || options.notify,
+                            options != null ? options.scheduleDate : 0,
+                            options != null ? options.scheduleRepeatPeriod : 0);
+                }
+                videoEditedInfo = null;
+            } else {
+                setupVideoPlayer(output);
+                NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.audioDidSent,
+                        recordingGuid, info, output.getAbsolutePath(), roundKeyframeThumbs);
+            }
+        } else if (videoEditedInfo != null) {
+            videoEditedInfo.notReadyYet = false;
+        }
+        didWriteRoundData(output, 0, true);
+        MediaController.getInstance().requestRecordAudioFocus(false);
+    }
+
+    private void sendRoundMedia(File output, VideoEditedInfo info, SendOptions options,
+                                boolean notify, int scheduleDate, int scheduleRepeatPeriod) {
+        MediaController.PhotoEntry entry = new MediaController.PhotoEntry(0, 0, 0,
+                output.getAbsolutePath(), 0, true, 0, 0, 0);
+        if (options != null) {
+            entry.ttl = options.ttl;
+            entry.effectId = options.effectId;
+        }
+        delegate.sendMedia(entry, info, notify, scheduleDate, scheduleRepeatPeriod,
+                false, options != null ? options.stars : 0);
+    }
 
     private Bitmap firstFrameThumb;
     private volatile int surfaceIndex;
@@ -1499,6 +2057,9 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         private final int DO_REINIT_MESSAGE = 2;
         private final int DO_SETSESSION_MESSAGE = 3;
         private final int DO_FLIP = 4;
+        private final int DO_SETORIENTATION_MESSAGE = 5;
+        private final int DO_SET_CAMERA_X_PREVIEW_SIZE = 6;
+        private final RoundVideoEncoder.FrameSnapshot frameSnapshot = new RoundVideoEncoder.FrameSnapshot();
 
         private int drawProgram;
         private int vertexMatrixHandle;
@@ -1651,7 +2212,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                     0.5f + tX, 0.5f + tY
             };
 
-            if (videoEncoder == null) {
+            if (ExteraConfig.getCameraType() != CameraType.CAMERA_X && videoEncoder == null) {
                 videoEncoder = new VideoRecorder();
             }
 
@@ -1785,6 +2346,21 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             }
         }
 
+        public void setOrientation() {
+            Handler handler = getHandler();
+            if (handler != null) {
+                sendMessage(handler.obtainMessage(DO_SETORIENTATION_MESSAGE), 0);
+            }
+        }
+
+        public void setCameraXPreviewSize(int index, int width, int height) {
+            Handler handler = getHandler();
+            if (handler != null && index >= 0 && index < previewSize.length && width > 0 && height > 0) {
+                sendMessage(handler.obtainMessage(DO_SET_CAMERA_X_PREVIEW_SIZE,
+                        index, 0, new Size(width, height)), 0);
+            }
+        }
+
         private void onDraw(Integer cameraId, boolean updateTexImage1, boolean updateTexImage2) {
             if (!initied) {
                 return;
@@ -1804,26 +2380,52 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             if (updateTexImage2) {
                 cameraSurface[1].updateTexImage();
             }
+            boolean useRoundEncoder = ExteraConfig.getCameraType() == CameraType.CAMERA_X;
+            if (useRoundEncoder && bothCameras
+                    && !(surfaceIndex == 0 ? updateTexImage1 : updateTexImage2)) {
+                return;
+            }
 
             boolean captureFirstFrameThumb = false;
             if (!recording) {
-                if (videoEncoder == null) {
-                    videoEncoder = new VideoRecorder();
-                }
-                if (videoEncoder.started) {
-                    if (!cameraReady) {
-                        cameraReady = true;
-                        AndroidUtilities.runOnUIThread(() -> textureOverlayView.animate().setDuration(120).alpha(0.0f).setInterpolator(new DecelerateInterpolator()).start());
+                if (useRoundEncoder) {
+                    if (roundVideoEncoder == null) {
+                        encoderFrameRate = resolveEncoderFrameRate();
+                        roundSentMedia = false;
+                        roundVideoConvertFirstWrite = true;
+                        roundEncoderFinishRequested = false;
+                        roundEncoderSend = 0;
+                        roundEncoderSendOptions = null;
+                        roundKeyframeThumbs.clear();
+                        roundVideoEncoder = new RoundVideoEncoder(new CameraXEncoderRenderer(),
+                                roundEncoderCallback, isSecretChat);
                     }
+                    captureFirstFrameThumb = !roundVideoEncoder.isStarted();
+                    roundEncoderFile = cameraFile;
+                    roundVideoEncoder.startRecording(cameraFile, EGL14.eglGetCurrentContext(), encoderFrameRate);
                 } else {
-                    captureFirstFrameThumb = true;
+                    if (videoEncoder == null) {
+                        encoderFrameRate = resolveEncoderFrameRate();
+                        videoEncoder = new VideoRecorder();
+                    }
+                    if (videoEncoder.started) {
+                        if (!cameraReady) {
+                            cameraReady = true;
+                            AndroidUtilities.runOnUIThread(() -> textureOverlayView.animate().setDuration(120)
+                                    .alpha(0.0f).setInterpolator(new DecelerateInterpolator()).start());
+                        }
+                    } else {
+                        captureFirstFrameThumb = true;
+                    }
+                    videoEncoder.startRecording(cameraFile, EGL14.eglGetCurrentContext());
                 }
-                videoEncoder.startRecording(cameraFile, EGL14.eglGetCurrentContext());
                 int orientation;
                 if (currentSession instanceof CameraSession) {
                     orientation = ((CameraSession) currentSession).getCurrentOrientation();
                 } else if (currentSession instanceof Camera2Session) {
                     orientation = ((Camera2Session) currentSession).getCurrentOrientation();
+                } else if (ExteraConfig.getCameraType() == CameraType.CAMERA_X && cameraXSession != null) {
+                    orientation = cameraXSession.getDisplayOrientation();
                 } else {
                     orientation = 0;
                 }
@@ -1836,11 +2438,28 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 updateFlash();
             }
 
-            if (videoEncoder != null && (surfaceIndex == 0 && updateTexImage1 || surfaceIndex == 1 && updateTexImage2)) {
-                videoEncoder.frameAvailable(cameraSurface[surfaceIndex], bothCameras ? surfaceIndex : cameraId, System.nanoTime());
-            }
-
             cameraSurface[surfaceIndex].getTransformMatrix(mSTMatrix);
+            if (surfaceIndex == 0 && updateTexImage1 || surfaceIndex == 1 && updateTexImage2) {
+                if (useRoundEncoder && roundVideoEncoder != null) {
+                    frameSnapshot.sourceTimestampNs = cameraSurface[surfaceIndex].getTimestamp();
+                    frameSnapshot.arrivalTimeNs = System.nanoTime();
+                    frameSnapshot.cameraId = bothCameras ? surfaceIndex : cameraId;
+                    frameSnapshot.surfaceIndex = surfaceIndex;
+                    frameSnapshot.textureId = cameraTexture[surfaceIndex];
+                    Size size = previewSize[surfaceIndex];
+                    frameSnapshot.previewWidth = size != null ? size.getWidth() : 0;
+                    frameSnapshot.previewHeight = size != null ? size.getHeight() : 0;
+                    System.arraycopy(mSTMatrix, 0, frameSnapshot.stMatrix, 0, 16);
+                    System.arraycopy(mMVPMatrix, 0, frameSnapshot.mvpMatrix, 0, 16);
+                    textureBuffer.position(0);
+                    textureBuffer.get(frameSnapshot.textureCoords);
+                    textureBuffer.position(0);
+                    roundVideoEncoder.frameAvailable(frameSnapshot);
+                } else if (videoEncoder != null) {
+                    videoEncoder.frameAvailable(cameraSurface[surfaceIndex],
+                            bothCameras ? surfaceIndex : cameraId, System.nanoTime());
+                }
+            }
 
             GLES20.glUseProgram(drawProgram);
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
@@ -1894,8 +2513,15 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                     break;
                 case DO_SHUTDOWN_MESSAGE:
                     finish();
-                    if (recording && (!(inputMessage.obj instanceof SendOptions) || ((SendOptions) inputMessage.obj).ttl != -2) && videoEncoder != null) {
-                        videoEncoder.stopRecording(inputMessage.arg1, inputMessage.obj instanceof SendOptions ? (SendOptions) inputMessage.obj : null);
+                    if (recording && (!(inputMessage.obj instanceof SendOptions)
+                            || ((SendOptions) inputMessage.obj).ttl != -2)) {
+                        SendOptions options = inputMessage.obj instanceof SendOptions
+                                ? (SendOptions) inputMessage.obj : null;
+                        if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+                            requestRoundEncoderStop(inputMessage.arg1, options);
+                        } else if (videoEncoder != null) {
+                            videoEncoder.stopRecording(inputMessage.arg1, options);
+                        }
                     }
                     Looper looper = Looper.myLooper();
                     if (looper != null) {
@@ -1992,6 +2618,32 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                     textureBuffer.put(texData).position(0);
                     break;
                 }
+                case DO_SETORIENTATION_MESSAGE: {
+                    int orientation = cameraXSession != null ? cameraXSession.getDisplayOrientation() : 0;
+                    android.opengl.Matrix.setIdentityM(mMVPMatrix, 0);
+                    if (orientation != 0) {
+                        android.opengl.Matrix.rotateM(mMVPMatrix, 0, orientation, 0, 0, 1);
+                    }
+                    break;
+                }
+                case DO_SET_CAMERA_X_PREVIEW_SIZE: {
+                    int index = inputMessage.arg1;
+                    previewSize[index] = (Size) inputMessage.obj;
+                    if (index == surfaceIndex) {
+                        updateScale();
+                        float tx = 1.0f / scaleX / 2.0f;
+                        float ty = 1.0f / scaleY / 2.0f;
+                        float[] coords = {
+                                0.5f - tx, 0.5f - ty,
+                                0.5f + tx, 0.5f - ty,
+                                0.5f - tx, 0.5f + ty,
+                                0.5f + tx, 0.5f + ty
+                        };
+                        textureBuffer.position(0);
+                        textureBuffer.put(coords).position(0);
+                    }
+                    break;
+                }
             }
         }
 
@@ -2006,6 +2658,96 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             Handler handler = getHandler();
             if (handler != null) {
                 sendMessage(handler.obtainMessage(DO_RENDER_MESSAGE, cameraId, (updateTexImage1 ? 1 : 0) + (updateTexImage2 ? 2 : 0)), 0);
+            }
+        }
+    }
+
+    private class CameraXEncoderRenderer implements RoundVideoEncoder.Renderer {
+        private final FloatBuffer frameTextureBuffer = ByteBuffer.allocateDirect(8 * 4)
+                .order(ByteOrder.nativeOrder()).asFloatBuffer();
+        private int program;
+        private int positionHandle;
+        private int textureHandle;
+        private int textureMatrixHandle;
+        private int vertexMatrixHandle;
+        private InstantCameraVideoEncoderOverlayHelper overlayHelper;
+
+        @Override
+        public void onEncoderSurfaceCreated(int width, int height) {
+            overlayHelper = new InstantCameraVideoEncoderOverlayHelper(width, height);
+            String fragmentShader = "#extension GL_OES_EGL_image_external : require\n"
+                    + "precision highp float;\n"
+                    + "varying vec2 vTextureCoord;\n"
+                    + "uniform samplerExternalOES sTexture;\n"
+                    + "void main() { gl_FragColor = texture2D(sTexture, vTextureCoord); }\n";
+            int vertex = loadShader(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER);
+            int fragment = loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentShader);
+            if (vertex == 0 || fragment == 0) {
+                return;
+            }
+            program = GLES20.glCreateProgram();
+            GLES20.glAttachShader(program, vertex);
+            GLES20.glAttachShader(program, fragment);
+            GLES20.glLinkProgram(program);
+            int[] linked = new int[1];
+            GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linked, 0);
+            if (linked[0] == 0) {
+                GLES20.glDeleteProgram(program);
+                program = 0;
+                return;
+            }
+            positionHandle = GLES20.glGetAttribLocation(program, "aPosition");
+            textureHandle = GLES20.glGetAttribLocation(program, "aTextureCoord");
+            textureMatrixHandle = GLES20.glGetUniformLocation(program, "uSTMatrix");
+            vertexMatrixHandle = GLES20.glGetUniformLocation(program, "uMVPMatrix");
+        }
+
+        @Override
+        public boolean onDrawEncoderFrame(long frameDeltaNs, RoundVideoEncoder.FrameSnapshot frame) {
+            if (!cameraTextureAvailable || program == 0 || vertexBuffer == null
+                    || frame.textureId == Integer.MIN_VALUE) {
+                return false;
+            }
+            frameTextureBuffer.clear();
+            frameTextureBuffer.put(frame.textureCoords).position(0);
+            if (overlayHelper != null) {
+                overlayHelper.bind();
+            }
+            GLES20.glUseProgram(program);
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, frame.textureId);
+            vertexBuffer.position(0);
+            GLES20.glVertexAttribPointer(positionHandle, 3, GLES20.GL_FLOAT, false, 12, vertexBuffer);
+            GLES20.glEnableVertexAttribArray(positionHandle);
+            GLES20.glVertexAttribPointer(textureHandle, 2, GLES20.GL_FLOAT, false, 8, frameTextureBuffer);
+            GLES20.glEnableVertexAttribArray(textureHandle);
+            GLES20.glUniformMatrix4fv(textureMatrixHandle, 1, false, frame.stMatrix, 0);
+            GLES20.glUniformMatrix4fv(vertexMatrixHandle, 1, false, frame.mvpMatrix, 0);
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+            GLES20.glDisableVertexAttribArray(positionHandle);
+            GLES20.glDisableVertexAttribArray(textureHandle);
+            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
+            GLES20.glUseProgram(0);
+            if (overlayHelper != null) {
+                overlayHelper.render();
+            }
+            if (!cameraReady) {
+                cameraReady = true;
+                AndroidUtilities.runOnUIThread(() -> textureOverlayView.animate().setDuration(120)
+                        .alpha(0.0f).setInterpolator(new DecelerateInterpolator()).start());
+            }
+            return true;
+        }
+
+        @Override
+        public void onEncoderSurfaceDestroyed() {
+            if (overlayHelper != null) {
+                overlayHelper.destroy();
+                overlayHelper = null;
+            }
+            if (program != 0) {
+                GLES20.glDeleteProgram(program);
+                program = 0;
             }
         }
     }
@@ -2126,7 +2868,6 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
 
         private static final String VIDEO_MIME_TYPE = "video/avc";
         private static final String AUDIO_MIME_TYPE = "audio/mp4a-latm";
-        private static final int FRAME_RATE = 30;
         private static final int IFRAME_INTERVAL = 1;
 
         private File videoFile;
@@ -2330,8 +3071,8 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             }
 
             started = true;
-            int resolution = MessagesController.getInstance(currentAccount).roundVideoSize;
-            int bitrate = MessagesController.getInstance(currentAccount).roundVideoBitrate * 1024;
+            int resolution = SystemUtils.getRoundVideoResolution();
+            int bitrate = SystemUtils.getRoundVideoBitrate() * 1024;
             AndroidUtilities.runOnUIThread(() -> {
                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.stopAllHeavyOperations, 512);
             });
@@ -2809,9 +3550,9 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 videoEditedInfo.key = key;
                 videoEditedInfo.iv = iv;
                 videoEditedInfo.estimatedSize = Math.max(1, size);
-                videoEditedInfo.framerate = 25;
-                videoEditedInfo.resultWidth = videoEditedInfo.originalWidth = 360;
-                videoEditedInfo.resultHeight = videoEditedInfo.originalHeight = 360;
+                videoEditedInfo.framerate = encoderFrameRate;
+                videoEditedInfo.resultWidth = videoEditedInfo.originalWidth = SystemUtils.getRoundVideoResolution();
+                videoEditedInfo.resultHeight = videoEditedInfo.originalHeight = SystemUtils.getRoundVideoResolution();
                 videoEditedInfo.originalPath = previewFile.getAbsolutePath();
                 setupVideoPlayer(previewFile);
                 videoEditedInfo.estimatedDuration = recordedTime;
@@ -2905,9 +3646,9 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                         videoEditedInfo.encryptedFile = encryptedFile;
                         videoEditedInfo.key = key;
                         videoEditedInfo.iv = iv;
-                        videoEditedInfo.framerate = 25;
-                        videoEditedInfo.resultWidth = videoEditedInfo.originalWidth = 360;
-                        videoEditedInfo.resultHeight = videoEditedInfo.originalHeight = 360;
+                        videoEditedInfo.framerate = encoderFrameRate;
+                        videoEditedInfo.resultWidth = videoEditedInfo.originalWidth = SystemUtils.getRoundVideoResolution();
+                        videoEditedInfo.resultHeight = videoEditedInfo.originalHeight = SystemUtils.getRoundVideoResolution();
                         videoEditedInfo.originalPath = videoFile.getAbsolutePath();
                         videoEditedInfo.notReadyYet = true;
                         videoEditedInfo.thumb = firstFrameThumb;
@@ -3041,7 +3782,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                             long endTime = videoEditedInfo.endTime >= 0 ? videoEditedInfo.endTime : videoEditedInfo.estimatedDuration;
                             videoEditedInfo.estimatedDuration = endTime - startTime;
                             videoEditedInfo.estimatedSize = Math.max(1, (long) (size * (videoEditedInfo.estimatedDuration / totalDuration)));
-                            videoEditedInfo.bitrate = 1000000;
+                            videoEditedInfo.bitrate = SystemUtils.getRoundVideoBitrate() * 1024;
                             if (videoEditedInfo.startTime > 0) {
                                 videoEditedInfo.startTime *= 1000;
                             }
@@ -3057,9 +3798,9 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                         videoEditedInfo.encryptedFile = encryptedFile;
                         videoEditedInfo.key = key;
                         videoEditedInfo.iv = iv;
-                        videoEditedInfo.framerate = 25;
-                        videoEditedInfo.resultWidth = videoEditedInfo.originalWidth = 360;
-                        videoEditedInfo.resultHeight = videoEditedInfo.originalHeight = 360;
+                        videoEditedInfo.framerate = encoderFrameRate;
+                        videoEditedInfo.resultWidth = videoEditedInfo.originalWidth = SystemUtils.getRoundVideoResolution();
+                        videoEditedInfo.resultHeight = videoEditedInfo.originalHeight = SystemUtils.getRoundVideoResolution();
                         videoEditedInfo.originalPath = videoFile.getAbsolutePath();
                         final VideoEditedInfo info = videoEditedInfo;
                         if (send == ENCODER_SEND_SEND) {
@@ -3209,7 +3950,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 audioFormat.setString(MediaFormat.KEY_MIME, AUDIO_MIME_TYPE);
                 audioFormat.setInteger(MediaFormat.KEY_SAMPLE_RATE, audioSampleRate);
                 audioFormat.setInteger(MediaFormat.KEY_CHANNEL_COUNT, 1);
-                audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, MessagesController.getInstance(currentAccount).roundAudioBitrate * 1024);
+                audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, SystemUtils.getRoundAudioBitrate() * 1024);
                 audioFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 2048 * AudioBufferInfo.MAX_SAMPLES);
 
                 audioEncoder = MediaCodec.createEncoderByType(AUDIO_MIME_TYPE);
@@ -3223,7 +3964,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
 
                 format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
                 format.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
-                format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
+                format.setInteger(MediaFormat.KEY_FRAME_RATE, encoderFrameRate);
                 format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, IFRAME_INTERVAL);
 
                 videoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -3597,7 +4338,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
     }
 
     private String createFragmentShader(Size previewSize) {
-        if (SharedConfig.deviceIsLow() || !allowBigSizeCamera() || previewSize != null && Math.max(previewSize.getHeight(), previewSize.getWidth()) * 0.7f < MessagesController.getInstance(currentAccount).roundVideoSize) {
+        if (SharedConfig.deviceIsLow() || !allowBigSizeCamera() || previewSize != null && Math.max(previewSize.getHeight(), previewSize.getWidth()) * 0.7f < SystemUtils.getRoundVideoResolution()) {
             return "#extension GL_OES_EGL_image_external : require\n" +
                     "precision highp float;\n" +
                     "varying vec2 vTextureCoord;\n" +
@@ -3653,7 +4394,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
     }
 
     private String createFragmentShaderV2(Size previewSize) {
-        if (SharedConfig.deviceIsLow() || !allowBigSizeCamera() || previewSize != null && Math.max(previewSize.getHeight(), previewSize.getWidth()) * 0.7f < MessagesController.getInstance(currentAccount).roundVideoSize) {
+        if (SharedConfig.deviceIsLow() || !allowBigSizeCamera() || previewSize != null && Math.max(previewSize.getHeight(), previewSize.getWidth()) * 0.7f < SystemUtils.getRoundVideoResolution()) {
             return "#extension GL_OES_EGL_image_external : require\n" +
                     "precision highp float;\n" +
                     "varying vec2 vTextureCoord;\n" +
@@ -3771,6 +4512,12 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             }
         }
 
+        if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+            getParent().requestDisallowInterceptTouchEvent(true);
+            scaleGestureDetector.onTouchEvent(ev);
+            return true;
+        }
+
         if (ev.getActionMasked() == MotionEvent.ACTION_DOWN || ev.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN) {
             if (maybePinchToZoomTouchMode && !isInPinchToZoomTouchMode && ev.getPointerCount() == 2 && finishZoomTransition == null && recording) {
                 pinchStartDistance = (float) Math.hypot(ev.getX(1) - ev.getX(0), ev.getY(1) - ev.getY(0));
@@ -3780,6 +4527,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 pointerId1 = ev.getPointerId(0);
                 pointerId2 = ev.getPointerId(1);
                 isInPinchToZoomTouchMode = true;
+                zoomSlider.beginPinchZoomGesture();
             }
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 AndroidUtilities.rectTmp.set(cameraContainer.getX(), cameraContainer.getY(), cameraContainer.getX() + cameraContainer.getMeasuredWidth(), cameraContainer.getY() + cameraContainer.getMeasuredHeight());
@@ -3808,11 +4556,16 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 if (camera2SessionCurrent != null) {
                     float zoom = Utilities.clamp(pinchScale, camera2SessionCurrent.getMaxZoom(), camera2SessionCurrent.getMinZoom());
                     camera2SessionCurrent.setZoom(zoom);
+                    cameraZoom = zoom;
                 }
             } else {
                 float zoom = Math.min(1f, Math.max(0, pinchScale - 1f));
-                cameraSession.setZoom(zoom);
+                if (cameraSession != null) {
+                    cameraSession.setZoom(zoom);
+                    cameraZoom = zoom;
+                }
             }
+            zoomSlider.syncZoom(cameraZoom);
         } else if ((ev.getActionMasked() == MotionEvent.ACTION_UP || (ev.getActionMasked() == MotionEvent.ACTION_POINTER_UP && checkPointerIds(ev)) || ev.getActionMasked() == MotionEvent.ACTION_CANCEL) && isInPinchToZoomTouchMode) {
             isInPinchToZoomTouchMode = false;
             finishZoom();
@@ -3822,8 +4575,46 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
 
     ValueAnimator finishZoomTransition;
 
-    public void finishZoom() {
+    private void cancelZoomAnimations() {
         if (finishZoomTransition != null) {
+            finishZoomTransition.cancel();
+            finishZoomTransition = null;
+        }
+    }
+
+    public void finishZoom() {
+        zoomSlider.endPinchZoomGesture();
+        if (finishZoomTransition != null || ExteraConfig.getStaticZoom()) {
+            return;
+        }
+
+        if (ExteraConfig.getCameraType() == CameraType.CAMERA_X) {
+            if (cameraXSession == null) {
+                return;
+            }
+            float zoom = zoomSlider.getZoom();
+            float resetZoom = Utilities.clamp(zoomSlider.getCameraXResetZoom(),
+                    zoomSlider.getMaximumZoom(), zoomSlider.getMinimumZoom());
+            float oneZoom = zoomSlider.getDisplayOneZoom();
+            if ((zoom >= oneZoom || resetZoom < oneZoom || zoomSlider.getMinimumZoom() >= oneZoom)
+                    && Math.abs(zoom - resetZoom) > 0.001f) {
+                finishZoomTransition = ValueAnimator.ofFloat(zoom, resetZoom);
+                finishZoomTransition.addUpdateListener(animation -> {
+                    if (cameraXSession != null) {
+                        zoomSlider.setCameraXZoomRatio((float) animation.getAnimatedValue());
+                        cameraZoom = cameraXSession.getLinearZoom();
+                    }
+                });
+                finishZoomTransition.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        finishZoomTransition = null;
+                    }
+                });
+                finishZoomTransition.setDuration(350);
+                finishZoomTransition.setInterpolator(CubicBezierInterpolator.DEFAULT);
+                finishZoomTransition.start();
+            }
             return;
         }
 
@@ -3841,12 +4632,15 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 if (useCamera2) {
                     if (camera2SessionCurrent != null) {
                         camera2SessionCurrent.setZoom((float) valueAnimator.getAnimatedValue());
+                        cameraZoom = (float) valueAnimator.getAnimatedValue();
                     }
                 } else {
                     if (cameraSession != null) {
                         cameraSession.setZoom((float) valueAnimator.getAnimatedValue());
+                        cameraZoom = (float) valueAnimator.getAnimatedValue();
                     }
                 }
+                zoomSlider.syncZoom(cameraZoom);
             });
             finishZoomTransition.addListener(new AnimatorListenerAdapter() {
                 @Override

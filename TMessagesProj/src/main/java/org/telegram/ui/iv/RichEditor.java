@@ -1,5 +1,8 @@
 package org.telegram.ui.iv;
 
+import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.utils.text.LocaleUtils;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
 import static org.telegram.messenger.AndroidUtilities.lerp;
@@ -620,6 +623,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
         aiButton.setScaleType(ImageView.ScaleType.CENTER);
         aiButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteBlackText), PorterDuff.Mode.SRC_IN));
         aiButton.setBackground(withShadow(Theme.createRadSelectorDrawable(getThemedColor(Theme.key_windowBackgroundWhite), Theme.blendOver(getThemedColor(Theme.key_windowBackgroundWhite), getThemedColor(Theme.key_listSelector)), dp(22), dp(22))));
+        aiButton.setVisibility(ExteraConfig.getTelegramAiEditor() ? View.VISIBLE : View.GONE);
         bottomPanel.addView(aiButton, LayoutHelper.createLinear(44, 44, 0, Gravity.LEFT | Gravity.CENTER_VERTICAL, 0, 0, 8, 0));
         ScaleStateListAnimator.apply(aiButton);
         aiButton.setContentDescription(getString(R.string.AIEditor));
@@ -814,7 +818,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
             protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                 final int avail = MeasureSpec.getSize(widthMeasureSpec);
                 int reserved = getPaddingLeft() + getPaddingRight();
-                if (formattingLayout1 != null) {
+                if (formattingLayout1 != null && formattingLayout1.getVisibility() != View.GONE) {
                     formattingLayout1.measure(
                         MeasureSpec.makeMeasureSpec(avail, MeasureSpec.AT_MOST),
                         MeasureSpec.makeMeasureSpec(dp(44), MeasureSpec.EXACTLY));
@@ -976,6 +980,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
         formattingLayout1.setOrientation(LinearLayout.HORIZONTAL);
         formattingLayout1.setPadding(dp(2), 0, dp(2), 0);
         formattingLayout1.setBackground(withShadow(Theme.createRoundRectDrawable(dp(22), getThemedColor(Theme.key_windowBackgroundWhite))));
+        formattingLayout1.setVisibility(ExteraConfig.getTelegramAiEditor() ? View.VISIBLE : View.GONE);
         formattingPanel.addView(formattingLayout1, 0, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 44, Gravity.BOTTOM, 0, 0, 8, 0));
 
         aiStyleButton = new Button(context, 0, getResourceProvider());
@@ -2403,7 +2408,10 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
 
     private void createEmojiView() {
         if (emojiView != null) return;
-        emojiView = new EmojiView(this, true, false, false, getContext(), true, null, container, true, getResourceProvider(), false);
+        TLRPC.ChatFull chatInfo = chatActivity != null ? chatActivity.getCurrentChatInfo() : null;
+        boolean allowLocalPremiumEmojis = LocaleUtils.canUseLocalPremiumEmojis(currentAccount);
+        emojiView = new EmojiView(this, true, false, false, getContext(), true, chatInfo, container, true, getResourceProvider(), false, false, allowLocalPremiumEmojis);
+        emojiView.allowEmojisForNonPremium(allowLocalPremiumEmojis, false);
         emojiView.setVisibility(View.GONE);
         emojiView.fixBottomTabContainerTranslation = false;
         emojiView.setDelegate(new EmojiView.EmojiViewDelegate() {

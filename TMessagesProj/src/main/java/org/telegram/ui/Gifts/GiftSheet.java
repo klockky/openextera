@@ -1,5 +1,7 @@
 package org.telegram.ui.Gifts;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import static android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
@@ -253,7 +255,7 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
         final StarParticlesView particlesView = StarsIntroActivity.makeParticlesView(context, 70, 0);
         topView.addView(particlesView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
-        avatarImageView.setRoundRadius(dp(42));
+        avatarImageView.setRoundRadius(ExteraConfig.getAvatarCorners(84f));
         topView.addView(avatarImageView, LayoutHelper.createFrame(84, 84, Gravity.CENTER, 0, 15, 0, 17));
         ScaleStateListAnimator.apply(avatarImageView);
         avatarImageView.setOnClickListener(v -> {

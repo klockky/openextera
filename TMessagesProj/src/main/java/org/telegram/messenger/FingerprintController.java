@@ -1,5 +1,7 @@
 package org.telegram.messenger;
 
+import com.exteragram.messenger.utils.system.SystemUtils;
+
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;
@@ -102,8 +104,7 @@ public class FingerprintController {
     }
 
     public static void checkKeyReady(boolean notifyCheckFingerprint) {
-        if (!isKeyReady() && AndroidUtilities.isKeyguardSecure() && FingerprintManagerCompat.from(ApplicationLoader.applicationContext).isHardwareDetected()
-                && FingerprintManagerCompat.from(ApplicationLoader.applicationContext).hasEnrolledFingerprints()) {
+        if (!isKeyReady() && AndroidUtilities.isKeyguardSecure() && SystemUtils.hasBiometrics()) {
             Utilities.globalQueue.postRunnable(() -> generateNewKey(notifyCheckFingerprint));
         }
     }

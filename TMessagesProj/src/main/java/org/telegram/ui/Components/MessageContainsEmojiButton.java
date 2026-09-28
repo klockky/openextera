@@ -57,7 +57,9 @@ public class MessageContainsEmojiButton extends FrameLayout implements Notificat
     public final static int REACTIONS_TYPE = 1;
     public final static int EMOJI_STICKER_TYPE = 2;
     public final static int SINGLE_REACTION_TYPE = 3;
-    public final static int STICKERS_BOT_TYPE = 4;
+    public final static int REPLY_EMOJI_TYPE = 4;
+    public final static int PROFILE_EMOJI_TYPE = 5;
+    public final static int STICKERS_BOT_TYPE = 6;
     int type;
 
     private class BoldAndAccent extends CharacterStyle {
@@ -100,7 +102,11 @@ public class MessageContainsEmojiButton extends FrameLayout implements Notificat
             }
         } else if (inputStickerSets.size() == 1) {
             String string;
-            if (type == EMOJI_TYPE) {
+            if (type == REPLY_EMOJI_TYPE) {
+                string = LocaleController.getString(R.string.ReplyUsesEmojiPacks);
+            } else if (type == PROFILE_EMOJI_TYPE) {
+                string = LocaleController.getString(R.string.ProfileUsesEmojiPack);
+            } else if (type == EMOJI_TYPE) {
                 string = LocaleController.getString(R.string.MessageContainsEmojiPack);
             } else if (type == SINGLE_REACTION_TYPE) {
                 string = LocaleController.getString(R.string.MessageContainsReactionPack);

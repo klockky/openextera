@@ -1,5 +1,7 @@
 package org.telegram.ui.Stars;
 
+import com.exteragram.messenger.ExteraConfig;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 import static org.telegram.messenger.AndroidUtilities.rectTmp;
@@ -2044,11 +2046,12 @@ public class StarsReactionsSheet extends BottomSheet implements NotificationCent
                     avatarDrawable.setInfo(chat);
                     imageReceiver.setForUserOrChat(chat, avatarDrawable);
                 }
-                imageReceiver.setRoundRadius(dp(56));
+                imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(56f));
                 imageReceiver.onAttachedToWindow();
                 imageReceiver.setCrossfadeWithOldImage(true);
 
                 anonymousAvatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_ANONYMOUS);
+                anonymousAvatarDrawable.setRoundRadius(ExteraConfig.getAvatarCorners(56f));
                 anonymousAvatarDrawable.setColor(Theme.getColor(Theme.key_avatar_backgroundGray, resourcesProvider));
 
                 text = new Text(name, 12);

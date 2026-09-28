@@ -228,8 +228,7 @@ def localProperty(String propName, String envName, String defaultValue) {
     return (value == null || value.trim().isEmpty()) ? defaultValue : value.trim()
 }
 
-// There is no google-services.json for OpenExtera yet; apply the plugin only when one is provided.
-if (file('google-services.json').exists()) {
+// Keep Firebase optional for local builds; variant-specific files support separate debug and release apps.
+if (file('google-services.json').exists() || !fileTree(dir: 'src', includes: ['**/google-services.json']).isEmpty()) {
     apply plugin: 'com.google.gms.google-services'
 }
-

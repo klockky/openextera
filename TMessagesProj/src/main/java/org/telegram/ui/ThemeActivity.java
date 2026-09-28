@@ -8,6 +8,12 @@
 
 package org.telegram.ui;
 
+import com.exteragram.messenger.appicons.AppIcon;
+import com.exteragram.messenger.appicons.AppIconController;
+import com.exteragram.messenger.appicons.AppIconPreviewDrawable;
+import com.exteragram.messenger.appicons.AppIconPreviewLoader;
+import com.exteragram.messenger.appicons.ui.AppIconsActivity;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.getString;
 
@@ -77,7 +83,6 @@ import org.telegram.ui.ActionBar.MonetAccentHelper;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeColors;
 import org.telegram.ui.ActionBar.ThemeDescription;
-import org.telegram.ui.Cells.AppIconsSelectorCell;
 import org.telegram.ui.Cells.BrightnessControlCell;
 import org.telegram.ui.Cells.ChatListCell;
 import org.telegram.ui.Cells.ChatMessageCell;
@@ -1114,6 +1119,8 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(!animations);
                 }
+            } else if (position == appIconSelectorRow) {
+                presentFragment(new AppIconsActivity());
             } else if (position == backgroundRow) {
                 presentFragment(new WallpapersListActivity(WallpapersListActivity.TYPE_ALL));
             } else if (position == changeUserColor) {
@@ -1539,6 +1546,16 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
         builder.setNegativeButton(getString("Cancel", R.string.Cancel), null);
         builder.setPositiveButton(getString("CreateTheme", R.string.CreateTheme), (dialog, which) -> AlertsCreator.createThemeCreateDialog(ThemeActivity.this, 0, null, null));
         showDialog(builder.create());
+    }
+
+    private void updateAppIconValueColor(View view) {
+        if (view instanceof TextSettingsCell) {
+            TextSettingsCell cell = (TextSettingsCell) view;
+            ImageView iconView = cell.getValueImageView();
+            if (iconView.getVisibility() == View.VISIBLE && iconView.getDrawable() instanceof AppIconPreviewDrawable) {
+                cell.setTextValueColor(AppIconPreviewLoader.getAccentTextColor(AppIconController.getSelectedIcon(), Theme.key_windowBackgroundWhiteValueText, getResourceProvider()));
+            }
+        }
     }
 
     @Override
@@ -2107,7 +2124,6 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
         private final static int TYPE_THEME_PREVIEW = 16;
         private final static int TYPE_DEFAULT_THEMES_PREVIEW = 17;
         private final static int TYPE_SAVE_TO_GALLERY = 19;
-        private final static int TYPE_APP_ICON = 20;
         private final static int TYPE_CHOOSE_COLOR = 21;
 
         private Context mContext;
@@ -2127,7 +2143,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             int type = holder.getItemViewType();
             return type == 0 || type == TYPE_TEXT_SETTING || type == TYPE_THEME_TYPE || type == TYPE_TEXT_CHECK ||
                     type == TYPE_NIGHT_THEME || type == TYPE_THEME_LIST || type == TYPE_THEME_ACCENT_LIST ||
-                    type == TYPE_TEXT_PREFERENCE || type == 18 || type == TYPE_APP_ICON || type == TYPE_CHOOSE_COLOR;
+                    type == TYPE_TEXT_PREFERENCE || type == 18 || type == TYPE_CHOOSE_COLOR;
         }
 
         private void showOptionsForTheme(Theme.ThemeInfo themeInfo) {
@@ -2506,9 +2522,6 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                 case TYPE_SAVE_TO_GALLERY:
                     view = new RadioButtonCell(mContext);
                     break;
-                case TYPE_APP_ICON:
-                    view = new AppIconsSelectorCell(mContext, ThemeActivity.this, currentAccount);
-                    break;
                 case TYPE_CHOOSE_COLOR:
                     view = new PeerColorActivity.ChangeNameColorCell(currentAccount, 0, mContext, getResourceProvider());
                     break;
@@ -2521,7 +2534,14 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             switch (holder.getItemViewType()) {
                 case TYPE_TEXT_SETTING: {
                     TextSettingsCell cell = (TextSettingsCell) holder.itemView;
-                    if (position == nightThemeRow) {
+                    if (position == appIconSelectorRow) {
+                        AppIcon selectedIcon = AppIconController.getSelectedIcon();
+                        cell.setTextAndValue(getString(R.string.AppIcon), selectedIcon.getTitle(), false);
+                        cell.setTextValueColor(AppIconPreviewLoader.getAccentTextColor(selectedIcon, Theme.key_windowBackgroundWhiteValueText, getResourceProvider()));
+                        ImageView iconView = cell.getValueImageView();
+                        iconView.setVisibility(View.VISIBLE);
+                        iconView.setImageDrawable(new AppIconPreviewDrawable(selectedIcon, dp(30)));
+                    } else if (position == nightThemeRow) {
                         if (Theme.selectedAutoNightType == Theme.AUTO_NIGHT_TYPE_NONE || Theme.getCurrentNightTheme() == null) {
                             cell.setTextAndValue(getString(R.string.AutoNightTheme), getString(R.string.AutoNightThemeOff), false);
                         } else {
@@ -2781,7 +2801,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             if (position == scheduleFromRow || position == distanceRow ||
                     position == scheduleToRow || position == scheduleUpdateLocationRow ||
                     position == contactsReimportRow || position == contactsSortRow ||
-                    position == bluetoothScoRow || position == searchEngineRow) {
+                    position == bluetoothScoRow || position == searchEngineRow || position == appIconSelectorRow) {
                 return TYPE_TEXT_SETTING;
             } else if (position == automaticBrightnessInfoRow || position == scheduleLocationInfoRow || position == swipeGestureInfoRow || position == stickersInfoRow || position == liteModeInfoRow) {
                 return TYPE_TEXT_INFO_PRIVACY;
@@ -2827,8 +2847,6 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                 return TYPE_DEFAULT_THEMES_PREVIEW;
             } else if (position == saveToGalleryOption1Row || position == saveToGalleryOption2Row) {
                 return TYPE_SAVE_TO_GALLERY;
-            } else if (position == appIconSelectorRow) {
-                return TYPE_APP_ICON;
             } else if (position == changeUserColor) {
                 return TYPE_CHOOSE_COLOR;
             }
@@ -2846,7 +2864,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
     public ArrayList<ThemeDescription> getThemeDescriptions() {
         ArrayList<ThemeDescription> themeDescriptions = new ArrayList<>();
 
-        themeDescriptions.add(new ThemeDescription(listView, ThemeDescription.FLAG_CELLBACKGROUNDCOLOR, new Class[]{TextSettingsCell.class, TextCheckCell.class, HeaderCell.class, BrightnessControlCell.class, ThemeTypeCell.class, TextSizeCell.class, BubbleRadiusCell.class, ChatListCell.class, NotificationsCheckCell.class, ThemesHorizontalListCell.class, TintRecyclerListView.class, TextCell.class, PeerColorActivity.ChangeNameColorCell.class, SwipeGestureSettingsView.class, DefaultThemesPreviewCell.class, AppIconsSelectorCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
+        themeDescriptions.add(new ThemeDescription(listView, ThemeDescription.FLAG_CELLBACKGROUNDCOLOR, new Class[]{TextSettingsCell.class, TextCheckCell.class, HeaderCell.class, BrightnessControlCell.class, ThemeTypeCell.class, TextSizeCell.class, BubbleRadiusCell.class, ChatListCell.class, NotificationsCheckCell.class, ThemesHorizontalListCell.class, TintRecyclerListView.class, TextCell.class, PeerColorActivity.ChangeNameColorCell.class, SwipeGestureSettingsView.class, DefaultThemesPreviewCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
         themeDescriptions.add(new ThemeDescription(fragmentView, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_windowBackgroundGray));
 
 //        themeDescriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_actionBarDefault));
@@ -2928,40 +2946,32 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
         themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{TextSizeCell.class}, null, null, null, Theme.key_chat_inTimeSelectedText));
         themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{TextSizeCell.class}, null, null, null, Theme.key_chat_outTimeSelectedText));
 
-        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{AppIconsSelectorCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
-        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{AppIconsSelectorCell.class}, null, null, null, Theme.key_windowBackgroundWhiteBlackText));
-        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{AppIconsSelectorCell.class}, null, null, null, Theme.key_windowBackgroundWhiteHintText));
-        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{AppIconsSelectorCell.class}, null, null, null, Theme.key_windowBackgroundWhiteValueText));
         themeDescriptions.addAll(SimpleThemeDescription.createThemeDescriptions(() -> {
             for (int i = 0; i < listView.getChildCount(); i++) {
                 View ch = listView.getChildAt(i);
-                if (ch instanceof AppIconsSelectorCell) {
-                    ((AppIconsSelectorCell) ch).getAdapter().notifyDataSetChanged();
-                } else if (ch instanceof PeerColorActivity.ChangeNameColorCell) {
+                updateAppIconValueColor(ch);
+                if (ch instanceof PeerColorActivity.ChangeNameColorCell) {
                     ((PeerColorActivity.ChangeNameColorCell) ch).updateColors();
                 }
             }
             for (int i = 0; i < listView.getCachedChildCount(); i++) {
                 View ch = listView.getCachedChildAt(i);
-                if (ch instanceof AppIconsSelectorCell) {
-                    ((AppIconsSelectorCell) ch).getAdapter().notifyDataSetChanged();
-                } else if (ch instanceof PeerColorActivity.ChangeNameColorCell) {
+                updateAppIconValueColor(ch);
+                if (ch instanceof PeerColorActivity.ChangeNameColorCell) {
                     ((PeerColorActivity.ChangeNameColorCell) ch).updateColors();
                 }
             }
             for (int i = 0; i < listView.getHiddenChildCount(); i++) {
                 View ch = listView.getHiddenChildAt(i);
-                if (ch instanceof AppIconsSelectorCell) {
-                    ((AppIconsSelectorCell) ch).getAdapter().notifyDataSetChanged();
-                } else if (ch instanceof PeerColorActivity.ChangeNameColorCell) {
+                updateAppIconValueColor(ch);
+                if (ch instanceof PeerColorActivity.ChangeNameColorCell) {
                     ((PeerColorActivity.ChangeNameColorCell) ch).updateColors();
                 }
             }
             for (int i = 0; i < listView.getAttachedScrapChildCount(); i++) {
                 View ch = listView.getAttachedScrapChildAt(i);
-                if (ch instanceof AppIconsSelectorCell) {
-                    ((AppIconsSelectorCell) ch).getAdapter().notifyDataSetChanged();
-                } else if (ch instanceof PeerColorActivity.ChangeNameColorCell) {
+                updateAppIconValueColor(ch);
+                if (ch instanceof PeerColorActivity.ChangeNameColorCell) {
                     ((PeerColorActivity.ChangeNameColorCell) ch).updateColors();
                 }
             }

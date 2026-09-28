@@ -68,14 +68,30 @@ The values end up in `org.telegram.messenger.BuildConfig.APP_ID` (int) and
 
 ### Firebase (push notifications)
 
-There is no `google-services.json` in the repository. Without it the
-`com.google.gms.google-services` plugin is simply not applied, Firebase is not
-initialised and the app relies on Telegram's own background connection for
-notifications. If you have your own Firebase project, create Android apps for
-`com.openextera.messenger` and `com.openextera.messenger.beta` (debug), enable Cloud
-Messaging and put the downloaded `google-services.json` into `TMessagesProj_App/` (and
-`TMessagesProj/`). It is listed in `.gitignore` — do not commit it.
-Firebase Analytics and Crashlytics are not used.
+FCM needs two different files with different purposes:
+
+1. Register the debug Android app `com.openextera.messenger.beta` in your own
+   Firebase project. Put its downloaded client config at
+   `TMessagesProj_App/src/debug/google-services.json`. For a release build, also
+   register `com.openextera.messenger` and put that app's config at
+   `TMessagesProj_App/src/release/google-services.json`. A single config at
+   `TMessagesProj_App/google-services.json` also works if it contains matching
+   clients for both package names. These files are ignored by Git. Do not put a
+   config in `TMessagesProj/`, which is a library module.
+2. Enable the Firebase Cloud Messaging API in the Firebase project. In the
+   settings of the matching Telegram API application at `my.telegram.org`,
+   configure push delivery using the Firebase project's **service-account
+   JSON**. This is a server credential with a private key: upload it only to
+   Telegram's application settings, never put it in the APK, this repository,
+   GitHub Actions, or chat.
+
+The build applies the Google Services plugin only when an Android client config
+is present. Without one, the APK still builds and uses Telegram's background
+connection; it cannot receive FCM pushes. With one, the existing Telegram code
+gets an FCM token and registers it with `account.registerDevice` as token type 2.
+Telegram can deliver push messages only after its application settings also
+have the matching server credential. Debug and release packages need their own
+Firebase Android app entries. Firebase Analytics and Crashlytics are not used.
 
 ## App identity
 
@@ -125,6 +141,12 @@ To make the CI APK able to log in, add your own Telegram API credentials under t
 repository's **Settings → Secrets and variables → Actions** as `OPENEXTERA_APP_ID` and
 `OPENEXTERA_APP_HASH`. Without them the build succeeds with the documented empty defaults,
 but the app cannot log in. Never put exteraGram's credentials in these secrets.
+
+For FCM in the CI debug APK, add `OPENEXTERA_GOOGLE_SERVICES_JSON_B64` as an Actions
+secret. Its value is the base64 encoding of your **debug Android client**
+`google-services.json` (on Linux: `base64 -w0 google-services.json`). The workflow
+decodes it only during the build and labels the artifact `fcm-enabled` or
+`fcm-disabled`. Do not use the Firebase service-account JSON here.
 
 The `Dockerfile` in the repository root builds the release APK and bundles in a clean
 environment.

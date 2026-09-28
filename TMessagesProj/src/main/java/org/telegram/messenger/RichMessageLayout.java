@@ -70,6 +70,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 
+import com.exteragram.messenger.utils.ui.FontUtils;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.utils.DrawableUtils;
 import org.telegram.messenger.utils.tlutils.TLKeyboardHelper;
@@ -2278,6 +2280,14 @@ public class RichMessageLayout {
                     p.setColor(getTextColor());
             }
 
+            if (isBold() && !FontUtils.isMediumWeightSupported()) {
+                p.setStrokeWidth(.65f);
+                p.setStyle(Paint.Style.FILL_AND_STROKE);
+            }
+            if (isItalic() && !FontUtils.isItalicSupported()) {
+                p.setTextSkewX(-.25f);
+            }
+
             if (hasFlag(flags, TEXT_FLAG_SUPERSCRIPT)) {
                 p.baselineShift -= dp(6.0f);
             } else if (hasFlag(flags, TEXT_FLAG_SUBSCRIPT)) {
@@ -2329,27 +2339,29 @@ public class RichMessageLayout {
             final int block = flags & TEXT_FLAG_BLOCKS;
             if (block == TEXT_FLAG_BLOCK_CODE) {
                 return Typeface.MONOSPACE;
-            } else if (block == TEXT_FLAG_BLOCK_QUOTE_CAPTION) {
-                return AndroidUtilities.bold();
-            } else if (block >= 1 && block <= 6) {
-                if (hasFlag(flags, TEXT_FLAG_ITALIC)) {
-                    return AndroidUtilities.getTypeface("fonts/mw_bolditalic.ttf");
-                }
-                return AndroidUtilities.getTypeface("fonts/mw_bold.ttf");
-            } else if (hasFlag(flags, TEXT_FLAG_MONO)) {
+            } else if (hasFlag(flags, TEXT_FLAG_MONO) && !(block >= TEXT_FLAG_BLOCK_HEADING1 && block <= TEXT_FLAG_BLOCK_HEADING6) && block != TEXT_FLAG_BLOCK_QUOTE_CAPTION) {
                 return Typeface.MONOSPACE;
             }
-            final boolean bold = hasFlag(flags, TEXT_FLAG_BOLD);
-            final boolean italic = hasFlag(flags, TEXT_FLAG_ITALIC) || block == TEXT_FLAG_BLOCK_PULLQUOTE;
-            if (bold && italic) {
+            final boolean bold = isBold();
+            final boolean italic = isItalic();
+            if (bold && italic && FontUtils.isMediumWeightSupported() && FontUtils.isItalicSupported()) {
                 return AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM_ITALIC);
-            } else if (bold) {
+            } else if (bold && FontUtils.isMediumWeightSupported()) {
                 return AndroidUtilities.bold();
-            } else if (italic) {
-                return AndroidUtilities.getTypeface("fonts/ritalic.ttf");
+            } else if (italic && FontUtils.isItalicSupported()) {
+                return AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_ITALIC);
             } else {
-                return null;
+                return AndroidUtilities.regular();
             }
+        }
+
+        public boolean isBold() {
+            final int block = flags & TEXT_FLAG_BLOCKS;
+            return hasFlag(flags, TEXT_FLAG_BOLD) || block == TEXT_FLAG_BLOCK_QUOTE_CAPTION || (block >= TEXT_FLAG_BLOCK_HEADING1 && block <= TEXT_FLAG_BLOCK_HEADING6);
+        }
+
+        public boolean isItalic() {
+            return hasFlag(flags, TEXT_FLAG_ITALIC) || (flags & TEXT_FLAG_BLOCKS) == TEXT_FLAG_BLOCK_PULLQUOTE;
         }
 
         @Override

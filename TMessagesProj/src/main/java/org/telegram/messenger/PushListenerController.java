@@ -1681,12 +1681,7 @@ public class PushListenerController {
 
         @Override
         public void onRequestPushToken() {
-            String currentPushString = SharedConfig.pushString;
-            if (!TextUtils.isEmpty(currentPushString)) {
-                if (BuildVars.DEBUG_PRIVATE_VERSION && BuildVars.LOGS_ENABLED) {
-                    FileLog.d("FCM regId = " + currentPushString);
-                }
-            } else {
+            if (TextUtils.isEmpty(SharedConfig.pushString)) {
                 if (BuildVars.LOGS_ENABLED) {
                     FileLog.d("FCM Registration not found.");
                 }
@@ -1694,7 +1689,11 @@ public class PushListenerController {
             Utilities.globalQueue.postRunnable(() -> {
                 try {
                     SharedConfig.pushStringGetTimeStart = SystemClock.elapsedRealtime();
-                    FirebaseApp.initializeApp(ApplicationLoader.applicationContext);
+                    if (FirebaseApp.initializeApp(ApplicationLoader.applicationContext) == null) {
+                        SharedConfig.pushStringStatus = "__FIREBASE_NOT_CONFIGURED__";
+                        PushListenerController.sendRegistrationToServer(getPushType(), null);
+                        return;
+                    }
                     FirebaseMessaging.getInstance().getToken()
                             .addOnCompleteListener(task -> {
                                 SharedConfig.pushStringGetTimeEnd = SystemClock.elapsedRealtime();
@@ -1713,6 +1712,8 @@ public class PushListenerController {
                             });
                 } catch (Throwable e) {
                     FileLog.e(e);
+                    SharedConfig.pushStringStatus = "__FIREBASE_FAILED__";
+                    PushListenerController.sendRegistrationToServer(getPushType(), null);
                 }
             });
         }

@@ -1,5 +1,7 @@
 package org.telegram.ui;
 
+import com.exteragram.messenger.api.dto.BadgeDTO;
+import com.exteragram.messenger.badges.BadgesController;
 import com.exteragram.messenger.utils.system.VibratorUtils;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
@@ -492,6 +494,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
 
     public boolean badgePicker;
     private long defaultBadgeId;
+    private EditTextCaption commentView;
 
     public void setDefaultBadge(Long documentId) {
         defaultBadgeId = documentId == null ? 0 : documentId;
@@ -501,7 +504,6 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
         this(baseFragment, context, includeEmpty, emojiX, type, shouldDrawBackground, resourcesProvider, topPaddingDp, accentColor, false);
     }
 
-    // TODO(openextera): lite's badge picker mode (comment field, hint/selection tweaks) is stage 2
     public SelectAnimatedEmojiDialog(BaseFragment baseFragment, Context context, boolean includeEmpty, Integer emojiX, int type, boolean shouldDrawBackground, Theme.ResourcesProvider resourcesProvider, int topPaddingDp, int accentColor, boolean badgePicker) {
         super(context);
         this.badgePicker = badgePicker;
@@ -958,7 +960,29 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
         });
         emojiSearchGridView.setVisibility(View.GONE);
         gridViewContainer.addView(emojiSearchGridView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, 0, 0, 0, 0));
-        contentView.addView(gridViewContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP, 0, type == TYPE_EXPANDABLE_REACTIONS || type == TYPE_STICKER_SET_EMOJI || type == TYPE_EFFECTS ? 0 : 36 + (1 / AndroidUtilities.density), 0, 0));
+        contentView.addView(gridViewContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP, 0, type == TYPE_EXPANDABLE_REACTIONS || type == TYPE_STICKER_SET_EMOJI || type == TYPE_EFFECTS ? 0 : 36 + (1 / AndroidUtilities.density), 0, badgePicker ? 48 : 0));
+        if (badgePicker) {
+            FrameLayout commentBar = new FrameLayout(context);
+            commentBar.setBackgroundColor(Theme.getColor(Theme.key_chat_emojiPanelBackground, resourcesProvider));
+            commentView = new EditTextCaption(context, resourcesProvider);
+            commentView.setHint(LocaleController.getString(R.string.Caption));
+            commentView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            commentView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+            commentView.setHintTextColor(Theme.getColor(Theme.key_chat_emojiSearchIcon, resourcesProvider));
+            commentView.setCursorColor(Theme.getColor(Theme.key_featuredStickers_addedIcon, resourcesProvider));
+            commentView.setCursorWidth(1.5f);
+            commentView.setCursorSize(dp(20));
+            commentView.setBackground(null);
+            commentView.setSingleLine(true);
+            commentView.setLines(1);
+            commentView.setMaxLines(1);
+            BadgeDTO badge = BadgesController.INSTANCE.getBadge(UserConfig.getInstance(currentAccount).getCurrentUser());
+            if (badge != null && badge.getText() != null) {
+                commentView.setText(badge.getText());
+            }
+            commentBar.addView(commentView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 16, 0, 16, 0));
+            contentView.addView(commentBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.BOTTOM));
+        }
         
         scrollHelper = new RecyclerAnimationScrollHelper(emojiGridView, layoutManager);
         scrollHelper.setAnimationCallback(new RecyclerAnimationScrollHelper.AnimationCallback() {
@@ -991,7 +1015,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                         if (document == null) {
                             document = AnimatedEmojiDrawable.findDocument(currentAccount, imageViewEmoji.span.documentId);
                         }
-                        onEmojiSelected(imageViewEmoji, imageViewEmoji.span.documentId, document, imageViewEmoji.starGift, null, null);
+                        onEmojiSelected(imageViewEmoji, imageViewEmoji.span.documentId, document, imageViewEmoji.starGift, null, getBadgeComment());
                         return true;
                     }
                     selectedReactionView = imageViewEmoji;
@@ -1010,7 +1034,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                     invalidateParent();
                     return true;
                 }
-                if (view instanceof ImageViewEmoji && ((ImageViewEmoji) view).span != null && (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP)) {
+                if (view instanceof ImageViewEmoji && ((ImageViewEmoji) view).span != null && !badgePicker && (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP)) {
                     final TL_stars.TL_starGiftUnique gift = ((ImageViewEmoji) view).starGift;
                     SelectStatusDurationDialog dialog = selectStatusDateDialog = new SelectStatusDurationDialog(context, dismiss, SelectAnimatedEmojiDialog.this, (ImageViewEmoji) view, resourcesProvider) {
                         @Override
@@ -3575,8 +3599,8 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
 
     public void onEmojiClick(View view, AnimatedEmojiSpan span) {
         incrementHintUse();
-        if (span == null || (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP) && selectedDocumentIds.contains(span.documentId)) {
-            onEmojiSelected(view, null, null, null, null, null);
+        if (span == null || !badgePicker && (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP) && selectedDocumentIds.contains(span.documentId)) {
+            onEmojiSelected(view, null, null, null, null, getBadgeComment());
         } else {
             TLRPC.TL_emojiStatus status = new TLRPC.TL_emojiStatus();
             status.document_id = span.getDocumentId();
@@ -3589,19 +3613,23 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                 }
                 if (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_SET_DEFAULT_REACTION) {
                     if (!willApplyEmoji(view, span.documentId, document, imageView.starGift, null)) {
-                        onEmojiSelected(view, span.documentId, document, imageView.starGift, null, null);
+                        onEmojiSelected(view, span.documentId, document, imageView.starGift, null, getBadgeComment());
                         return;
                     }
                     animateEmojiSelect(imageView, () -> {
-                        onEmojiSelected(view, span.documentId, document, imageView.starGift, null, null);
+                        onEmojiSelected(view, span.documentId, document, imageView.starGift, null, getBadgeComment());
                     });
                 } else {
-                    onEmojiSelected(view, span.documentId, document, imageView.starGift, null, null);
+                    onEmojiSelected(view, span.documentId, document, imageView.starGift, null, getBadgeComment());
                 }
             } else {
-                onEmojiSelected(view, span.documentId, document, null, null, null);
+                onEmojiSelected(view, span.documentId, document, null, null, getBadgeComment());
             }
         }
+    }
+
+    private String getBadgeComment() {
+        return commentView == null ? null : commentView.getText().toString();
     }
 
     private void incrementHintUse() {
@@ -3828,7 +3856,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
 
         }
 
-        if (includeHint && type != TYPE_STICKER_SET_EMOJI && type != TYPE_SET_DEFAULT_REACTION && type != TYPE_TAGS && type != TYPE_TOPIC_ICON && type != TYPE_CHAT_REACTIONS && type != TYPE_EXPANDABLE_REACTIONS && type != TYPE_AVATAR_CONSTRUCTOR && type != TYPE_SET_REPLY_ICON && type != TYPE_SET_REPLY_ICON_BOTTOM) {
+        if (includeHint && !badgePicker && type != TYPE_STICKER_SET_EMOJI && type != TYPE_SET_DEFAULT_REACTION && type != TYPE_TAGS && type != TYPE_TOPIC_ICON && type != TYPE_CHAT_REACTIONS && type != TYPE_EXPANDABLE_REACTIONS && type != TYPE_AVATAR_CONSTRUCTOR && type != TYPE_SET_REPLY_ICON && type != TYPE_SET_REPLY_ICON_BOTTOM) {
             longtapHintRow = totalCount++;
             rowHashCodes.add(6L);
         }
@@ -4655,7 +4683,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                     ImageReceiver imageReceiver;
                     if (imageView.empty) {
                         Drawable drawable = getPremiumStar();
-                        float scale = type == TYPE_SET_REPLY_ICON || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_SET_REPLY_ICON_BOTTOM ? 1.3f : 1f;
+                        float scale = badgePicker || type == TYPE_SET_REPLY_ICON || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_SET_REPLY_ICON_BOTTOM ? 1.3f : 1f;
                         if (imageView.pressedProgress != 0 || imageView.selectedProgress > 0) {
                             scale *= 0.8f + 0.2f * (1f - Math.max(imageView.selectedProgress * .8f, imageView.pressedProgress));
                         }
@@ -4823,7 +4851,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                         Drawable drawable = null;
                         if (imageView.empty) {
                             drawable = getPremiumStar();
-                            if (type == TYPE_SET_REPLY_ICON || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_SET_REPLY_ICON_BOTTOM) {
+                            if (badgePicker || type == TYPE_SET_REPLY_ICON || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_SET_REPLY_ICON_BOTTOM) {
                                 AndroidUtilities.rectTmp2.inset((int) (-AndroidUtilities.rectTmp2.width() * .15f), (int) (-AndroidUtilities.rectTmp2.height() * .15f));
                             }
                             drawable.setBounds(AndroidUtilities.rectTmp2);
