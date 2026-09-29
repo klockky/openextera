@@ -54,6 +54,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
+import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.ChatSearchTabs;
 import org.telegram.ui.Components.CheckBox2;
 import org.telegram.ui.Components.CheckBoxSquare;
@@ -72,6 +73,8 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
     protected SimpleTextView nameTextView;
     protected SimpleTextView statusTextView;
     private ImageView imageView;
+    private final ImageView mutualContactView;
+    private boolean mutual;
     private CheckBox2 checkBox;
     private CheckBoxSquare checkBoxBig;
     private ImageView checkBox3;
@@ -238,6 +241,17 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
             addView(adminTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP, LocaleController.isRTL ? 23 : 0, 10, LocaleController.isRTL ? 0 : 23, 0));
         }
 
+        mutualContactView = new ImageView(context);
+        mutualContactView.setImageResource(R.drawable.msg_switch);
+        mutualContactView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_player_actionBarSelector)));
+        mutualContactView.setScaleType(ImageView.ScaleType.CENTER);
+        mutualContactView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon, resourcesProvider), PorterDuff.Mode.MULTIPLY));
+        mutualContactView.setVisibility(GONE);
+        mutualContactView.setOnClickListener(view -> NotificationCenter.getGlobalInstance().postNotificationName(
+                NotificationCenter.showBulletin, Bulletin.TYPE_ERROR, LocaleController.getString(R.string.MutualContactInfo)));
+        addView(mutualContactView, LayoutHelper.createFrame(40, 40, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.CENTER_VERTICAL,
+                LocaleController.isRTL ? 10 : 0, 0, LocaleController.isRTL ? 0 : 10, 0));
+
         setFocusable(true);
     }
 
@@ -351,6 +365,8 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
             nameTextView.setText("");
             statusTextView.setText("");
             avatarImageView.setImageDrawable(null);
+            mutualContactView.setVisibility(GONE);
+            nameTextView.setPadding(0, 0, 0, 0);
             return;
         }
         encryptedChat = ec;
@@ -758,6 +774,9 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
                 : ExteraConfig.getAvatarCorners(callCellStyle ? 44 : 46, false, currentChat != null && currentChat.forum));
 
         nameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+        mutualContactView.setVisibility(mutual ? VISIBLE : GONE);
+        nameTextView.setPadding(LocaleController.isRTL && mutual ? dp(33) : 0, 0,
+                !LocaleController.isRTL && mutual ? dp(33) : 0, 0);
     }
 
     @Override
@@ -777,6 +796,10 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
 
     public void setSelfAsSavedMessages(boolean value) {
         selfAsSavedMessages = value;
+    }
+
+    public void setMutual(boolean mutual) {
+        this.mutual = mutual;
     }
 
     @Override

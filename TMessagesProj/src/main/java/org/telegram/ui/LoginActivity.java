@@ -28,6 +28,7 @@ import android.app.Dialog;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -100,6 +101,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
 import com.exteragram.messenger.ExteraConfig;
+import com.exteragram.messenger.components.QrCodeLoginView;
 import com.exteragram.messenger.utils.ui.FabUiHelper;
 
 import com.android.billingclient.api.BillingClient;
@@ -108,6 +110,8 @@ import com.android.billingclient.api.ProductDetails;
 import com.android.billingclient.api.Purchase;
 import com.android.billingclient.api.QueryProductDetailsParams;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.identity.GetPhoneNumberHintIntentRequest;
+import com.google.android.gms.auth.api.identity.Identity;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
@@ -147,6 +151,7 @@ import org.telegram.messenger.SRPHelper;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
+import org.telegram.messenger.utils.ViewOutlineProviderImpl;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.RequestDelegate;
 import org.telegram.tgnet.SerializedData;
@@ -261,7 +266,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             VIEW_CODE_FRAGMENT_SMS = 15,
             VIEW_CODE_WORD = 16,
             VIEW_CODE_PHRASE = 17,
-            VIEW_PAY = 18;
+            VIEW_QR = 18,
+            VIEW_PAY = 19;
+
+    private static final int REQUEST_PHONE_NUMBER_HINT = 201;
 
     public final static int COUNTRY_STATE_NOT_SET_OR_VALID = 0,
             COUNTRY_STATE_EMPTY = 1,
@@ -309,6 +317,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             VIEW_CODE_FRAGMENT_SMS,
             VIEW_CODE_WORD,
             VIEW_CODE_PHRASE,
+            VIEW_QR,
             VIEW_PAY
     })
     private @interface ViewNumber {}
@@ -322,7 +331,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     @ViewNumber
     private int currentViewNum;
-    private final SlideView[] views = new SlideView[19];
+    private final SlideView[] views = new SlideView[20];
     private CustomPhoneKeyboardView keyboardView;
     private ValueAnimator keyboardAnimator;
     private boolean paid;
@@ -365,6 +374,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     private ImageView proxyButtonView;
     private ProxyDrawable proxyDrawable;
+    private ItemOptions loginOptionsMenu;
 
     // Open animation stuff
     private LinearLayout keyboardLinearLayout;
@@ -527,6 +537,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 AndroidUtilities.cancelRunOnUIThread(callback);
             }
         }
+        if (loginOptionsMenu != null) {
+            loginOptionsMenu.dismiss();
+            loginOptionsMenu = null;
+        }
         getNotificationCenter().removeObserver(this, NotificationCenter.didUpdateConnectionState);
         getNotificationCenter().removeObserver(this, NotificationCenter.newSuggestionsAvailable);
     }
@@ -687,6 +701,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         views[VIEW_CODE_FRAGMENT_SMS] = new LoginActivitySmsView(context, AUTH_TYPE_FRAGMENT_SMS);
         views[VIEW_CODE_WORD] = new LoginActivityPhraseView(context, AUTH_TYPE_WORD);
         views[VIEW_CODE_PHRASE] = new LoginActivityPhraseView(context, AUTH_TYPE_PHRASE);
+        views[VIEW_QR] = new LoginActivityQrView(context);
         views[VIEW_PAY] = new LoginPayView(context);
 
         for (int a = 0; a < views.length; a++) {
@@ -770,7 +785,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
         proxyButtonView = new ImageView(context);
         proxyButtonView.setImageDrawable(proxyDrawable = new ProxyDrawable(context));
-        proxyButtonView.setOnClickListener(v -> presentFragment(new ProxyListActivity()));
+        proxyButtonView.setOnClickListener(v -> showLoginOptionsMenu());
         proxyButtonView.setAlpha(0f);
         proxyButtonView.setVisibility(View.GONE);
         sizeNotifierFrameLayout.addView(proxyButtonView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 16, 16, 16, 16));
@@ -1151,6 +1166,11 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     @Override
     public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
+        super.onActivityResultFragment(requestCode, resultCode, data);
+        if (requestCode == REQUEST_PHONE_NUMBER_HINT && currentViewNum == VIEW_PHONE_INPUT) {
+            ((PhoneView) views[VIEW_PHONE_INPUT]).handlePhoneNumberHintResult(resultCode, data);
+            return;
+        }
         LoginActivityRegisterView registerView = (LoginActivityRegisterView) views[VIEW_REGISTER];
         if (registerView != null) {
             registerView.imageUpdater.onActivityResult(requestCode, resultCode, data);
@@ -1968,6 +1988,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         private LinkSpanDrawable.LinksTextView subtitleView;
         private View codeDividerView;
         private ImageView chevronRight;
+        private ImageView phoneNumberHintButton;
         private CheckBoxCell syncContactsBox;
         private CheckBoxCell testBackendCheckBox;
 
@@ -1985,6 +2006,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         private boolean ignoreOnPhoneChangePaste = false;
         private boolean nextPressed = false;
         private boolean confirmedNumber = false;
+        private boolean requestingPhoneNumberHint;
 
         private int titleClickCount = 0;
         private long lastTitleClick = 0;
@@ -2333,7 +2355,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 //            phoneField.setLineColors(getThemedColor(Theme.key_windowBackgroundWhiteInputField), getThemedColor(Theme.key_windowBackgroundWhiteInputFieldActivated), getThemedColor(Theme.key_text_RedRegular));
             phoneField.setShowSoftInputOnFocus(!(hasCustomKeyboard() && !isCustomKeyboardForceDisabled()));
             phoneField.setContentDescription(getString(R.string.PhoneNumber));
-            linearLayout.addView(phoneField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36));
+            linearLayout.addView(phoneField, LayoutHelper.createLinear(0, 36, 1.0f));
             phoneField.addTextChangedListener(new TextWatcher() {
 
                 private int characterAction = -1;
@@ -2456,6 +2478,15 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 }
                 return false;
             });
+
+            phoneNumberHintButton = new ImageView(context);
+            phoneNumberHintButton.setImageResource(R.drawable.menu_phone);
+            phoneNumberHintButton.setScaleType(ImageView.ScaleType.CENTER);
+            phoneNumberHintButton.setContentDescription(getString(R.string.PhoneNumber));
+            phoneNumberHintButton.setVisibility(activityMode == MODE_LOGIN
+                    && PushListenerController.GooglePushListenerServiceProvider.INSTANCE.hasServices() ? VISIBLE : GONE);
+            phoneNumberHintButton.setOnClickListener(view -> requestPhoneNumberHint());
+            linearLayout.addView(phoneNumberHintButton, LayoutHelper.createLinear(36, 36, 8, 0, -8, 0));
 
             int bottomMargin = 72;
             if (newAccount && activityMode == MODE_LOGIN) {
@@ -2695,6 +2726,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             phoneField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
             phoneField.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
             phoneField.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteInputFieldActivated));
+            phoneNumberHintButton.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+            phoneNumberHintButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 1));
 
             if (syncContactsBox != null) {
                 syncContactsBox.setSquareCheckBoxColor(Theme.key_checkboxSquareUnchecked, Theme.key_checkboxSquareBackground, Theme.key_checkboxSquareCheck);
@@ -3301,69 +3334,110 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     }
                     numberFilled = true;
                     if (!newAccount && allowCall && allowReadPhoneNumbers) {
-                        codeField.setAlpha(0);
-                        phoneField.setAlpha(0);
+                        fillNumberInternal(PhoneFormat.stripExceptNumbers(tm.getLine1Number()));
+                    }
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
 
-                        String number = PhoneFormat.stripExceptNumbers(tm.getLine1Number());
-                        String textToSet = null;
-                        boolean ok = false;
-                        if (!TextUtils.isEmpty(number)) {
-                            if (number.length() > 4) {
-                                for (int a = 4; a >= 1; a--) {
-                                    String sub = number.substring(0, a);
-
-                                    CountrySelectActivity.Country country;
-                                    List<CountrySelectActivity.Country> list = codesMap.get(sub);
-                                    if (list == null) {
-                                        country = null;
-                                    } else if (list.size() > 1) {
-                                        SharedPreferences preferences = MessagesController.getGlobalMainSettings();
-                                        String lastMatched = preferences.getString("phone_code_last_matched_" + sub, null);
-
-                                        country = list.get(list.size() - 1);
-                                        if (lastMatched != null) {
-                                            for (CountrySelectActivity.Country c : countriesArray) {
-                                                if (Objects.equals(c.shortname, lastMatched)) {
-                                                    country = c;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        country = list.get(0);
-                                    }
-
-                                    if (country != null) {
-                                        ok = true;
-                                        textToSet = number.substring(a);
-                                        codeField.setText(sub);
+        private void fillNumberInternal(String number) {
+            codeField.setAlpha(0);
+            phoneField.setAlpha(0);
+            String phone = null;
+            if (!TextUtils.isEmpty(number) && number.length() > 4) {
+                for (int length = 4; length >= 1; length--) {
+                    String code = number.substring(0, length);
+                    List<CountrySelectActivity.Country> countries = codesMap.get(code);
+                    CountrySelectActivity.Country country = null;
+                    if (countries != null && !countries.isEmpty()) {
+                        if (countries.size() == 1) {
+                            country = countries.get(0);
+                        } else {
+                            country = countries.get(countries.size() - 1);
+                            String lastMatched = MessagesController.getGlobalMainSettings().getString("phone_code_last_matched_" + code, null);
+                            if (lastMatched != null) {
+                                for (CountrySelectActivity.Country candidate : countriesArray) {
+                                    if (Objects.equals(candidate.shortname, lastMatched)) {
+                                        country = candidate;
                                         break;
                                     }
                                 }
-                                if (!ok) {
-                                    textToSet = number.substring(1);
-                                    codeField.setText(number.substring(0, 1));
-                                }
                             }
-                            if (textToSet != null) {
-                                phoneField.requestFocus();
-                                phoneField.setText(textToSet);
-                                phoneField.setSelection(phoneField.length());
-                            }
-                        }
-
-                        if (phoneField.length() > 0) {
-                            AnimatorSet set = new AnimatorSet().setDuration(300);
-                            set.playTogether(ObjectAnimator.ofFloat(codeField, View.ALPHA, 1f),
-                                    ObjectAnimator.ofFloat(phoneField, View.ALPHA, 1f));
-                            set.start();
-
-                            confirmedNumber = true;
-                        } else {
-                            codeField.setAlpha(1);
-                            phoneField.setAlpha(1);
                         }
                     }
+                    if (country != null) {
+                        phone = number.substring(length);
+                        codeField.setText(code);
+                        break;
+                    }
+                }
+                if (phone == null) {
+                    phone = number.substring(1);
+                    codeField.setText(number.substring(0, 1));
+                }
+            }
+            if (phone != null) {
+                phoneField.requestFocus();
+                phoneField.setText(phone);
+                phoneField.setSelection(phoneField.length());
+            }
+            if (phoneField.length() > 0) {
+                AnimatorSet animation = new AnimatorSet().setDuration(300);
+                animation.playTogether(ObjectAnimator.ofFloat(codeField, View.ALPHA, 1f),
+                        ObjectAnimator.ofFloat(phoneField, View.ALPHA, 1f));
+                animation.start();
+                numberFilled = true;
+                confirmedNumber = true;
+            } else {
+                codeField.setAlpha(1);
+                phoneField.setAlpha(1);
+            }
+        }
+
+        private void requestPhoneNumberHint() {
+            if (requestingPhoneNumberHint || activityMode != MODE_LOGIN || getParentActivity() == null
+                    || !PushListenerController.GooglePushListenerServiceProvider.INSTANCE.hasServices()) {
+                return;
+            }
+            requestingPhoneNumberHint = true;
+            try {
+                Identity.getSignInClient(getParentActivity())
+                        .getPhoneNumberHintIntent(GetPhoneNumberHintIntentRequest.builder().build())
+                        .addOnSuccessListener(pendingIntent -> {
+                            if (getParentActivity() == null || currentViewNum != VIEW_PHONE_INPUT) {
+                                requestingPhoneNumberHint = false;
+                                return;
+                            }
+                            try {
+                                AndroidUtilities.hideKeyboard(fragmentView);
+                                getParentActivity().startIntentSenderForResult(pendingIntent.getIntentSender(),
+                                        REQUEST_PHONE_NUMBER_HINT, null, 0, 0, 0);
+                            } catch (IntentSender.SendIntentException e) {
+                                requestingPhoneNumberHint = false;
+                                FileLog.e(e);
+                            }
+                        })
+                        .addOnFailureListener(e -> {
+                            requestingPhoneNumberHint = false;
+                            FileLog.e(e);
+                        });
+            } catch (Exception e) {
+                requestingPhoneNumberHint = false;
+                FileLog.e(e);
+            }
+        }
+
+        private void handlePhoneNumberHintResult(int resultCode, Intent data) {
+            requestingPhoneNumberHint = false;
+            if (resultCode != Activity.RESULT_OK || data == null || getParentActivity() == null) {
+                return;
+            }
+            try {
+                String number = PhoneFormat.stripExceptNumbers(Identity.getSignInClient(getParentActivity()).getPhoneNumberFromIntent(data));
+                if (!TextUtils.isEmpty(number)) {
+                    fillNumberInternal(number);
                 }
             } catch (Exception e) {
                 FileLog.e(e);
@@ -8477,6 +8551,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         radialProgressView.setProgressColor(Theme.getColor(Theme.key_chats_actionBackground));
 
         floatingButton.updateColors();
+        floatingButton.setOutlineProvider(ExteraConfig.getSquareFab()
+                ? ViewOutlineProviderImpl.boundsWithPaddingRoundRect(0, AndroidUtilities.dp(16))
+                : ViewOutlineProviderImpl.BOUNDS_OVAL);
         floatingButtonIcon.setColor(Theme.getColor(Theme.key_chats_actionIcon));
         floatingButtonIcon.setBackgroundColor(Theme.getColor(Theme.key_chats_actionBackground));
 
@@ -8766,10 +8843,280 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         return ColorUtils.calculateLuminance(color) > 0.7f;
     }
 
+    private void showLoginOptionsMenu() {
+        if (proxyButtonView == null || getContext() == null) {
+            return;
+        }
+        if (loginOptionsMenu != null && loginOptionsMenu.isShown()) {
+            loginOptionsMenu.dismiss();
+        }
+        loginOptionsMenu = ItemOptions.makeOptions(this, proxyButtonView)
+                .setGravity(Gravity.RIGHT)
+                .setOnTopOfScrim()
+                .translate(AndroidUtilities.dp(6), -AndroidUtilities.dp(12))
+                .add(new ProxyDrawable(getContext()), getString(R.string.ProxySettings), () -> presentFragment(new ProxyListActivity()))
+                .add(R.drawable.msg_qrcode, getString(R.string.LoginQrTitle), () -> {
+                    showProxyButton(false, false);
+                    setPage(VIEW_QR, true, null, false);
+                });
+        loginOptionsMenu.setOnDismiss(() -> loginOptionsMenu = null);
+        loginOptionsMenu.show();
+    }
+
+    private class LoginActivityQrView extends QrCodeLoginView implements NotificationCenter.NotificationCenterDelegate {
+        private int exportRequestId;
+        private int importRequestId;
+        private int passwordRequestId;
+        private boolean waitingForEvent;
+        private boolean exportRequestedAfterCurrent;
+        private boolean firstQrToken;
+        private long showStartTime;
+        private Runnable applyTokenRunnable;
+        private Runnable refreshRunnable;
+
+        LoginActivityQrView(Context context) {
+            super(context);
+        }
+
+        @Override
+        public boolean onBackPressed(boolean force) {
+            setPage(VIEW_PHONE_INPUT, true, null, true);
+            updateProxyButton(false, true);
+            return false;
+        }
+
+        @Override
+        public void onShow() {
+            super.onShow();
+            waitingForEvent = true;
+            firstQrToken = true;
+            showStartTime = System.currentTimeMillis();
+            clear();
+            exportLoginToken(true);
+        }
+
+        @Override
+        public void onHide() {
+            stopWaiting();
+            cancelRequests();
+            firstQrToken = true;
+            clear(false);
+            super.onHide();
+        }
+
+        @Override
+        public void onDestroyActivity() {
+            stopWaiting();
+            cancelRequests();
+            super.onDestroyActivity();
+        }
+
+        private boolean isActive() {
+            return waitingForEvent && currentViewNum == VIEW_QR;
+        }
+
+        private void stopWaiting() {
+            waitingForEvent = false;
+            exportRequestedAfterCurrent = false;
+            getNotificationCenter().removeObserver(this, NotificationCenter.onUpdateLoginToken);
+            if (refreshRunnable != null) {
+                AndroidUtilities.cancelRunOnUIThread(refreshRunnable);
+                refreshRunnable = null;
+            }
+            if (applyTokenRunnable != null) {
+                AndroidUtilities.cancelRunOnUIThread(applyTokenRunnable);
+                applyTokenRunnable = null;
+            }
+        }
+
+        private void cancelRequests() {
+            if (exportRequestId != 0) {
+                getConnectionsManager().cancelRequest(exportRequestId, true);
+                exportRequestId = 0;
+            }
+            if (importRequestId != 0) {
+                getConnectionsManager().cancelRequest(importRequestId, true);
+                importRequestId = 0;
+            }
+            if (passwordRequestId != 0) {
+                getConnectionsManager().cancelRequest(passwordRequestId, true);
+                passwordRequestId = 0;
+            }
+        }
+
+        private void exportLoginToken(boolean initial) {
+            if (!waitingForEvent || getContext() == null) {
+                return;
+            }
+            if (exportRequestId != 0) {
+                exportRequestedAfterCurrent = true;
+                return;
+            }
+            exportRequestedAfterCurrent = false;
+            if (initial) {
+                getNotificationCenter().addObserver(this, NotificationCenter.onUpdateLoginToken);
+                if (getConnectionsManager().isTestBackend() != testBackend) {
+                    getConnectionsManager().switchBackend(false);
+                }
+                getConnectionsManager().cleanup(false);
+            }
+            TLRPC.TL_auth_exportLoginToken request = new TLRPC.TL_auth_exportLoginToken();
+            request.api_id = BuildVars.getExteraAppId();
+            request.api_hash = BuildVars.getExteraAppHash();
+            for (int account = 0; account < UserConfig.MAX_ACCOUNT_COUNT; account++) {
+                UserConfig config = UserConfig.getInstance(account);
+                if (config.isClientActivated()) {
+                    request.except_ids.add(config.getClientUserId());
+                }
+            }
+            int flags = ConnectionsManager.RequestFlagEnableUnauthorized
+                    | ConnectionsManager.RequestFlagFailOnServerErrors
+                    | ConnectionsManager.RequestFlagWithoutLogin
+                    | ConnectionsManager.RequestFlagTryDifferentDc;
+            exportRequestId = getConnectionsManager().sendRequest(request,
+                    (response, error) -> AndroidUtilities.runOnUIThread(() -> onExportResult(response, error)), flags);
+        }
+
+        private void onExportResult(TLObject response, TLRPC.TL_error error) {
+            exportRequestId = 0;
+            boolean repeat = exportRequestedAfterCurrent;
+            exportRequestedAfterCurrent = false;
+            if (!isActive()) {
+                return;
+            }
+            if (error != null) {
+                clear(true);
+                stopWaiting();
+                handleError(TextUtils.isEmpty(error.text) ? getString(R.string.UnknownError) : error.text);
+                return;
+            }
+            if (response instanceof TLRPC.TL_auth_loginToken) {
+                TLRPC.TL_auth_loginToken token = (TLRPC.TL_auth_loginToken) response;
+                String link = "tg://login?token=" + Base64.encodeToString(token.token,
+                        Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+                if (firstQrToken) {
+                    clear(true);
+                    if (applyTokenRunnable != null) {
+                        AndroidUtilities.cancelRunOnUIThread(applyTokenRunnable);
+                    }
+                    applyTokenRunnable = () -> {
+                        applyTokenRunnable = null;
+                        if (isActive()) {
+                            setData(link);
+                            firstQrToken = false;
+                        }
+                    };
+                    AndroidUtilities.runOnUIThread(applyTokenRunnable,
+                            Math.max(0, 380 - Math.max(0, System.currentTimeMillis() - showStartTime)));
+                } else {
+                    setData(link);
+                }
+                if (refreshRunnable != null) {
+                    AndroidUtilities.cancelRunOnUIThread(refreshRunnable);
+                }
+                refreshRunnable = () -> {
+                    refreshRunnable = null;
+                    exportLoginToken(false);
+                };
+                long seconds = token.expires - getConnectionsManager().getCurrentTime();
+                if (seconds < 0) {
+                    seconds = 20;
+                }
+                AndroidUtilities.runOnUIThread(refreshRunnable, seconds * 1000);
+            } else if (response instanceof TLRPC.TL_auth_loginTokenMigrateTo) {
+                stopWaiting();
+                showDoneButton(true, true);
+                TLRPC.TL_auth_loginTokenMigrateTo migrate = (TLRPC.TL_auth_loginTokenMigrateTo) response;
+                getConnectionsManager().setDefaultDatacenterId(migrate.dc_id);
+                TLRPC.TL_auth_importLoginToken request = new TLRPC.TL_auth_importLoginToken();
+                request.token = migrate.token;
+                importRequestId = getConnectionsManager().sendRequest(request,
+                        (result, importError) -> AndroidUtilities.runOnUIThread(() -> onImportResult(result, importError)),
+                        ConnectionsManager.RequestFlagEnableUnauthorized
+                                | ConnectionsManager.RequestFlagFailOnServerErrors
+                                | ConnectionsManager.RequestFlagWithoutLogin
+                                | ConnectionsManager.RequestFlagTryDifferentDc);
+            } else if (response instanceof TLRPC.TL_auth_loginTokenSuccess) {
+                stopWaiting();
+                AndroidUtilities.runOnUIThread(() -> {
+                    if (currentViewNum == VIEW_QR) {
+                        onAuthSuccess((TLRPC.TL_auth_authorization) ((TLRPC.TL_auth_loginTokenSuccess) response).authorization);
+                    }
+                }, 150);
+            }
+            if (repeat && isActive() && exportRequestId == 0) {
+                exportLoginToken(false);
+            }
+        }
+
+        private void onImportResult(TLObject response, TLRPC.TL_error error) {
+            importRequestId = 0;
+            if (currentViewNum != VIEW_QR) {
+                return;
+            }
+            if (error == null && response instanceof TLRPC.TL_auth_loginTokenSuccess) {
+                AndroidUtilities.runOnUIThread(() -> {
+                    if (currentViewNum == VIEW_QR) {
+                        showDoneButton(false, true);
+                        onAuthSuccess((TLRPC.TL_auth_authorization) ((TLRPC.TL_auth_loginTokenSuccess) response).authorization);
+                    }
+                }, 150);
+            } else {
+                showDoneButton(false, true);
+                clear(true);
+                stopWaiting();
+                handleError(error == null || TextUtils.isEmpty(error.text) ? getString(R.string.UnknownError) : error.text);
+            }
+        }
+
+        private void handleError(String message) {
+            if (message.contains("SESSION_PASSWORD_NEEDED")) {
+                passwordRequestId = getConnectionsManager().sendRequest(new TL_account.getPassword(),
+                        (response, error) -> AndroidUtilities.runOnUIThread(() -> onPasswordResult(response, error)),
+                        ConnectionsManager.RequestFlagFailOnServerErrors | ConnectionsManager.RequestFlagWithoutLogin);
+            } else {
+                needShowAlert(getString(R.string.AppName), message.startsWith("FLOOD_WAIT") ? getString(R.string.FloodWait) : message);
+            }
+        }
+
+        private void onPasswordResult(TLObject response, TLRPC.TL_error error) {
+            passwordRequestId = 0;
+            if (currentViewNum != VIEW_QR) {
+                return;
+            }
+            showDoneButton(false, true);
+            if (error != null || !(response instanceof TL_account.Password)) {
+                needShowAlert(getString(R.string.AppName), error == null || TextUtils.isEmpty(error.text) ? getString(R.string.UnknownError) : error.text);
+                return;
+            }
+            TL_account.Password password = (TL_account.Password) response;
+            if (!TwoStepVerificationActivity.canHandleCurrentPassword(password, true)) {
+                AlertsCreator.showUpdateAppAlert(getParentActivity(), getString(R.string.UpdateAppAlert), true);
+                return;
+            }
+            Bundle params = new Bundle();
+            SerializedData data = new SerializedData(password.getObjectSize());
+            password.serializeToStream(data);
+            params.putString("password", Utilities.bytesToHex(data.toByteArray()));
+            setPage(VIEW_PASSWORD, true, params, false);
+        }
+
+        @Override
+        public void didReceivedNotification(int id, int account, Object... args) {
+            if (id == NotificationCenter.onUpdateLoginToken) {
+                exportLoginToken(false);
+            }
+        }
+    }
+
     private int currentConnectionState;
 
     private void updateProxyButton(boolean animated, boolean force) {
         if (proxyDrawable == null) {
+            return;
+        }
+        if (currentViewNum == VIEW_QR) {
+            showProxyButton(false, animated);
             return;
         }
         int state = getConnectionsManager().getConnectionState();
@@ -8789,7 +9136,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             proxyDrawable.setConnected(true, connected, animated);
             showProxyButtonDelayed();
         } else {
-            showProxyButton(false, animated);
+            showProxyButton(activityMode == MODE_LOGIN && currentViewNum == VIEW_PHONE_INPUT, animated);
         }
     }
     

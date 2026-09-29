@@ -462,6 +462,7 @@ public class SearchAdapter extends RecyclerListView.SelectionAdapter {
 
                     if (useUserCell) {
                         UserCell userCell = (UserCell) holder.itemView;
+                        userCell.setMutual(object instanceof TLRPC.User && ((TLRPC.User) object).mutual_contact);
                         userCell.setData(object, name, username, 0);
                         userCell.setChecked(selectedUsers.indexOfKey(id) >= 0, false);
                     } else {

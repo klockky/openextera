@@ -1299,6 +1299,12 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
     }
 
     @Override
+    public void dismissInternal() {
+        super.dismissInternal();
+        ContentPreviewViewer.getInstance().clearDelegate(previewDelegate);
+    }
+
+    @Override
     public int getContainerViewHeight() {
         return (listView == null ? 0 : listView.getMeasuredHeight()) - getListTop() + (containerView == null ? 0 : containerView.getPaddingTop()) + AndroidUtilities.navigationBarHeight + AndroidUtilities.dp(8);
     }

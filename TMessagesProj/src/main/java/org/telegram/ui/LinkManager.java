@@ -1235,7 +1235,7 @@ public class LinkManager {
     }
 
     private boolean handleInvoiceSlug(String slug) {
-        if (TextUtils.isEmpty(slug) || !ExteraConfig.getTelegramAiEditor()) return false;
+        if (TextUtils.isEmpty(slug)) return false;
 
         init();
 
@@ -1383,7 +1383,7 @@ public class LinkManager {
     }
 
     private boolean handleAiStyle(String slug) {
-        if (TextUtils.isEmpty(slug)) return false;
+        if (TextUtils.isEmpty(slug) || !ExteraConfig.getTelegramAiEditor()) return false;
         final TL_aicompose.getTone req = new TL_aicompose.getTone();
         final TL_aicompose.inputAiComposeToneSlug input = new TL_aicompose.inputAiComposeToneSlug();
         input.slug = slug;
