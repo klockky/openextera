@@ -3389,6 +3389,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
 
     @Override
     public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
+        super.onActivityResultFragment(requestCode, resultCode, data);
         if (requestCode == LOAD_PAYMENT_DATA_REQUEST_CODE) {
             AndroidUtilities.runOnUIThread(() -> {
                 if (resultCode == Activity.RESULT_OK) {

@@ -7,6 +7,7 @@ import android.text.TextUtils;
 import android.util.LongSparseArray;
 import android.view.View;
 
+import com.exteragram.messenger.preferences.components.CustomPreferenceCell;
 import com.exteragram.messenger.preferences.utils.SettingsRegistry;
 
 import org.telegram.messenger.MessageObject;
@@ -828,11 +829,15 @@ public class UItem extends AdapterWithDiffUtils.Item {
         if (viewType != item.viewType)
             return false;
         if (viewType == UniversalAdapter.VIEW_TYPE_USER_GROUP_CHECKBOX ||
-                viewType == UniversalAdapter.VIEW_TYPE_ROUND_CHECKBOX) {
+                viewType == UniversalAdapter.VIEW_TYPE_ROUND_CHECKBOX ||
+                viewType == UniversalAdapter.VIEW_TYPE_CHECK) {
             return id == item.id;
         }
         if (viewType == UniversalAdapter.VIEW_TYPE_SPACE) {
             return id == item.id;
+        }
+        if (item.view instanceof CustomPreferenceCell) {
+            return ((CustomPreferenceCell) item.view).equals(view);
         }
         if (viewType == UniversalAdapter.VIEW_TYPE_GRAY_SECTION) {
             return TextUtils.equals(text, item.text);

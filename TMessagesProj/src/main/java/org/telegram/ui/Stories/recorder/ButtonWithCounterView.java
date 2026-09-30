@@ -112,7 +112,7 @@ public class ButtonWithCounterView extends FrameLayout implements Loadable {
         addView(rippleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         if (filled) {
-            setBackground(Theme.createRoundRectDrawable(dp(8), backgroundColor = Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider)));
+            setBackground(Theme.createRoundRectDrawable(dp(radiusDp), backgroundColor = Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider)));
         }
 
         paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -124,6 +124,8 @@ public class ButtonWithCounterView extends FrameLayout implements Loadable {
         text.setTextSize(dp(14));
         if (filled) {
             text.setTypeface(AndroidUtilities.bold());
+        } else {
+            text.setTypeface(AndroidUtilities.regular());
         }
         text.setGravity(Gravity.CENTER_HORIZONTAL);
 
@@ -533,12 +535,12 @@ public class ButtonWithCounterView extends FrameLayout implements Loadable {
             float countAlpha = countAlphaAnimated.set(this.countAlpha);
 
             float lightningWidth = withCounterIcon ? AndroidUtilities.dp(12) : 0;
-            float width = textWidth + lightningWidth + calculateCounterWidth((dp(5.66f + 5 + 5) + countText.getCurrentWidth()), countAlpha);
+            float width = textWidth + lightningWidth + calculateCounterWidth((dp(5.66f + 5 + 5 + 2) + countText.getCurrentWidth()), countAlpha);
             AndroidUtilities.rectTmp2.set(
                     (int) ((getMeasuredWidth() - width - getWidth()) / 2f),
-                    (int) ((getMeasuredHeight() - text.getHeight()) / 2f - dp(1)),
+                    (int) ((getMeasuredHeight() - text.getHeight()) / 2f),
                     (int) ((getMeasuredWidth() - width + getWidth()) / 2f + textWidth),
-                    (int) ((getMeasuredHeight() + text.getHeight()) / 2f - dp(1))
+                    (int) ((getMeasuredHeight() + text.getHeight()) / 2f)
             );
             AndroidUtilities.rectTmp2.offset(0, (int) (-dp(7) * subTextT));
             text.setAlpha((int) (globalAlpha * (1f - loadingT) * AndroidUtilities.lerp(.5f, 1f, enabledT)));
@@ -567,7 +569,7 @@ public class ButtonWithCounterView extends FrameLayout implements Loadable {
             AndroidUtilities.rectTmp2.set(
                     (int) ((getMeasuredWidth() - width) / 2f + textWidth + dp(countFilled ? 5 : 2)),
                     (int) ((getMeasuredHeight() - dp(18)) / 2f),
-                    (int) ((getMeasuredWidth() - width) / 2f + textWidth + dp((countFilled ? 5 : 2) + 4 + 4) + Math.max(dp(9), countText.getCurrentWidth() + lightningWidth)),
+                    (int) ((getMeasuredWidth() - width) / 2f + textWidth + dp((countFilled ? 5 : 2) + 4 + 4 + 2) + Math.max(dp(9), countText.getCurrentWidth() + lightningWidth)),
                     (int) ((getMeasuredHeight() + dp(18)) / 2f)
             );
             AndroidUtilities.rectTmp.set(AndroidUtilities.rectTmp2);
@@ -584,7 +586,7 @@ public class ButtonWithCounterView extends FrameLayout implements Loadable {
                 }
 
                 int countLength = countText.getText() != null ? countText.getText().length() : 0;
-                AndroidUtilities.rectTmp2.offset(-dp(countLength > 1 ? .3f : 0), -dp(.4f));
+                AndroidUtilities.rectTmp2.offset(-dp(countLength > 1 ? .3f : 0), -dp(.2f));
                 countText.setAlpha((int) (globalAlpha * (1f - loadingT) * countAlpha * (countFilled ? 1 : .5f)));
                 countText.setBounds(AndroidUtilities.rectTmp2);
                 canvas.save();

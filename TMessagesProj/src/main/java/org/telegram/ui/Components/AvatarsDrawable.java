@@ -275,14 +275,14 @@ public class AvatarsDrawable {
             currentStates[a].imageReceiver.setInvalidateAll(true);
             currentStates[a].imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(24));
             currentStates[a].avatarDrawable = new AvatarDrawable();
-            currentStates[a].avatarDrawable.setTextSize(dp(12));
+            currentStates[a].avatarDrawable.setTextSize(dp(16));
 
             animatingStates[a] = new DrawingState();
             animatingStates[a].imageReceiver = new ImageReceiver(parent);
             animatingStates[a].imageReceiver.setInvalidateAll(true);
             animatingStates[a].imageReceiver.setRoundRadius(ExteraConfig.getAvatarCorners(24));
             animatingStates[a].avatarDrawable = new AvatarDrawable();
-            animatingStates[a].avatarDrawable.setTextSize(dp(12));
+            animatingStates[a].avatarDrawable.setTextSize(dp(16));
         }
         isInCall = inCall;
         xRefP.setColor(0);

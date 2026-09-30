@@ -83,7 +83,7 @@ public class RecyclerViewItemRangeSelector implements RecyclerView.OnItemTouchLi
             }
         }
 
-        if (result && e.getAction() == MotionEvent.ACTION_UP) {
+        if (result && (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL)) {
             onDragSelectionStop();
         }
         return result;
@@ -100,7 +100,8 @@ public class RecyclerViewItemRangeSelector implements RecyclerView.OnItemTouchLi
         }
         float y = e.getY();
         switch (e.getAction()) {
-            case MotionEvent.ACTION_UP: {
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL: {
                 onDragSelectionStop();
                 return;
             }

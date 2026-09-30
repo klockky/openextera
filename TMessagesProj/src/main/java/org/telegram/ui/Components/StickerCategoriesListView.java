@@ -137,6 +137,9 @@ public class StickerCategoriesListView extends RecyclerListView {
         setSelectorType(Theme.RIPPLE_MASK_CIRCLE_20DP);
         setSelectorDrawableColor(getThemedColor(Theme.key_listSelector));
         selectedPaint.setColor(getThemedColor(Theme.key_listSelector));
+        setSelectorRadius(0);
+        setSelectorType(100);
+        setSelectorDrawableColor(0);
 
         setWillNotDraw(false);
 

@@ -160,26 +160,45 @@ public class Utilities {
         if (value == null) {
             return 0;
         }
-        int val = 0;
-        try {
-            int start = -1, end;
-            for (end = 0; end < value.length(); ++end) {
-                char character = value.charAt(end);
-                boolean allowedChar = character == '-' || character >= '0' && character <= '9';
-                if (allowedChar && start < 0) {
-                    start = end;
-                } else if (!allowedChar && start >= 0) {
-                    end++;
-                    break;
-                }
+        final int length = value.length();
+        int i = 0;
+        boolean negative = false;
+        while (i < length) {
+            final char c = value.charAt(i);
+            if (c >= '0' && c <= '9') {
+                break;
             }
-            if (start >= 0) {
-                String str = value.subSequence(start, end).toString();
-//                val = parseInt(str);
-                val = Integer.parseInt(str);
+            if (c == '-' && i + 1 < length && value.charAt(i + 1) >= '0' && value.charAt(i + 1) <= '9') {
+                negative = true;
+                i++;
+                break;
             }
-        } catch (Exception ignore) {}
-        return val;
+            i++;
+        }
+        if (i >= length) {
+            return 0;
+        }
+        // accumulate negatively to handle Integer.MIN_VALUE, saturate on overflow
+        final int limit = negative ? Integer.MIN_VALUE : -Integer.MAX_VALUE;
+        final int multMin = limit / 10;
+        int result = 0;
+        while (i < length) {
+            final char c = value.charAt(i);
+            if (c < '0' || c > '9') {
+                break;
+            }
+            final int digit = c - '0';
+            if (result < multMin) {
+                return negative ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+            }
+            result *= 10;
+            if (result < limit + digit) {
+                return negative ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+            }
+            result -= digit;
+            i++;
+        }
+        return negative ? result : -result;
     }
 
     private static int parseInt(final String s) {

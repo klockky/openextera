@@ -1077,7 +1077,7 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
                     } else {
                         yoff = -(cell.getHeight() - AndroidUtilities.rectTmp2.centerY()) - AndroidUtilities.dp(16);
                     }
-                    xoff = AndroidUtilities.rectTmp2.centerX() - (AndroidUtilities.displaySize.x - popupWidth) + dp(12);
+                    xoff = AndroidUtilities.rectTmp2.centerX() - (cell.getRight() - popupWidth);
                 }
             }
             SelectAnimatedEmojiDialog popupLayout = new SelectAnimatedEmojiDialog(PeerColorActivity.this, getContext(), true, xoff, type == PAGE_NAME ? SelectAnimatedEmojiDialog.TYPE_SET_REPLY_ICON : SelectAnimatedEmojiDialog.TYPE_SET_REPLY_ICON_BOTTOM, true, getResourceProvider(), type == PAGE_NAME ? 24 : 16, cell.getColor()) {
@@ -2542,10 +2542,10 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
 
         @Override
         protected void dispatchDraw(Canvas canvas) {
-            DrawableUtils.setBounds(drawable, rtl(dp(28)), getMeasuredHeight() / 2f, Gravity.CENTER);
+            DrawableUtils.setBounds(drawable, rtl(dp(32)), getMeasuredHeight() / 2f, Gravity.CENTER);
             drawable.draw(canvas);
             buttonText.ellipsize(getMeasuredWidth() - dp(64 + 7 + 100) - (lock != null ? lock.getIntrinsicWidth() + dp(8) : 0));
-            float textX = LocaleController.isRTL ? getMeasuredWidth() - buttonText.getWidth() - dp(58) : dp(58);
+            float textX = LocaleController.isRTL ? getMeasuredWidth() - buttonText.getWidth() - dp(71) : dp(71);
             buttonText.draw(canvas, textX, getMeasuredHeight() / 2f);
             if (lock != null) {
                 int x = (int) (textX + buttonText.getWidth() + dp(6));

@@ -1713,8 +1713,15 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
                     }
                     AndroidUtilities.runOnUIThread(animationRunnable, 500);
                     isUploadingState = false;
-                    textView.setTextSize(10);
-                    textView.setText(LocaleController.getString(R.string.MyStory));
+                    if (type == TYPE_ARCHIVE) {
+                        TL_stories.PeerStories stories = storiesController.getStories(dialogId);
+                        int count = stories != null ? stories.stories.size() : 1;
+                        textView.setTextSize(11);
+                        textView.setText(LocaleController.formatPluralString("Stories", Math.max(1, count)));
+                    } else {
+                        textView.setTextSize(10);
+                        textView.setText(LocaleController.getString(R.string.MyStory));
+                    }
                 } else if (user != null) {
                     textView.setTextSize(11);
                     String name = user.first_name == null ? "" : user.first_name.trim();

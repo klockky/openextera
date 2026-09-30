@@ -481,7 +481,7 @@ public class WebActionBar extends FrameLayout {
         backgroundPaint[i].setColor(backgroundColor);
         final float dark = AndroidUtilities.computePerceivedBrightness(backgroundColor) <= .721f ? 1f : 0f;
         final int iconColor = ColorUtils.blendARGB(Color.BLACK, Color.WHITE, dark);
-        progressBackgroundPaint[i].setColor(Theme.blendOver(backgroundColor, Theme.multAlpha(iconColor, lerp(.07f, .2f, dark))));
+        progressBackgroundPaint[i].setColor(Theme.blendOver(backgroundColor, Theme.multAlpha(iconColor, lerp(.05f, .1f, dark))));
         shadowPaint[i].setColor(Theme.blendOver(backgroundColor, Theme.multAlpha(iconColor, lerp(.14f, .24f, dark))));
         titles[i].title.setTextColor(iconColor);
         titles[i].subtitleColor = Theme.blendOver(backgroundColor, Theme.multAlpha(iconColor, .6f));

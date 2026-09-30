@@ -87,6 +87,7 @@ import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.URLSpanNoUnderline;
 import org.telegram.ui.Components.UndoView;
 import org.telegram.ui.Components.voip.CellFlickerDrawable;
+import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
 
 import java.util.ArrayList;
 import java.util.Objects;
@@ -1049,7 +1050,7 @@ public class SessionsActivity extends BaseFragment implements NotificationCenter
 
         BackupImageView imageView;
         TextView textView;
-        TextView buttonTextView;
+        ButtonWithCounterView buttonTextView;
         CellFlickerDrawable flickerDrawable = new CellFlickerDrawable();
 
         public ScanQRCodeView(@NonNull Context context) {
@@ -1087,6 +1088,7 @@ public class SessionsActivity extends BaseFragment implements NotificationCenter
             textView.setGravity(Gravity.CENTER_HORIZONTAL);
             textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+            textView.setTypeface(AndroidUtilities.regular());
             textView.setLinkTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteLinkText));
             textView.setHighlightColor(Theme.getColor(Theme.key_windowBackgroundWhiteLinkSelection));
 
@@ -1115,31 +1117,12 @@ public class SessionsActivity extends BaseFragment implements NotificationCenter
 
             textView.setText(spanned);
 
-            buttonTextView = new TextView(context) {
-                @Override
-                public void draw(Canvas canvas) {
-                    super.draw(canvas);
-
-                    if (flickerDrawable.progress <= 1f && highlightLinkDesktopDevice && fragmentOpened) {
-                        AndroidUtilities.rectTmp.set(0, 0, getWidth(), getHeight());
-                        flickerDrawable.setParentWidth(getMeasuredWidth());
-                        flickerDrawable.draw(canvas, AndroidUtilities.rectTmp, AndroidUtilities.dp(8), null);
-                        invalidate();
-                    }
-                }
-            };
-            buttonTextView.setPadding(AndroidUtilities.dp(34), 0, AndroidUtilities.dp(34), 0);
-            buttonTextView.setGravity(Gravity.CENTER);
-            buttonTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-            buttonTextView.setTypeface(AndroidUtilities.bold());
+            buttonTextView = new ButtonWithCounterView(context, resourceProvider);
 
             SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder();
             spannableStringBuilder.append(".  ").append(getString(R.string.LinkDesktopDevice));
             spannableStringBuilder.setSpan(new ColoredImageSpan(ContextCompat.getDrawable(getContext(), R.drawable.msg_mini_qr)), 0, 1, 0);
-            buttonTextView.setText(spannableStringBuilder);
-
-            buttonTextView.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
-            buttonTextView.setBackground(Theme.createSimpleSelectorRoundRectDrawable(dp(24), Theme.getColor(Theme.key_featuredStickers_addButton), Theme.getColor(Theme.key_featuredStickers_addButtonPressed)));
+            buttonTextView.setText(spannableStringBuilder, false);
 
             buttonTextView.setOnClickListener(view -> {
                 if (getParentActivity() == null) {

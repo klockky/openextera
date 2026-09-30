@@ -36,6 +36,7 @@ import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RLottieImageView;
 import org.telegram.ui.Components.Switch;
+import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
 
 public class SessionBottomSheet extends BottomSheet {
 
@@ -78,6 +79,7 @@ public class SessionBottomSheet extends BottomSheet {
         TextView timeView = new TextView(context);
         timeView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
         timeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        timeView.setTypeface(AndroidUtilities.regular());
         timeView.setGravity(Gravity.CENTER);
         linearLayout.addView(timeView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 21, 4, 21, 21));
 
@@ -234,15 +236,8 @@ public class SessionBottomSheet extends BottomSheet {
         }
 
         if (!isCurrentSession) {
-            TextView buttonTextView = new TextView(context);
-            buttonTextView.setPadding(dp(34), 0, dp(34), 0);
-            buttonTextView.setGravity(Gravity.CENTER);
-            buttonTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-            buttonTextView.setTypeface(AndroidUtilities.bold());
-            buttonTextView.setText(LocaleController.getString(R.string.TerminateSession));
-
-            buttonTextView.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
-            buttonTextView.setBackground(Theme.createSimpleSelectorRoundRectDrawable(dp(24), Theme.getColor(Theme.key_chat_attachAudioBackground), ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_windowBackgroundWhite), 120)));
+            ButtonWithCounterView buttonTextView = new ButtonWithCounterView(context, null);
+            buttonTextView.setText(LocaleController.getString(R.string.TerminateSession), false);
 
             linearLayout.addView(buttonTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, 0, 16, 15, 16, 16));
 

@@ -405,6 +405,15 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             AndroidUtilities.cancelRunOnUIThread(this.onLongClick);
             AndroidUtilities.runOnUIThread(this.onLongClick, ViewConfiguration.getLongPressTimeout());
             return true;
+        } else if (ev.getAction() == MotionEvent.ACTION_MOVE) {
+            if (pressed) {
+                final float x = ev.getX(), y = ev.getY();
+                if (x < 0 || y < 0 || x > getWidth() || y > getHeight()) {
+                    bounce.setPressed(false);
+                    pressed = false;
+                    AndroidUtilities.cancelRunOnUIThread(this.onLongClick);
+                }
+            }
         } else if (ev.getAction() == MotionEvent.ACTION_UP || ev.getAction() == MotionEvent.ACTION_CANCEL) {
             if (pressed) {
                 bounce.setPressed(false);
@@ -808,26 +817,24 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 titleTextLargerCopyView.layout(l, viewTop + dp(10), l + titleTextLargerCopyView.getMeasuredWidth(), viewTop + titleTextLargerCopyView.getTextHeight() + dp(10));
             }
         }
+        final float avatarSizeDelta = avatarSizeInDp - 42f;
         if (communityItem != null) {
-            communityItem.layout(
-                leftPadding + dp(29f),
-                viewTop + dp(27.33f),
-                leftPadding + dp(29f) + communityItem.getMeasuredWidth(),
-                viewTop + dp(27.33f) + communityItem.getMeasuredHeight());
+            final int communityLeft = leftPadding + avatarLeftOffset + dp(29f + avatarSizeDelta);
+            final int communityTop = viewTop + dp(27.33f + avatarSizeDelta);
+            communityItem.layout(communityLeft, communityTop, communityLeft + communityItem.getMeasuredWidth(), communityTop + communityItem.getMeasuredHeight());
         }
         if (timeItem != null) {
-            timeItem.layout(
-                leftPadding + dp(19.333f),
-                viewTop - dp(8),
-                leftPadding + dp(19.333f) + timeItem.getMeasuredWidth(),
-                viewTop - dp(8) + timeItem.getMeasuredHeight()
-            );
+            final int timeLeft = leftPadding + avatarLeftOffset + dp(avatarSizeDelta + 19.333f);
+            final int timeTop = viewTop - dp(8);
+            timeItem.layout(timeLeft, timeTop, timeLeft + timeItem.getMeasuredWidth(), timeTop + timeItem.getMeasuredHeight());
         }
+        final int starLeft = leftPadding + avatarLeftOffset + dp(avatarSizeInDp - 14);
+        final int starTop = viewTop + dp(avatarSizeInDp - 18);
         if (starBgItem != null) {
-            starBgItem.layout(leftPadding + dp(28), viewTop + dp(24), leftPadding + dp(28) + starBgItem.getMeasuredWidth(), viewTop + dp(24) + starBgItem.getMeasuredHeight());
+            starBgItem.layout(starLeft, starTop, starLeft + starBgItem.getMeasuredWidth(), starTop + starBgItem.getMeasuredHeight());
         }
         if (starFgItem != null) {
-            starFgItem.layout(leftPadding + dp(28), viewTop + dp(24), leftPadding + dp(28) + starFgItem.getMeasuredWidth(), viewTop + dp(24) + starFgItem.getMeasuredHeight());
+            starFgItem.layout(starLeft, starTop, starLeft + starFgItem.getMeasuredWidth(), starTop + starFgItem.getMeasuredHeight());
         }
         if (subtitleTextView != null) {
             subtitleTextView.layout(l, subtitleTop, l + subtitleTextView.getMeasuredWidth(), subtitleTop + subtitleTextView.getTextHeight());
@@ -1186,7 +1193,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private boolean showingSavedMessagesHint;
 
     public void updateSubtitle(boolean animated) {
-        if (parentFragment == null) {
+        if (parentFragment == null || parentFragment.isFeedSearch()) {
             return;
         }
         if (parentFragment.getChatMode() == ChatActivity.MODE_EDIT_BUSINESS_LINK) {
@@ -1765,6 +1772,9 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         info.setContentDescription(sb);
         if (info.isClickable()) {
             info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_CLICK, getString(R.string.OpenProfile)));
+        }
+        if (info.isLongClickable()) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK, getString(R.string.Search)));
         }
     }
 

@@ -445,75 +445,78 @@ public class RoundVideoEncoder {
     }
 
     private void handleFrame() {
+        // Keep the lock for the whole frame, as exteraGram does: the snapshot references the camera's live
+        // texture, and holding the lock while the encoder samples it makes the camera thread wait in
+        // frameAvailable() instead of updating the texture mid-draw (that race produced white tiles in videos).
         synchronized (pendingFrameLock) {
             if (!pendingFrameSet) {
                 return;
             }
             pendingFrameSet = false;
             currentFrame.copyFrom(pendingFrame);
-        }
-        long sourceTimestampNs = currentFrame.sourceTimestampNs;
-        long arrivalTimeNs = currentFrame.arrivalTimeNs;
-        int cameraId = currentFrame.cameraId;
-        if (state != STATE_RECORDING) {
-            return;
-        }
-        try {
-            drainEncoders();
-            feedPendingAudio();
+            long sourceTimestampNs = currentFrame.sourceTimestampNs;
+            long arrivalTimeNs = currentFrame.arrivalTimeNs;
+            int cameraId = currentFrame.cameraId;
+            if (state != STATE_RECORDING) {
+                return;
+            }
+            try {
+                drainEncoders();
+                feedPendingAudio();
 
-            boolean cameraChanged = cameraId != lastCameraId;
-            lastCameraId = cameraId;
-            boolean discontinuity = true;
-            long frameTimeNs;
-            if (sourceTimestampNs <= 0) {
-                sourceAnchorSet = false;
-                frameTimeNs = arrivalTimeNs;
-            } else {
-                if (!sourceAnchorSet || cameraChanged || sourceTimestampNs <= lastSourceTimestampNs || sourceTimestampNs - lastSourceTimestampNs > NANOS_PER_SECOND) {
-                    sourceAnchorSourceNs = sourceTimestampNs;
-                    sourceAnchorMonotonicNs = arrivalTimeNs;
-                    sourceAnchorSet = true;
+                boolean cameraChanged = cameraId != lastCameraId;
+                lastCameraId = cameraId;
+                boolean discontinuity = true;
+                long frameTimeNs;
+                if (sourceTimestampNs <= 0) {
+                    sourceAnchorSet = false;
                     frameTimeNs = arrivalTimeNs;
                 } else {
-                    frameTimeNs = sourceAnchorMonotonicNs + (sourceTimestampNs - sourceAnchorSourceNs);
-                    discontinuity = false;
+                    if (!sourceAnchorSet || cameraChanged || sourceTimestampNs <= lastSourceTimestampNs || sourceTimestampNs - lastSourceTimestampNs > NANOS_PER_SECOND) {
+                        sourceAnchorSourceNs = sourceTimestampNs;
+                        sourceAnchorMonotonicNs = arrivalTimeNs;
+                        sourceAnchorSet = true;
+                        frameTimeNs = arrivalTimeNs;
+                    } else {
+                        frameTimeNs = sourceAnchorMonotonicNs + (sourceTimestampNs - sourceAnchorSourceNs);
+                        discontinuity = false;
+                    }
+                    lastSourceTimestampNs = sourceTimestampNs;
                 }
-                lastSourceTimestampNs = sourceTimestampNs;
-            }
 
-            if (segmentFirstArrivalNs == -1) {
-                segmentFirstArrivalNs = arrivalTimeNs;
-            }
-            if (arrivalTimeNs - segmentFirstArrivalNs < SEGMENT_WARMUP_NS) {
-                return;
-            }
+                if (segmentFirstArrivalNs == -1) {
+                    segmentFirstArrivalNs = arrivalTimeNs;
+                }
+                if (arrivalTimeNs - segmentFirstArrivalNs < SEGMENT_WARMUP_NS) {
+                    return;
+                }
 
-            if (segmentVideoOriginNs != -1) {
-                long activeTimeNs = segmentActiveBaseNs + (frameTimeNs - segmentVideoOriginNs);
+                if (segmentVideoOriginNs != -1) {
+                    long activeTimeNs = segmentActiveBaseNs + (frameTimeNs - segmentVideoOriginNs);
+                    long frameIndex = frameRate * activeTimeNs / NANOS_PER_SECOND;
+                    if (frameIndex > lastVideoFrameIndex && activeTimeNs / 1000 < maxDurationUs) {
+                        acceptFrame(frameIndex, activeTimeNs, discontinuity ? 0 : activeTimeNs - lastVideoActiveTimeNs);
+                    }
+                    return;
+                }
+
+                long activeTimeNs = lastVideoFrameIndex < 0 ? 0 : lastVideoActiveTimeNs + videoFallbackFrameDurationNs();
+                if (activeTimeNs / 1000 >= maxDurationUs) {
+                    return;
+                }
                 long frameIndex = frameRate * activeTimeNs / NANOS_PER_SECOND;
-                if (frameIndex > lastVideoFrameIndex && activeTimeNs / 1000 < maxDurationUs) {
-                    acceptFrame(frameIndex, activeTimeNs, discontinuity ? 0 : activeTimeNs - lastVideoActiveTimeNs);
+                segmentVideoOriginNs = frameTimeNs;
+                segmentActiveBaseNs = activeTimeNs;
+                if (BuildVars.LOGS_ENABLED) {
+                    FileLog.d("RoundVideoEncoder segment origin at " + activeTimeNs + "ns slot " + frameIndex);
                 }
-                return;
+                if (acceptFrame(frameIndex, activeTimeNs, 0)) {
+                    feedPendingAudio();
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+                fail();
             }
-
-            long activeTimeNs = lastVideoFrameIndex < 0 ? 0 : lastVideoActiveTimeNs + videoFallbackFrameDurationNs();
-            if (activeTimeNs / 1000 >= maxDurationUs) {
-                return;
-            }
-            long frameIndex = frameRate * activeTimeNs / NANOS_PER_SECOND;
-            segmentVideoOriginNs = frameTimeNs;
-            segmentActiveBaseNs = activeTimeNs;
-            if (BuildVars.LOGS_ENABLED) {
-                FileLog.d("RoundVideoEncoder segment origin at " + activeTimeNs + "ns slot " + frameIndex);
-            }
-            if (acceptFrame(frameIndex, activeTimeNs, 0)) {
-                feedPendingAudio();
-            }
-        } catch (Exception e) {
-            FileLog.e(e);
-            fail();
         }
     }
 

@@ -5934,6 +5934,9 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
                     stringBuilder.setSpan(span, stringBuilder.length() - 3, stringBuilder.length() - 2, 0);
                     stringBuilder.append(AndroidUtilities.formatWholeNumber(storyItem.views.views_count, 0));
                     selfStatusView.setText(stringBuilder);
+                    if (selfView != null) {
+                        ((FrameLayout.LayoutParams) selfView.getLayoutParams()).rightMargin = (int) (dp(80) + selfStatusView.getPaint().measureText(stringBuilder.toString()));
+                    }
                 } else {
                     selfStatusView.setText("");
                 }

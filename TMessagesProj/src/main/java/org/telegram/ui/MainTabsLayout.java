@@ -639,8 +639,8 @@ public class MainTabsLayout extends AnimatedLinearLayout {
             pivotY = cy;
         }
 
-        pivotX = lerp(cx, pivotX, 1f);
-        pivotY = lerp(cy, pivotY, 3f);
+        pivotX = lerp(cx, pivotX, 0.95f);
+        pivotY = lerp(cy, pivotY, 2.83f);
 
         view.setPivotX(pivotX);
         view.setPivotY(pivotY);

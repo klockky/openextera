@@ -134,6 +134,13 @@ public class SimpleTextView extends View implements Drawable.Callback {
     private float touchDownX, touchDownY;
     private OnClickListener rightDrawable2OnClickListener;
     private boolean maybeClick2;
+    private final Runnable longPressRunnable = () -> {
+        if (maybeClick) {
+            maybeClick = false;
+        } else if (maybeClick2) {
+            maybeClick2 = false;
+        }
+    };
     private float touchDown2X, touchDown2Y;
 
     private AnimatedEmojiSpan.EmojiGroupedSpans emojiStack;
@@ -1354,8 +1361,10 @@ public class SimpleTextView extends View implements Drawable.Callback {
             if (rightDrawable2 instanceof PressableDrawable) {
                 ((PressableDrawable) rightDrawable2).setPressed(true);
             }
+            AndroidUtilities.runOnUIThread(longPressRunnable, 500);
         } else if (event.getAction() == MotionEvent.ACTION_MOVE && maybeClick2) {
             if (Math.abs(event.getX() - touchDown2X) >= AndroidUtilities.touchSlop || Math.abs(event.getY() - touchDown2Y) >= AndroidUtilities.touchSlop) {
+                AndroidUtilities.cancelRunOnUIThread(longPressRunnable);
                 maybeClick2 = false;
                 getParent().requestDisallowInterceptTouchEvent(false);
                 if (rightDrawable2 instanceof PressableDrawable) {
@@ -1363,6 +1372,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
                 }
             }
         } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+            AndroidUtilities.cancelRunOnUIThread(longPressRunnable);
             if (maybeClick2 && event.getAction() == MotionEvent.ACTION_UP) {
                 rightDrawable2OnClickListener.onClick(this);
             }
@@ -1387,8 +1397,10 @@ public class SimpleTextView extends View implements Drawable.Callback {
                 if (rightDrawable instanceof PressableDrawable) {
                     ((PressableDrawable) rightDrawable).setPressed(true);
                 }
+                AndroidUtilities.runOnUIThread(longPressRunnable, 500);
             } else if (event.getAction() == MotionEvent.ACTION_MOVE && maybeClick) {
                 if (Math.abs(event.getX() - touchDownX) >= AndroidUtilities.touchSlop || Math.abs(event.getY() - touchDownY) >= AndroidUtilities.touchSlop) {
+                    AndroidUtilities.cancelRunOnUIThread(longPressRunnable);
                     maybeClick = false;
                     getParent().requestDisallowInterceptTouchEvent(false);
                     if (rightDrawable instanceof PressableDrawable) {
@@ -1396,6 +1408,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
                     }
                 }
             } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                AndroidUtilities.cancelRunOnUIThread(longPressRunnable);
                 if (maybeClick && event.getAction() == MotionEvent.ACTION_UP) {
                     rightDrawableOnClickListener.onClick(this);
                     if (rightDrawable instanceof PressableDrawable) {

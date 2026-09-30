@@ -1395,7 +1395,11 @@ public class GalleryListView extends FrameLayout implements NotificationCenter.N
                 paintUnderCheck.setColor(0x0CFFFFFF);
                 canvas.drawRect(0, 0, getWidth(), getHeight(), paintUnderCheck);
                 canvas.scale(s, s, getWidth() / 2.0f, getHeight() / 2.0f);
-                canvas.clipRect(0, 0, getWidth(), getHeight());
+                clipPath.rewind();
+                AndroidUtilities.rectTmp.set(0, 0, getWidth(), getHeight());
+                final float r = dp(12) * checkBox.getProgress();
+                clipPath.addRoundRect(AndroidUtilities.rectTmp, r, r, Path.Direction.CW);
+                canvas.clipPath(clipPath);
             }
 
             canvas.drawRect(0, 0, getWidth(), getHeight(), bgPaint);
