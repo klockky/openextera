@@ -710,7 +710,7 @@ public class ThemeEditorView {
                 @Override
                 protected void onDraw(@NonNull Canvas canvas) {
                     int y = scrollOffsetY - backgroundPaddingTop + AndroidUtilities.dp(6);
-                    int top = scrollOffsetY - backgroundPaddingTop - AndroidUtilities.dp(13);
+                    int top = scrollOffsetY - backgroundPaddingTop - AndroidUtilities.dp(8);
                     int height = getMeasuredHeight() + AndroidUtilities.dp(30) + backgroundPaddingTop;
                     int statusBarHeight = 0;
                     float radProgress = 1.0f;

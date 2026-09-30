@@ -1472,8 +1472,10 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
         progressView.addView(progressView2, LayoutHelper.createFrame(36, 36, Gravity.CENTER));
 
         progressBar = new RadialProgressView(context);
+        progressBar.setStyle(2);
         progressBar.setSize(dp(28));
         progressBar.setProgressColor(Theme.getColor(Theme.key_chat_serviceText));
+        progressBar.setTrackColor(Theme.blendOver(Theme.getColor(Theme.key_chat_serviceBackground), Theme.multAlpha(Theme.getColor(Theme.key_chat_serviceText), Theme.isCurrentThemeDark() ? 0.65f : 0.8f)));
         progressView.addView(progressBar, LayoutHelper.createFrame(32, 32, Gravity.CENTER));
 
         floatingDateView = new ChatActionCell(context);

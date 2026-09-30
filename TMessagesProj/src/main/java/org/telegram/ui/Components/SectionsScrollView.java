@@ -152,12 +152,17 @@ public class SectionsScrollView extends ScrollView {
 
         AndroidUtilities.rectTmp.set(
             contentView.getX() + getChildX(from),
-            Math.max(getScrollY() - dp(16), contentView.getY() + getChildY(from) - fromTopMargin),
+            Math.max(getScrollY() - sectionRadius, contentView.getY() + getChildY(from) - fromTopMargin),
             contentView.getX() + getChildX(from) + from.getWidth(),
-            Math.min(getHeight() + dp(16) + getScrollY(), contentView.getY() + getChildY(to) + to.getHeight() + toBottomMargin)
+            Math.min(getHeight() + sectionRadius + getScrollY(), contentView.getY() + getChildY(to) + to.getHeight() + toBottomMargin)
         );
         if (AndroidUtilities.rectTmp.bottom < AndroidUtilities.rectTmp.top) return;
-        RecyclerListView.drawBackgroundRect(canvas, AndroidUtilities.rectTmp, dp(16), dp(16), from.getAlpha(), resourcesProvider);
+        final float radius = from == to && RecyclerListView.isRoundSectionView(from) ? getSingleSectionRadius() : sectionRadius;
+        RecyclerListView.drawBackgroundRect(canvas, AndroidUtilities.rectTmp, radius, radius, from.getAlpha(), resourcesProvider);
+    }
+
+    private float getSingleSectionRadius() {
+        return AndroidUtilities.rectTmp.height() / 2f;
     }
 
     @Override
@@ -185,9 +190,9 @@ public class SectionsScrollView extends ScrollView {
 
         AndroidUtilities.rectTmp.set(
             child.getX(),
-            Math.max(getScrollY() - dp(16), contentView.getY() + child.getY()),
+            Math.max(getScrollY() - sectionRadius, contentView.getY() + child.getY()),
             child.getX() + child.getWidth(),
-            Math.min(getHeight() + getScrollY() + dp(16), contentView.getY() + child.getY() + child.getHeight())
+            Math.min(getHeight() + getScrollY() + sectionRadius, contentView.getY() + child.getY() + child.getHeight())
         );
         if (prev && next) {
             prev = child.getY() >= AndroidUtilities.rectTmp.top;
@@ -196,7 +201,8 @@ public class SectionsScrollView extends ScrollView {
         }
         if (!prev && !next) {
             clipPath.rewind();
-            clipPath.addRoundRect(AndroidUtilities.rectTmp, sectionRadius, sectionRadius, Path.Direction.CW);
+            final float radius = RecyclerListView.isRoundSectionView(child) ? getSingleSectionRadius() : sectionRadius;
+            clipPath.addRoundRect(AndroidUtilities.rectTmp, radius, radius, Path.Direction.CW);
             canvas.clipPath(clipPath);
         } else if (!prev) {
             clipPath.rewind();

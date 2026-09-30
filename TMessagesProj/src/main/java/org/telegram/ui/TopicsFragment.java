@@ -122,7 +122,6 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.ListView.AdapterWithDiffUtils;
 import org.telegram.ui.Components.NumberTextView;
 import org.telegram.ui.Components.PullForegroundDrawable;
-import org.telegram.ui.Components.RLottieDrawable;
 import org.telegram.ui.Components.RadialProgressView;
 import org.telegram.ui.Components.RecyclerAnimationScrollHelper;
 import org.telegram.ui.Components.RecyclerItemsEnterAnimator;
@@ -437,12 +436,12 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
                     getParentLayout().drawHeaderShadow(canvas, (int) (255 * (1f - searchAnimationProgress)), y);
                     if (searchAnimationProgress > 0) {
                         if (searchAnimationProgress < 1) {
-                            int a = Theme.dividerPaint.getAlpha();
-                            Theme.dividerPaint.setAlpha((int) (a * searchAnimationProgress));
-                            canvas.drawLine(0, y, getMeasuredWidth(), y, Theme.dividerPaint);
-                            Theme.dividerPaint.setAlpha(a);
+                            int a = Theme.forcedDividerPaint.getAlpha();
+                            Theme.forcedDividerPaint.setAlpha((int) (a * searchAnimationProgress));
+                            canvas.drawLine(0, y, getMeasuredWidth(), y, Theme.forcedDividerPaint);
+                            Theme.forcedDividerPaint.setAlpha(a);
                         } else {
-                            canvas.drawLine(0, y, getMeasuredWidth(), y, Theme.dividerPaint);
+                            canvas.drawLine(0, y, getMeasuredWidth(), y, Theme.forcedDividerPaint);
                         }
                     }
                 }
@@ -608,7 +607,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
                     actionBarPaint.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
                     actionBarPaint.setAlpha((int) (255 * searchAnimationProgress));
                     canvas.drawRect(0, 0, getWidth(), AndroidUtilities.statusBarHeight, actionBarPaint);
-                    canvas.drawLine(0, 0, 0, getHeight(), Theme.dividerPaint);
+                    canvas.drawLine(0, 0, 0, getHeight(), Theme.forcedDividerPaint);
                 }
                 if (parentDialogsActivity == null) {
                     AndroidUtilities.drawNavigationBarProtection(canvas, this, getThemedColor(Theme.key_windowBackgroundWhite), navigationBarHeight);
@@ -836,6 +835,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
             }
         });
         ActionBarMenu menu = actionBar.createMenu();
+        menu.setTranslationX(-AndroidUtilities.dp(5));
 
         if (parentDialogsActivity != null) {
             searchItem = menu.addItem(0, R.drawable.outline_header_search);
@@ -880,7 +880,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
         other.setContentDescription(getString(R.string.AccDescrMoreOptions));
         other.addSubItem(toggle_id, R.drawable.msg_discussion, getString(R.string.TopicViewAsMessages));
         addMemberSubMenu = other.addSubItem(add_member_id, R.drawable.msg_addcontact, getString(R.string.AddMember));
-        boostGroupSubmenu = other.addSubItem(boost_group_id, 0, new RLottieDrawable(R.raw.boosts, AndroidUtilities.dp(24), AndroidUtilities.dp(24)), getString(R.string.BoostingBoostGroupMenu), true, false);
+        boostGroupSubmenu = other.addSubItem(boost_group_id, R.drawable.boosts, getString(R.string.BoostingBoostGroupMenu));
         createTopicSubmenu = other.addSubItem(create_topic_id, R.drawable.msg_topic_create, getString(R.string.CreateTopic));
         reportSubmenu = other.addSubItem(report, R.drawable.msg_report, getString(R.string.ReportChat));
         deleteChatSubmenu = other.addSubItem(delete_chat_id, R.drawable.msg_leave, getString(R.string.LeaveMegaMenu), themeDelegate);
@@ -1361,10 +1361,9 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
         bottomOverlayContainer = new FrameLayout(context) {
             @Override
             protected void dispatchDraw(@NonNull Canvas canvas) {
-                int bottom = Theme.chat_composeShadowDrawable.getIntrinsicHeight();
-                Theme.chat_composeShadowDrawable.setBounds(0, 0, getMeasuredWidth(), bottom);
-                Theme.chat_composeShadowDrawable.draw(canvas);
                 super.dispatchDraw(canvas);
+                final float y = Theme.chat_composeShadowDrawable.getIntrinsicHeight();
+                canvas.drawLine(0, y, getWidth(), y, Theme.forcedDividerPaint);
             }
         };
         bottomOverlayChatText = new UnreadCounterTextView(context);

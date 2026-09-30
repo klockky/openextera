@@ -64,7 +64,7 @@ public class SendButtonBlockedByTypingView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        DrawableUtils.setBounds(typingDotsDrawable, w / 2f, h / 2f, Gravity.CENTER);
+        DrawableUtils.setBounds(typingDotsDrawable, w - dp(20), h / 2f, Gravity.CENTER);
     }
 
     @Override
@@ -74,7 +74,7 @@ public class SendButtonBlockedByTypingView extends View {
 
         super.onDraw(canvas);
         paint.setColor(Theme.getColor(Theme.key_chat_messagePanelSend, resourcesProvider));
-        canvas.drawCircle(cx, cy, dp(19), paint);
+        canvas.drawCircle(cx, cy, dp(20), paint);
 
         final float factorStop = animatorStopAllowed.getFloatValue();
         final float factorDots = 1f - factorStop;

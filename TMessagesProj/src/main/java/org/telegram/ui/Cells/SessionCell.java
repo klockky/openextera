@@ -401,12 +401,23 @@ public class SessionCell extends FrameLayout {
             colorKey = Theme.key_avatar_backgroundPink;
             colorKey2 = Theme.key_avatar_background2Pink;
         }
+        final boolean isExteraGram = session.app_name.toLowerCase().contains("exteragram");
+        if (isExteraGram) {
+            iconId = R.drawable.ic_foreground;
+        }
         Drawable iconDrawable = ContextCompat.getDrawable(ApplicationLoader.applicationContext, iconId).mutate();
-        iconDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_avatar_text), PorterDuff.Mode.SRC_IN));
-        Drawable bgDrawable = new CircleGradientDrawable(dp(sz), colorKey == -1 ? 0xFF000000 : Theme.getColor(colorKey), colorKey2 == -1 ? 0xFF000000 : Theme.getColor(colorKey2));
+        if (!isExteraGram) {
+            iconDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_avatar_text), PorterDuff.Mode.SRC_IN));
+        }
+        final int exteraBackground = isExteraGram ? ContextCompat.getColor(ApplicationLoader.applicationContext, R.color.ic_background) : 0;
+        Drawable bgDrawable = new CircleGradientDrawable(dp(sz),
+                isExteraGram ? exteraBackground : colorKey == -1 ? 0xFF000000 : Theme.getColor(colorKey),
+                isExteraGram ? exteraBackground : colorKey2 == -1 ? 0xFF000000 : Theme.getColor(colorKey2));
         CombinedDrawable drawable = new CombinedDrawable(bgDrawable, iconDrawable);
-        if (platform != null && platform.contains("fragment")) {
+        if (platform.contains("fragment")) {
             drawable.setIconSize((int) (iconDrawable.getIntrinsicWidth() / 44.0f * sz), (int) (iconDrawable.getIntrinsicHeight() / 44.0f * sz));
+        } else {
+            drawable.setIconSize(dp(42), dp(42));
         }
         return drawable;
     }

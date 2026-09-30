@@ -450,8 +450,8 @@ public final class BulletinFactory {
         layout.textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         layout.textView.setTextDirection(View.TEXT_DIRECTION_LOCALE);
         layout.textView.setSingleLine(false);
-        layout.textView.setMaxLines(3);
-        layout.textView.setText(text);
+        layout.textView.setMaxLines(4);
+        layout.textView.setText(AndroidUtilities.replaceTags(text.toString()));
         layout.setButton(new Bulletin.UndoButton(getContext(), true, icon, resourcesProvider).setText(button).setUndoAction(onButtonClick));
         return create(layout, duration);
     }
@@ -742,6 +742,9 @@ public final class BulletinFactory {
             layout.imageView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_undo_infoColor), PorterDuff.Mode.SRC_IN));
         }
         layout.setAnimation(document, 36, 36);
+        if (layout.imageView.getImageReceiver() != null) {
+            layout.imageView.getImageReceiver().setRoundRadius(dp(5));
+        }
         layout.textView.setText(text);
         layout.textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         layout.textView.setSingleLine(false);
@@ -793,13 +796,18 @@ public final class BulletinFactory {
         }
         layout.setAnimation(document, 36, 36);
         if (layout.imageView.getImageReceiver() != null) {
-            layout.imageView.getImageReceiver().setRoundRadius(dp(4));
+            layout.imageView.getImageReceiver().setRoundRadius(dp(8));
+        }
+        if (text.toString().contains("**")) {
+            text = AndroidUtilities.replaceTags(text);
         }
         layout.textView.setText(text);
         layout.textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         layout.textView.setSingleLine(false);
-        layout.textView.setMaxLines(3);
-        layout.setButton(new Bulletin.UndoButton(getContext(), true, resourcesProvider).setText(button).setUndoAction(onButtonClick));
+        layout.textView.setMaxLines(4);
+        if (button != null && onButtonClick != null) {
+            layout.setButton(new Bulletin.UndoButton(getContext(), true, resourcesProvider).setText(button).setUndoAction(onButtonClick));
+        }
         return create(layout, Bulletin.DURATION_LONG);
     }
 

@@ -50,7 +50,7 @@ public class PermanentLinkBottomSheet extends BottomSheet {
         setAllowNestedScroll(true);
         setApplyBottomPadding(false);
         setApplyTopPadding(false);
-        fixNavigationBar(getThemedColor(Theme.key_windowBackgroundWhite));
+        fixNavigationBar(getThemedColor(Theme.key_dialogBackground));
 
         LinearLayout linearLayout = new LinearLayout(context);
         linearLayout.setOrientation(LinearLayout.VERTICAL);

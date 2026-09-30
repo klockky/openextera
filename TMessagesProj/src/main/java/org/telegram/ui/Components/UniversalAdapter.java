@@ -467,7 +467,7 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
                 break;
             case VIEW_TYPE_TEXT_CHECK:
             case VIEW_TYPE_ICON_TEXT_CHECK:
-                view = new NotificationsCheckCell(context, 21, 60, viewType == VIEW_TYPE_ICON_TEXT_CHECK, resourcesProvider);
+                view = new NotificationsCheckCell(context, 21, 60, 71, viewType == VIEW_TYPE_ICON_TEXT_CHECK, resourcesProvider);
                 break;
             case VIEW_TYPE_CUSTOM:
             case VIEW_TYPE_CUSTOM_SHADOW:

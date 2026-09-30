@@ -395,7 +395,7 @@ public class ItemOptions {
             final boolean inside = rawX >= location[0] && rawX <= location[0] + child.getWidth() && rawY >= location[1] && rawY <= location[1] + child.getHeight();
             if (child.isClickable()) {
                 if (inside && !child.isPressed()) {
-                    child.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_TAP), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                    child.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.CLOCK_TICK), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                 }
                 if (child.isPressed() != inside) {
                     child.setPressed(inside);
@@ -2093,7 +2093,7 @@ public class ItemOptions {
             }
             hoveredItem = hit;
             if (hoveredItem != null) {
-                hoveredItem.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.KEYBOARD_TAP), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                hoveredItem.performHapticFeedback(VibratorUtils.getType(HapticFeedbackConstants.CLOCK_TICK), HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
                 hoveredItem.setPressed(true);
             }
         }

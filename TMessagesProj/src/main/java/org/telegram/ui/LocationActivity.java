@@ -1694,6 +1694,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
             }
             canvas.translate(dp(6), dp(6));
             avatarDrawable.setBounds(0, 0, dp(50), dp(50));
+            avatarDrawable.setRoundRadius(dp(25));
             avatarDrawable.draw(canvas);
             canvas.restore();
 

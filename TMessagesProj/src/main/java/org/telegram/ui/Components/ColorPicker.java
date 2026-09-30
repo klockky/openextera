@@ -766,10 +766,8 @@ public class ColorPicker extends FrameLayout {
     }
 
     private void drawPointerArrow(Canvas canvas, int x, int y, int color, boolean small) {
-        int side = AndroidUtilities.dp(small ? 12 : 16);
-        circleDrawable.setBounds(x - side, y - side, x + side, y + side);
-        circleDrawable.draw(canvas);
-
+        circlePaint.setColor(0xff707070);
+        canvas.drawCircle(x, y, AndroidUtilities.dp(small ? 11.5f : 15.5f), circlePaint);
         circlePaint.setColor(0xffffffff);
         canvas.drawCircle(x, y, AndroidUtilities.dp(small ? 11 : 15), circlePaint);
         circlePaint.setColor(color);

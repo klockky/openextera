@@ -82,8 +82,8 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
 
         container = new FrameLayout(context);
         container.setClipToOutline(true);
-        container.setOutlineProvider(ViewOutlineProviderImpl.boundsWithPaddingRoundRect(0, dp(22)));
-        addView(container, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44, Gravity.CENTER_VERTICAL));
+        container.setOutlineProvider(ViewOutlineProviderImpl.boundsWithPaddingRoundRect(0, dp(24)));
+        addView(container, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.CENTER_VERTICAL));
     }
 
     public void updateColors() {
@@ -269,7 +269,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             if (holder == null) {
                 continue;
             }
-            paddingLeft += holder.visibilityAnimator.getValue() ? dp(44 + 10) : 0;
+            paddingLeft += holder.visibilityAnimator.getValue() ? dp(48 + 10) : 0;
         }
 
         for (final int buttonId : buttonsOrderRight) {
@@ -277,7 +277,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             if (holder == null) {
                 continue;
             }
-            paddingRight += holder.visibilityAnimator.getValue() ? dp(44 + 10) : 0;
+            paddingRight += holder.visibilityAnimator.getValue() ? dp(48 + 10) : 0;
         }
 
         final MarginLayoutParams lp = (MarginLayoutParams) container.getLayoutParams();
@@ -313,8 +313,8 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
                 continue;
             }
 
-            final float width = holder.visibilityAnimator.getFloatValue() * dp(44 + 10);    // width + margin
-            holder.button.setTranslationX(dp(1) + totalWidthLeft);
+            final float width = holder.visibilityAnimator.getFloatValue() * dp(48 + 10);    // width + margin
+            holder.button.setTranslationX(dp(3) + totalWidthLeft);
             totalWidthLeft += width;
         }
 
@@ -324,8 +324,8 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
                 continue;
             }
 
-            final float width = holder.visibilityAnimator.getFloatValue() * dp(44 + 10);    // width + margin
-            holder.button.setTranslationX(getMeasuredWidth() - holder.button.getMeasuredWidth() - dp(1) - totalWidthRight);
+            final float width = holder.visibilityAnimator.getFloatValue() * dp(48 + 10);    // width + margin
+            holder.button.setTranslationX(getMeasuredWidth() - holder.button.getMeasuredWidth() - dp(3) - totalWidthRight);
             totalWidthRight += width;
         }
 
@@ -433,13 +433,13 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
         if (accentAlpha > 0) {
             tmpRect.set(
                 totalWidthLeft + dp(10),
-                dp(9),
+                dp(7),
                 getMeasuredWidth() - dp(10) - totalWidthRight,
-                getMeasuredHeight() - dp(9)
+                getMeasuredHeight() - dp(7)
             );
             backgroundAccentPaint.setColor(accentColor);
             backgroundAccentPaint.setAlpha(accentAlpha);
-            canvas.drawRoundRect(tmpRect, dp(19), dp(19), backgroundAccentPaint);
+            canvas.drawRoundRect(tmpRect, dp(21), dp(21), backgroundAccentPaint);
         }
 
         super.dispatchDraw(canvas);

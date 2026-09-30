@@ -36,6 +36,7 @@ public class CopyUtilities {
     private final static int TYPE_MONO = 1;
     private final static int TYPE_QUOTE = 2;
     private final static int TYPE_COLLAPSE = 3;
+    private final static int TYPE_CODE = 4;
 
     public static Spannable fromHTML(String html) {
         Spanned spanned;
@@ -83,6 +84,8 @@ public class CopyUtilities {
                     } else {
                         entities.add(setEntityStartEnd(new TLRPC.TL_messageEntityPre(), start, end));
                     }
+                } else if (parsedSpan.type == TYPE_CODE) {
+                    entities.add(setEntityStartEnd(new TLRPC.TL_messageEntityCode(), start, end));
                 } else if (parsedSpan.type == TYPE_QUOTE || parsedSpan.type == TYPE_COLLAPSE) {
                     quotes.add(parsedSpan);
                 }
@@ -273,15 +276,23 @@ public class CopyUtilities {
                         return true;
                     }
                 }
-            } else if (tag.equals("pre")) {
+            } else if (tag.equals("pre") || tag.equals("code") || tag.equals("tt")) {
+                final boolean pre = tag.equals("pre");
+                if (!pre && getLast(output, ParsedSpan.class, TYPE_MONO) != null) {
+                    return false;
+                }
+                final int type = pre ? TYPE_MONO : TYPE_CODE;
                 if (opening) {
-                    String lang = HTMLTagAttributesHandler.getValue(attributes, "language");
-                    if (lang == null) lang = HTMLTagAttributesHandler.getValue(attributes, "lang");
-                    if (lang == null) lang = HTMLTagAttributesHandler.getValue(attributes, "lng");
-                    output.setSpan(new ParsedSpan(TYPE_MONO, lang), output.length(), output.length(), Spanned.SPAN_MARK_MARK);
+                    String lang = null;
+                    if (pre) {
+                        lang = HTMLTagAttributesHandler.getValue(attributes, "language");
+                        if (lang == null) lang = HTMLTagAttributesHandler.getValue(attributes, "lang");
+                        if (lang == null) lang = HTMLTagAttributesHandler.getValue(attributes, "lng");
+                    }
+                    output.setSpan(new ParsedSpan(type, lang), output.length(), output.length(), Spanned.SPAN_MARK_MARK);
                     return true;
                 } else {
-                    ParsedSpan obj = getLast(output, ParsedSpan.class, TYPE_MONO);
+                    ParsedSpan obj = getLast(output, ParsedSpan.class, type);
                     if (obj != null) {
                         int where = output.getSpanStart(obj);
                         output.removeSpan(obj);

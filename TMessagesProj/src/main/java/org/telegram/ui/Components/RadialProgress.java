@@ -23,6 +23,7 @@ import android.view.animation.DecelerateInterpolator;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Stories.StoriesUtilities;
 
 public class RadialProgress {
 
@@ -71,6 +72,7 @@ public class RadialProgress {
     private Paint overridePaint = null;
     private boolean disableUpdate;
     private boolean roundRectProgress;
+    private float roundRectRadius = -1f;
 
     public float getAnimatedProgress() {
         return animatedProgressValue;
@@ -550,7 +552,10 @@ public class RadialProgress {
     private final Path roundRectProgressPath = new Path();
 
     private void drawArc(Canvas canvas, RectF oval, float startAngle, float sweepAngle, boolean useCenter, Paint paint) {
-        if (roundRectProgress) {
+        if (roundRectRadius >= 0) {
+            final float endAngle = startAngle + sweepAngle;
+            StoriesUtilities.drawRoundRectSegment(canvas, oval, roundRectRadius, Math.min(startAngle, endAngle), Math.max(startAngle, endAngle), paint);
+        } else if (roundRectProgress) {
             float r = oval.height() * 0.32f;
             if (Math.abs(sweepAngle) == 360) {
                 canvas.drawRoundRect(oval, r, r, paint);
@@ -590,5 +595,9 @@ public class RadialProgress {
 
     public void setRoundRectProgress(boolean roundRectProgress) {
         this.roundRectProgress = roundRectProgress;
+    }
+
+    public void setRoundRectRadius(float radius) {
+        roundRectRadius = radius;
     }
 }

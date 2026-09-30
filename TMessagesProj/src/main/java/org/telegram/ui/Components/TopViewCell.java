@@ -3,6 +3,7 @@ package org.telegram.ui.Components;
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -87,10 +88,15 @@ public class TopViewCell extends LinearLayout implements Theme.Colorable {
     }
 
     public void setText(CharSequence text) {
-        titleView.setVisibility(View.GONE);
-        textView.setText(text);
-        textView.setMaxWidth(HintView2.cutInFancyHalf(text, textView.getPaint()));
-        textView.requestLayout();
+        if (TextUtils.isEmpty(text)) {
+            textView.setVisibility(View.GONE);
+        } else {
+            titleView.setVisibility(View.GONE);
+            textView.setVisibility(View.VISIBLE);
+            textView.setText(text);
+            textView.setMaxWidth(HintView2.cutInFancyHalf(text, textView.getPaint()));
+            textView.requestLayout();
+        }
 
         updateColors();
     }

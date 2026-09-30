@@ -8996,8 +8996,8 @@ public class RichMessageLayout {
             int targetDelta = 0;
             if (velocityX < 0 && currentPage < cells.size() - 1) targetDelta = 1;
             else if (velocityX > 0 && currentPage > 0) targetDelta = -1;
-            else if (pageOffset > 0.5f && currentPage < cells.size() - 1) targetDelta = 1;
-            else if (pageOffset < -0.5f && currentPage > 0) targetDelta = -1;
+            else if (pageOffset > 0.15f && currentPage < cells.size() - 1) targetDelta = 1;
+            else if (pageOffset < -0.15f && currentPage > 0) targetDelta = -1;
             final int target = currentPage + targetDelta;
             final float from = pageOffset;
             final float to = (target - currentPage);

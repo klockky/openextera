@@ -289,12 +289,9 @@ public class ColorPicker extends FrameLayout {
         int cx = (int) (rectF.left + rectF.width() * location);
         int cy = (int) (rectF.centerY() + draggingFactor * -AndroidUtilities.dp(70) - (changingWeight ? weight * AndroidUtilities.dp(190) : 0.0f));
 
-        int side = (int) (AndroidUtilities.dp(24) * (0.5f * (1 + draggingFactor)));
-        shadowDrawable.setBounds(cx - side, cy - side, cx + side, cy + side);
-        shadowDrawable.draw(canvas);
-
         float swatchRadius = (int) Math.floor(AndroidUtilities.dp(4) + (AndroidUtilities.dp(19) - AndroidUtilities.dp(4)) * weight) * (1 + draggingFactor) / 2;
 
+        canvas.drawCircle(cx, cy, AndroidUtilities.dp(22) / 2 * (draggingFactor + 1) + 0.5f, swatchStrokePaint);
         canvas.drawCircle(cx, cy, AndroidUtilities.dp(22) / 2 * (draggingFactor + 1), backgroundPaint);
         canvas.drawCircle(cx, cy, swatchRadius, swatchPaint);
         canvas.drawCircle(cx, cy, swatchRadius - AndroidUtilities.dp(0.5f), swatchStrokePaint);

@@ -103,6 +103,7 @@ import androidx.core.graphics.ColorUtils;
 import com.exteragram.messenger.ExteraConfig;
 import com.exteragram.messenger.components.QrCodeLoginView;
 import com.exteragram.messenger.utils.ui.FabUiHelper;
+import com.exteragram.messenger.utils.ui.UIUtil;
 
 import com.android.billingclient.api.BillingClient;
 import com.android.billingclient.api.BillingFlowParams;
@@ -345,7 +346,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
     private boolean checkPermissions = true;
     private boolean checkShowPermissions = true;
     private boolean newAccount;
-    private boolean syncContacts = true;
+    private boolean syncContacts;
     private boolean testBackend = false;
 
     @ActivityMode
@@ -718,7 +719,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         }
         if (savedInstanceState != null) {
             currentViewNum = savedInstanceState.getInt("currentViewNum", 0);
-            syncContacts = savedInstanceState.getInt("syncContacts", 1) == 1;
+            syncContacts = savedInstanceState.getInt("syncContacts", 0) == 1;
             if (currentViewNum >= VIEW_CODE_MESSAGE && currentViewNum <= VIEW_CODE_CALL) {
                 int time = savedInstanceState.getInt("open");
                 if (time != 0 && Math.abs(System.currentTimeMillis() / 1000 - time) >= 24 * 60 * 60) {
@@ -740,6 +741,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     savedInstanceState = null;
                     clearCurrentState();
                 }
+            } else if (currentViewNum == VIEW_QR) {
+                currentViewNum = VIEW_PHONE_INPUT;
+                clearCurrentState();
+                savedInstanceState = null;
             }
         }
 
@@ -783,13 +788,16 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             });
         }
 
+        // exteraGram: a permanent "more options" button (proxy settings, QR login) instead of the
+        // connection-state proxy indicator, so proxyDrawable stays null and updateProxyButton() is a no-op
         proxyButtonView = new ImageView(context);
-        proxyButtonView.setImageDrawable(proxyDrawable = new ProxyDrawable(context));
+        proxyButtonView.setImageResource(R.drawable.ic_ab_other);
         proxyButtonView.setOnClickListener(v -> showLoginOptionsMenu());
-        proxyButtonView.setAlpha(0f);
-        proxyButtonView.setVisibility(View.GONE);
+        proxyButtonView.setContentDescription(getString(R.string.AccDescrMoreOptions));
+        proxyButtonView.setPadding(AndroidUtilities.dp(4), AndroidUtilities.dp(4), AndroidUtilities.dp(4), AndroidUtilities.dp(4));
+        proxyButtonView.setAlpha(1f);
+        proxyButtonView.setVisibility(View.VISIBLE);
         sizeNotifierFrameLayout.addView(proxyButtonView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 16, 16, 16, 16));
-        updateProxyButton(false, true);
 
         radialProgressView = new RadialProgressView(context);
         radialProgressView.setSize(AndroidUtilities.dp(20));
@@ -1317,13 +1325,28 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         if (animated) {
             showDoneAnimation[currentDoneType] = new AnimatorSet();
             if (floating) {
-                floatingButton.setButtonVisible(show, animated);
+                if (show) {
+                    if (floatingButton.getVisibility() != View.VISIBLE) {
+                        floatingAutoAnimator.setOffsetY(AndroidUtilities.dpf2(70));
+                        floatingButton.setVisibility(View.VISIBLE);
+                    }
+                }
+                ValueAnimator offsetAnimator = ValueAnimator.ofFloat(floatingAutoAnimator.getOffsetY(), show ? 0 : AndroidUtilities.dpf2(70));
+                offsetAnimator.addUpdateListener(animation -> {
+                    float offsetY = (float) animation.getAnimatedValue();
+                    floatingAutoAnimator.setOffsetY(offsetY);
+                    floatingButton.setAlpha(1f - offsetY / AndroidUtilities.dpf2(70));
+                });
+                showDoneAnimation[currentDoneType].play(offsetAnimator);
             }
             showDoneAnimation[currentDoneType].addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator animation) {
                     if (showDoneAnimation[floating ? 0 : 1] != null && showDoneAnimation[floating ? 0 : 1].equals(animation)) {
                         if (!show) {
+                            if (floating) {
+                                floatingButton.setVisibility(View.GONE);
+                            }
                             if (floating && floatingButtonIcon.getAlpha() != 1f) {
                                 floatingButtonIcon.setAlpha(1f);
                                 floatingButtonIcon.setScaleX(1f);
@@ -1359,8 +1382,14 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             showDoneAnimation[currentDoneType].setInterpolator(interpolator);
             showDoneAnimation[currentDoneType].start();
         } else {
-            if (floating) {
-                floatingButton.setButtonVisible(show, animated);
+            if (show) {
+                floatingAutoAnimator.setOffsetY(0);
+                floatingButton.setAlpha(1f);
+                floatingButton.setVisibility(View.VISIBLE);
+            } else {
+                floatingAutoAnimator.setOffsetY(AndroidUtilities.dpf2(70));
+                floatingButton.setAlpha(0f);
+                floatingButton.setVisibility(View.GONE);
             }
         }
     }
@@ -1556,6 +1585,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             final SlideView newView = views[page];
             currentViewNum = page;
             backButtonView.setVisibility(newView.needBackButton() || newAccount ? View.VISIBLE : View.GONE);
+            proxyButtonView.setVisibility(currentViewNum == VIEW_PHONE_INPUT ? View.VISIBLE : View.GONE);
 
             newView.setParams(params, false);
             setParentActivityTitle(newView.getHeaderName());
@@ -1585,6 +1615,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             setCustomKeyboardVisible(newView.hasCustomKeyboard(), true);
         } else {
             backButtonView.setVisibility(views[page].needBackButton() || newAccount ? View.VISIBLE : View.GONE);
+            proxyButtonView.setVisibility(page == VIEW_PHONE_INPUT ? View.VISIBLE : View.GONE);
             views[currentViewNum].setVisibility(View.GONE);
             views[currentViewNum].onHide();
             currentViewNum = page;
@@ -2129,7 +2160,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             linearLayout.setOrientation(HORIZONTAL);
 
             phoneOutlineView = new OutlineTextContainerView(context);
-            phoneOutlineView.addView(linearLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 16, 8, 16, 8));
+            phoneOutlineView.setClipChildren(false);
+            phoneOutlineView.setClipToPadding(false);
+            phoneOutlineView.addView(linearLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36, Gravity.CENTER_VERTICAL, 16, 8, 16, 8));
             phoneOutlineView.setText(getString(R.string.PhoneNumber));
             addView(phoneOutlineView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 58, 16, 8, 16, 8));
 
@@ -8545,12 +8578,13 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         backButtonView.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
         backButtonView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)));
 
-        proxyDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText), PorterDuff.Mode.SRC_IN));
+        proxyButtonView.setColorFilter(Theme.getColor(Theme.key_actionBarDefaultIcon));
         proxyButtonView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)));
 
         radialProgressView.setProgressColor(Theme.getColor(Theme.key_chats_actionBackground));
 
         floatingButton.updateColors();
+        floatingButton.setBackground(UIUtil.createFabBackground(56, Theme.getColor(Theme.key_featuredStickers_addButton), Theme.getColor(Theme.key_featuredStickers_addButtonPressed)));
         floatingButton.setOutlineProvider(ExteraConfig.getSquareFab()
                 ? ViewOutlineProviderImpl.boundsWithPaddingRoundRect(0, AndroidUtilities.dp(16))
                 : ViewOutlineProviderImpl.BOUNDS_OVAL);

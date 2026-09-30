@@ -16991,6 +16991,9 @@ public class MessagesController extends BaseController implements NotificationCe
             case "USER_BANNED_IN_CHANNEL":
                 getNotificationCenter().postNotificationName(NotificationCenter.chatInfoCantLoad, channelId, 2);
                 break;
+            case "CHANNEL_BLOCKED":
+                getNotificationCenter().postNotificationName(NotificationCenter.chatInfoCantLoad, channelId, 10);
+                break;
         }
     }
 

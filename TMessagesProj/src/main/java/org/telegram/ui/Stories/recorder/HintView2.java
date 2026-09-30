@@ -22,7 +22,6 @@ import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
-import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -102,7 +101,7 @@ public class HintView2 extends View {
     }
 
     protected final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private Paint blurBackgroundPaint, blurCutPaint;
+    private Paint blurBackgroundPaint;
 
     private int blurBitmapWidth, blurBitmapHeight;
     private BitmapShader blurBitmapShader;
@@ -181,8 +180,8 @@ public class HintView2 extends View {
         if (cutSelectorPaint != null) {
             cutSelectorPaint.setPathEffect(roundWithCornerEffect ? new CornerPathEffect(rounding) : null);
         }
-        if (blurCutPaint != null) {
-            blurCutPaint.setPathEffect(roundWithCornerEffect ? new CornerPathEffect(rounding) : null);
+        if (blurBackgroundPaint != null) {
+            blurBackgroundPaint.setPathEffect(roundWithCornerEffect ? new CornerPathEffect(rounding) : null);
         }
         return this;
     }
@@ -782,10 +781,7 @@ public class HintView2 extends View {
 
     protected void drawBgPath(Canvas canvas, float alpha) {
         if (blurBackgroundPaint != null) {
-            canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(), 0xFF, Canvas.ALL_SAVE_FLAG);
             canvas.drawPath(path, blurBackgroundPaint);
-            canvas.drawPath(path, blurCutPaint);
-            canvas.restore();
         }
         if (shadowColor != 0) {
             backgroundPaint.setShadowLayer(
@@ -1209,13 +1205,11 @@ public class HintView2 extends View {
             blurBitmapMatrix = new Matrix();
             blurBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             blurBackgroundPaint.setShader(blurBitmapShader);
+            blurBackgroundPaint.setPathEffect(new CornerPathEffect(rounding));
             ColorMatrix colorMatrix = new ColorMatrix();
             colorMatrix.setSaturation(1.5f);
             AndroidUtilities.adjustBrightnessColorMatrix(colorMatrix, Theme.isCurrentThemeDark() ? +.12f : -.08f);
             blurBackgroundPaint.setColorFilter(new ColorMatrixColorFilter(colorMatrix));
-            blurCutPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            blurCutPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));
-            blurCutPaint.setPathEffect(new CornerPathEffect(rounding));
         }, blurScale);
     }
 

@@ -1357,7 +1357,7 @@ public class Bulletin {
             textView.setDisablePaddingsOffsetY(true);
             textView.setSingleLine();
             textView.setTextColor(undoInfoColor);
-            textView.setTypeface(Typeface.SANS_SERIF);
+            textView.setTypeface(AndroidUtilities.regular());
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
             addView(textView, LayoutHelper.createFrameRelatively(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.START | Gravity.CENTER_VERTICAL, 56, 0, 16, 0));
         }
@@ -1421,7 +1421,7 @@ public class Bulletin {
             subtitleTextView.setTextColor(undoInfoColor);
             subtitleTextView.setLinkTextColor(getThemedColor(Theme.key_undo_cancelColor));
             subtitleTextView.setMovementMethod(new LinkMovementMethod());
-            subtitleTextView.setTypeface(Typeface.SANS_SERIF);
+            subtitleTextView.setTypeface(AndroidUtilities.regular());
             subtitleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             linearLayout.addView(subtitleTextView);
         }
@@ -1479,7 +1479,7 @@ public class Bulletin {
             subtitleTextView.setPadding(dp(4), 0, dp(4), 0);
             subtitleTextView.setTextColor(undoInfoColor);
             subtitleTextView.setLinkTextColor(undoLinkColor);
-            subtitleTextView.setTypeface(Typeface.SANS_SERIF);
+            subtitleTextView.setTypeface(AndroidUtilities.regular());
             subtitleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             linearLayout.addView(subtitleTextView);
         }
@@ -1712,7 +1712,6 @@ public class Bulletin {
             subtitleTextView = new AnimatedTextView(context, true, true, true);
             subtitleTextView.setPadding(dp(4), 0, dp(4), 0);
             subtitleTextView.setTextColor(undoInfoColor);
-            subtitleTextView.setTypeface(Typeface.SANS_SERIF);
             subtitleTextView.setTextSize(dp(13));
             subtitleTextView.setEllipsizeByGradient(true);
             linearLayout.addView(subtitleTextView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 18));
@@ -1950,7 +1949,6 @@ public class Bulletin {
             progressView.addView(imageView, LayoutHelper.createFrame(28, 28, Gravity.CENTER));
 
             textView = new AnimatedTextView(context);
-            textView.setTypeface(Typeface.SANS_SERIF);
             textView.setTextSize(dp(15));
             textView.setPadding(0, dp(8), 0, dp(8));
             addView(textView, LayoutHelper.createFrameRelatively(LayoutHelper.WRAP_CONTENT, 18, Gravity.START | Gravity.CENTER_VERTICAL, 56, 0, 8, 0));
@@ -2011,7 +2009,7 @@ public class Bulletin {
             };
             NotificationCenter.listenEmojiLoading(textView);
             textView.setSingleLine();
-            textView.setTypeface(Typeface.SANS_SERIF);
+            textView.setTypeface(AndroidUtilities.regular());
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
             textView.setEllipsize(TextUtils.TruncateAt.END);
             textView.setPadding(0, dp(8), 0, dp(8));
@@ -2269,7 +2267,7 @@ public class Bulletin {
 
             if (text) {
                 undoTextView = new TextView(context);
-                undoTextView.setBackground(Theme.createSelectorDrawable((undoCancelColor & 0x00ffffff) | 0x19000000, Theme.RIPPLE_MASK_ROUNDRECT_6DP));
+                undoTextView.setBackground(Theme.createRadSelectorDrawable((undoCancelColor & 0x00ffffff) | 0x19000000, 12, 12));
                 undoTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
                 undoTextView.setTypeface(AndroidUtilities.bold());
                 undoTextView.setTextColor(undoCancelColor);
@@ -2291,6 +2289,7 @@ public class Bulletin {
             }
 
             setOnClickListener(v -> undo());
+            ScaleStateListAnimator.apply(this);
         }
 
         public UndoButton setText(CharSequence text) {
