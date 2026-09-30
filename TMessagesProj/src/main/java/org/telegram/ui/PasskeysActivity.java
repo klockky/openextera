@@ -20,7 +20,10 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
+import com.exteragram.messenger.utils.PasskeysUtil;
+
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.browser.Browser;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.PasskeysController;
@@ -105,6 +108,11 @@ public class PasskeysActivity extends BaseFragment {
         items.add(UItem.asShadow(AndroidUtilities.replaceArrows(AndroidUtilities.replaceSingleTag(getString(R.string.PasskeyInfo), () -> {
             showLearnSheet(getContext(), currentAccount, resourceProvider, passkeys.size() + 1 <= getMessagesController().config.passkeysAccountPasskeysMax.get());
         }), true)));
+        items.add(UItem.asButton(-2, R.drawable.msg_settings, getString(R.string.Settings)));
+        items.add(UItem.asShadow(AndroidUtilities.replaceMultipleTags(getString(R.string.PasskeyInfo2),
+            () -> Browser.openUrl(getContext(), "https://github.com/bitwarden/android"),
+            () -> Browser.openUrl(getContext(), "https://github.com/Kunzisoft/KeePassDX")
+        )));
     }
 
     private void openMenu(View view) {
@@ -171,6 +179,8 @@ public class PasskeysActivity extends BaseFragment {
                     added(passkey);
                 }
             });
+        } else if (item.id == -2) {
+            PasskeysUtil.openSettings(getParentActivity());
         } else if (item.object != null) {
             openMenu(view);
         }

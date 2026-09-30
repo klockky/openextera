@@ -2,6 +2,7 @@ package org.telegram.ui.ActionBar;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
 
+import com.exteragram.messenger.utils.ui.UIUtil;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
@@ -220,6 +221,9 @@ public class ActionBarMenuSubItem extends FrameLayout {
             imageView.setVisibility(INVISIBLE);
             textView.setPadding(0, 0, 0, 0);
         }
+        if (subtextView != null) {
+            subtextView.setPadding(textView.getPaddingLeft(), 0, textView.getPaddingRight(), 0);
+        }
     }
 
     public void setTextAndIcon(CharSequence text, ImageLocation imageLocation, String imageFilter, Drawable thumb, Object parentObject) {
@@ -363,7 +367,7 @@ public class ActionBarMenuSubItem extends FrameLayout {
             subtextView.setTextColor(getThemedColor(Theme.key_groupcreate_sectionText));
             subtextView.setVisibility(GONE);
             subtextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-            subtextView.setPadding(LocaleController.isRTL ? 0 : dp(43), 0, LocaleController.isRTL ? dp(43) : 0, 0);
+            subtextView.setPadding(textView.getPaddingLeft(), 0, textView.getPaddingRight(), 0);
             addView(subtextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL, 0, 10, 0, 0));
         }
         boolean visible = !TextUtils.isEmpty(text);
@@ -412,7 +416,8 @@ public class ActionBarMenuSubItem extends FrameLayout {
     }
 
     public void updateBackground() {
-        setBackground(Theme.createRadSelectorDrawable(selectorColor, top ? selectorRad : 0, bottom ? selectorRad : 0));
+        setBackground(Theme.createRadSelectorDrawable(selectorColor, selectorRad, selectorRad));
+        UIUtil.applyScaleStateListAnimator(this, selectorRad, top, bottom, 3, 0.04f, 1.5f);
     }
 
     private int getThemedColor(int key) {

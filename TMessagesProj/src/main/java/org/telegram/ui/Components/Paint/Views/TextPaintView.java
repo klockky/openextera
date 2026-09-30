@@ -366,14 +366,20 @@ public class TextPaintView extends EntityView {
         editText.setShadowLayer(0, 0, 0, 0);
         int textColor = swatch.color;
         if (currentType == 0) {
+            editText.setStrokeColor(0);
             editText.setFrameColor(swatch.color);
             textColor = AndroidUtilities.computePerceivedBrightness(swatch.color) >= .721f ? Color.BLACK : Color.WHITE;
         } else if (currentType == 1) {
             editText.setFrameColor(AndroidUtilities.computePerceivedBrightness(swatch.color) >= .25f ? 0x99000000 : 0x99ffffff);
         } else if (currentType == 2) {
             editText.setFrameColor(AndroidUtilities.computePerceivedBrightness(swatch.color) >= .25f ? Color.BLACK : Color.WHITE);
+        } else if (currentType == 3) {
+            editText.setStrokeColor(0);
+            editText.setFrameColor(0);
         } else {
             editText.setFrameColor(0);
+            editText.setStrokeColor(swatch.color);
+            textColor = AndroidUtilities.computePerceivedBrightness(swatch.color) >= .721f ? Color.BLACK : Color.WHITE;
         }
         editText.setTextColor(textColor);
         editText.setCursorColor(textColor);

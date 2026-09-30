@@ -3464,6 +3464,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     int top;
                     if (videoTimelineViewContainer != null && videoTimelineViewContainer.getVisibility() == VISIBLE) {
                         top = videoTimelineViewContainer.getTop();
+                    } else if (!captionAbove && captionEdit != null && captionEdit.getVisibility() == VISIBLE) {
+                        top = pickerView.getTop() - dp(56);
                     } else {
                         top = pickerView.getTop();
                         if (child == livePhotoButton) {
@@ -4824,7 +4826,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     f = FileLoader.getInstance(currentAccount).getPathToMessage(currentMessageObject.messageOwner);
                 }
             } else if (currentFileLocationVideo != null) {
-                f = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), getFileLocationExt(currentFileLocationVideo), avatarsDialogId != 0 || isEvent);
+                f = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), getFileLocationExt(currentFileLocationVideo), !Objects.equals(getFileLocationExt(currentFileLocationVideo), "mp4") && avatarsDialogId != 0 || isEvent);
                 if (f == null || !f.exists()) {
                     f = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), getFileLocationExt(currentFileLocationVideo), false);
                 }
@@ -5138,7 +5140,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                             isVideo = currentMessageObject.isVideo();
                         } else if (currentFileLocationVideo != null) {
                             String ext = getFileLocationExt(currentFileLocationVideo);
-                            f = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), ext, avatarsDialogId != 0 || isEvent);
+                            f = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), ext, !Objects.equals(ext, "mp4") && avatarsDialogId != 0 || isEvent);
                             if (f != null && !f.exists()) {
                                 f = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), ext, false);
                             }
@@ -5981,7 +5983,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 if (currentMessageObject != null || currentSecureDocument != null) {
                     return true;
                 } else if (currentFileLocationVideo != null) {
-                    File f = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), getFileLocationExt(currentFileLocationVideo), avatarsDialogId != 0 || isEvent);
+                    File f = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), getFileLocationExt(currentFileLocationVideo), !Objects.equals(getFileLocationExt(currentFileLocationVideo), "mp4") && avatarsDialogId != 0 || isEvent);
                     File f2 = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), f.getName());
                     File f3 = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), getFileLocationExt(currentFileLocationVideo), false);
                     return f.exists() || f2.exists() || f3.exists();
@@ -10094,7 +10096,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void createVideoControlsInterface() {
+        if (videoPlayerControlAnimator != null) {
+            videoPlayerControlAnimator.cancel();
+            videoPlayerControlAnimator = null;
+        }
+        videoPlayerControlVisible = false;
         videoPlayerControlFrameLayout = new VideoPlayerControlFrameLayout(containerView.getContext());
+        videoPlayerControlFrameLayout.setVisibility(View.GONE);
+        videoPlayerControlFrameLayout.setAlpha(0f);
         containerView.addView(videoPlayerControlFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.BOTTOM | Gravity.LEFT));
 
         final VideoPlayerSeekBar.SeekBarDelegate seekBarDelegate = new VideoPlayerSeekBar.SeekBarDelegate() {
@@ -14877,6 +14886,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         actionBarContainer.setSubtitle(null);
         clearCurrentExternalSubtitle(false);
         setItemVisible(masksItem, false, true);
+        menuItem.hideSubItem(gallery_menu_masks2);
         muteVideo = false;
         if (livePhotoButton != null) {
             livePhotoButton.setValue(true, false);
@@ -15480,9 +15490,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                         menuItem.hideSubItem(gallery_menu_openin);
                         menuItem.hideSubItem(gallery_menu_copy_frame);
                     }
-                    final boolean masksItemVisible = masksItem.getVisibility() == View.VISIBLE;
+                    final boolean masksItemVisible = masksItem.getVisibility() == View.VISIBLE || menuItem.isSubItemVisible(gallery_menu_masks2);
                     if (masksItemVisible) {
                         setItemVisible(masksItem, false, false);
+                        menuItem.hideSubItem(gallery_menu_masks2);
                     }
                     if (noforwards) {
                         setItemVisible(pipItem, false, true);
@@ -17866,7 +17877,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                         }
                     }
                 }
-                boolean cacheOnly = messageObject != null && messageObject.isWebpage() || avatarsDialogId != 0 || isEvent;
+                boolean cacheOnly = messageObject != null && messageObject.isWebpage() || !Objects.equals(getFileLocationExt(currentFileLocationVideo), "mp4") && avatarsDialogId != 0 || isEvent;
                 Object parentObject;
                 ImageLocation videoThumb = null;
                 if (messageObject != null) {

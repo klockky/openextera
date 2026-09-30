@@ -184,7 +184,7 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
                 holder.button.setTranslationY(dp(80) * (1f - visibility) - totalHeight);
             }
 
-            final int height = dp(44);
+            final int height = dp(48);
             final int gap = dp(10 + 10 * counterVisibility);
 
             totalHeight += (height + gap) * visibility;

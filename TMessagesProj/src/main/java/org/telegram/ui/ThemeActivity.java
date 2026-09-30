@@ -210,6 +210,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
     private int chatListInfoRow;
     private int themeListRow;
     private int themeListRow2;
+    private int browseThemesRow;
     private int themeAccentListRow;
     private int themeInfoRow;
     private int chatBlurRow;
@@ -557,6 +558,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
         scheduleFromToInfoRow = -1;
         themeListRow = -1;
         themeListRow2 = -1;
+        browseThemesRow = -1;
         themeAccentListRow = -1;
         themeInfoRow = -1;
         preferedHeaderRow = -1;
@@ -667,6 +669,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             themeHeaderRow = rowCount++;
 
             themeListRow2 = rowCount++;
+            browseThemesRow = rowCount++;
             themeInfoRow = rowCount++;
 
             bubbleRadiusHeaderRow = rowCount++;
@@ -677,7 +680,6 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             chatListRow = rowCount++;
             chatListInfoRow = rowCount++;
 
-            appIconHeaderRow = rowCount++;
             appIconSelectorRow = rowCount++;
             appIconShadowRow = rowCount++;
 
@@ -1123,6 +1125,8 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                 presentFragment(new AppIconsActivity());
             } else if (position == backgroundRow) {
                 presentFragment(new WallpapersListActivity(WallpapersListActivity.TYPE_ALL));
+            } else if (position == browseThemesRow) {
+                presentFragment(new ThemeActivity(THEME_TYPE_THEMES_BROWSER));
             } else if (position == changeUserColor) {
                 presentFragment(new PeerColorActivity(0).setOnApplied(this));
             } else if (position == sendByEnterRow) {
@@ -2749,6 +2753,10 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                         cell.setSubtitle(null);
                         cell.setColors(Theme.key_windowBackgroundWhiteBlueText4, Theme.key_windowBackgroundWhiteBlueText4);
                         cell.setTextAndIcon(getString(R.string.CreateNewTheme), R.drawable.msg_colors, false);
+                    } else if (position == browseThemesRow) {
+                        cell.setSubtitle(null);
+                        cell.setColors(Theme.key_windowBackgroundWhiteBlueText4, Theme.key_windowBackgroundWhiteBlueText4);
+                        cell.setTextAndIcon(getString(R.string.SettingsBrowseThemes), R.drawable.msg_colors, false);
                     } else if (position == liteModeRow) {
                         cell.setColors(Theme.key_dialogIcon, Theme.key_windowBackgroundWhiteBlackText);
                         cell.setTextAndIcon(getString(R.string.LiteMode), R.drawable.msg2_animations, true);
@@ -2837,7 +2845,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
             } else if (position == bubbleRadiusRow) {
                 return TYPE_BUBBLE_RADIUS;
             } else if (position == backgroundRow || position == editThemeRow || position == createNewThemeRow ||
-                        position == liteModeRow || position == stickersRow) {
+                        position == liteModeRow || position == stickersRow || position == browseThemesRow) {
                 return TYPE_TEXT_PREFERENCE;
             } else if (position == swipeGestureRow) {
                 return TYPE_SWIPE_GESTURE;

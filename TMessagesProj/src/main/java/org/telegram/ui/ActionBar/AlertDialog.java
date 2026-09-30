@@ -283,7 +283,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             if (icon != 0) {
                 imageView.setImageResource(icon);
                 imageView.setVisibility(VISIBLE);
-                textView.setPadding(LocaleController.isRTL ? 0 : dp(56), 0, LocaleController.isRTL ? dp(56) : 0, 0);
+                textView.setPadding(LocaleController.isRTL ? 0 : dp(46), 0, LocaleController.isRTL ? dp(46) : 0, 0);
             } else {
                 imageView.setVisibility(INVISIBLE);
                 textView.setPadding(0, 0, 0, 0);
@@ -370,7 +370,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             if (progressViewStyle == ALERT_TYPE_SPINNER) {
-                progressViewContainer.measure(MeasureSpec.makeMeasureSpec(dp(86), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(86), MeasureSpec.EXACTLY));
+                progressViewContainer.measure(MeasureSpec.makeMeasureSpec(dp(56), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(56), MeasureSpec.EXACTLY));
                 setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec));
             } else {
                 inLayout = true;
@@ -564,9 +564,9 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             if (blurredBackground && !blurredNativeBackground) {
                 float r;
                 if (progressViewStyle == ALERT_TYPE_SPINNER && progressViewContainer != null) {
-                    r = dp(18);
                     float w = progressViewContainer.getWidth() * progressViewContainer.getScaleX();
                     float h = progressViewContainer.getHeight() * progressViewContainer.getScaleY();
+                    r = Math.min(w, h) / 2f;
                     AndroidUtilities.rectTmp.set(
                             (getWidth() - w) / 2f,
                             (getHeight() - h) / 2f,
@@ -827,12 +827,10 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
                     boolean result = super.drawChild(canvas, child, drawingTime);
                     if (shadow[0].getPaint().getAlpha() != 0) {
-                        shadow[0].setBounds(0, getScrollY(), getMeasuredWidth(), getScrollY() + dp(3));
-                        shadow[0].draw(canvas);
+                        canvas.drawLine(0, getScrollY(), getMeasuredWidth(), getScrollY(), Theme.forcedDividerPaint);
                     }
                     if (shadow[1].getPaint().getAlpha() != 0) {
-                        shadow[1].setBounds(0, getScrollY() + getMeasuredHeight() - dp(3), getMeasuredWidth(), getScrollY() + getMeasuredHeight());
-                        shadow[1].draw(canvas);
+                        canvas.drawLine(0, getScrollY() + getMeasuredHeight(), getMeasuredWidth(), getScrollY() + getMeasuredHeight(), Theme.forcedDividerPaint);
                     }
                     return result;
                 }
@@ -861,6 +859,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             containerView.addView(messageTextView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 24, title == null ? 19 : 0, 24, 20));
 
             lineProgressView = new LineProgressView(getContext());
+            lineProgressView.setProgressType(1);
             lineProgressView.setProgress(currentProgress / 100.0f, false);
             lineProgressView.setProgressColor(getThemedColor(Theme.key_dialogLineProgress));
             lineProgressView.setBackColor(getThemedColor(Theme.key_dialogLineProgressBackground));
@@ -880,14 +879,15 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             progressViewContainer = new FrameLayout(getContext());
             backgroundColor = getThemedColor(Theme.key_dialog_inlineProgressBackground);
             if (!(blurredBackground && !blurredNativeBackground)) {
-                progressViewContainer.setBackgroundDrawable(Theme.createRoundRectDrawable(dp(18), backgroundColor));
+                progressViewContainer.setBackgroundDrawable(Theme.createRoundRectDrawable(dp(28), backgroundColor));
             }
-            containerView.addView(progressViewContainer, LayoutHelper.createLinear(86, 86, Gravity.CENTER));
+            containerView.addView(progressViewContainer, LayoutHelper.createLinear(56, 56, Gravity.CENTER));
 
             RadialProgressView progressView = new RadialProgressView(getContext(), resourcesProvider);
+            progressView.setStyle(1);
             progressView.setSize(dp(32));
             progressView.setProgressColor(getThemedColor(Theme.key_dialog_inlineProgress));
-            progressViewContainer.addView(progressView, LayoutHelper.createFrame(86, 86, Gravity.CENTER));
+            progressViewContainer.addView(progressView, LayoutHelper.createFrame(56, 56, Gravity.CENTER));
         } else {
             if (aboveMessageView != null) {
                 scrollContainer.addView(aboveMessageView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 22, 4, 22, 12));

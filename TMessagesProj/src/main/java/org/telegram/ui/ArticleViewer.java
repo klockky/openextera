@@ -315,7 +315,6 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
 //    private BackDrawable backDrawable;
     private Dialog visibleDialog;
     private Paint backgroundPaint;
-    private Drawable layerShadowDrawable;
     private Paint scrimPaint;
     private AnimatorSet progressViewAnimation;
 
@@ -1144,11 +1143,6 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                 }
                 scrimPaint.setColor((int) (((0x99000000 & 0xff000000) >>> 24) * opacity) << 24);
                 canvas.drawRect(0, 0, translationX, getHeight(), scrimPaint);
-
-                final float alpha = Math.max(0, Math.min((width - translationX) / (float) dp(20), 1.0f));
-                layerShadowDrawable.setBounds(translationX - layerShadowDrawable.getIntrinsicWidth(), child.getTop(), translationX, child.getBottom());
-                layerShadowDrawable.setAlpha((int) (0xff * alpha));
-                layerShadowDrawable.draw(canvas);
             }
             return result;
         }
@@ -4152,7 +4146,6 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
         createPaint(this, false);
         backgroundPaint = new Paint();
 
-        layerShadowDrawable = activity.getResources().getDrawable(R.drawable.layer_shadow);
         scrimPaint = new Paint();
 
         windowView = new WindowView(activity);
@@ -4180,20 +4173,13 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                     final boolean result = super.drawChild(canvas, child, drawingTime);
                     canvas.restoreToCount(restoreCount);
 
-                    if (translationX != 0) {
-                        if (child == pages[0]) {
-                            final float alpha = Math.max(0, Math.min((width - translationX) / (float) dp(20), 1.0f));
-                            layerShadowDrawable.setBounds(translationX - layerShadowDrawable.getIntrinsicWidth(), child.getTop(), translationX, child.getBottom());
-                            layerShadowDrawable.setAlpha((int) (0xff * alpha));
-                            layerShadowDrawable.draw(canvas);
-                        } else if (child == pages[1]) {
-                            float opacity = Math.min(0.8f, (width - translationX) / (float) width);
-                            if (opacity < 0) {
-                                opacity = 0;
-                            }
-                            scrimPaint.setColor((int) (((0x99000000 & 0xff000000) >>> 24) * opacity) << 24);
-                            canvas.drawRect(clipLeft, 0, clipRight, getHeight(), scrimPaint);
+                    if (translationX != 0 && child == pages[1]) {
+                        float opacity = Math.min(0.8f, (width - translationX) / (float) width);
+                        if (opacity < 0) {
+                            opacity = 0;
                         }
+                        scrimPaint.setColor((int) (((0x99000000 & 0xff000000) >>> 24) * opacity) << 24);
+                        canvas.drawRect(clipLeft, 0, clipRight, getHeight(), scrimPaint);
                     }
 
                     return result;

@@ -53,7 +53,7 @@ public class NestedSizeNotifierLayout extends SizeNotifierFrameLayout implements
         if (target == targetListView && childAttached()) {
             RecyclerListView innerListView = childLayout.getListView();
             int top = childLayout.getTop();
-            if (top == maxTop) {
+            if (top <= maxTop + dp(4)) {
                 consumed[1] = dyUnconsumed;
                 innerListView.scrollBy(0, dyUnconsumed);
             }
@@ -75,7 +75,7 @@ public class NestedSizeNotifierLayout extends SizeNotifierFrameLayout implements
         if (target == targetListView && childAttached()) {
             int t = childLayout.getTop();
             if (dy < 0) {
-                if (t <= maxTop) {
+                if (t <= maxTop + dp(4)) {
                     RecyclerListView innerListView = childLayout.getListView();
                     LinearLayoutManager linearLayoutManager = (LinearLayoutManager) innerListView.getLayoutManager();
                     int pos = linearLayoutManager.findFirstVisibleItemPosition();

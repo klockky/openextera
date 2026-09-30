@@ -1415,8 +1415,8 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
 //        }
         if (premiumStar == null) {
             premiumStar = new SpannableString("★");
-            Drawable drawable = new AnimatedEmojiDrawable.WrapSizeDrawable(PremiumGradient.getInstance().premiumStarMenuDrawable, dp(18), dp(18));
-            drawable.setBounds(0, 0, dp(18), dp(18));
+            Drawable drawable = new AnimatedEmojiDrawable.WrapSizeDrawable(PremiumGradient.getInstance().premiumStarMenuDrawable, dp(16), dp(16));
+            drawable.setBounds(0, 0, dp(16), dp(16));
             premiumStar.setSpan(new ImageSpan(drawable, DynamicDrawableSpan.ALIGN_CENTER), 0, premiumStar.length(), Spanned.SPAN_INCLUSIVE_EXCLUSIVE);
         }
         return new SpannableStringBuilder(text).append("  ").append(premiumStar);

@@ -724,6 +724,7 @@ public class ContentPreviewViewer {
                 popupLayout.animate().translationY(0).alpha(1f).scaleX(1f).scaleY(1f).setDuration(320).setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT).start();
                 showEmojiSelectorForStickers();
                 menuVisible = true;
+                runLongPressHaptic(containerView);
                 containerView.invalidate();
             } else if (currentContentType == CONTENT_TYPE_STICKER) {
                 if (MessageObject.isPremiumSticker(currentDocument) && !AccountInstance.getInstance(currentAccount).getUserConfig().isPremium()) {

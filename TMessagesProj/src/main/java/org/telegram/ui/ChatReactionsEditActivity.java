@@ -127,9 +127,6 @@ public class ChatReactionsEditActivity extends BaseFragment implements Notificat
             ll.addView(enableReactionsCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         }
 
-        HeaderCell headerCell = new HeaderCell(context);
-        headerCell.setText(LocaleController.getString(R.string.AvailableReactions));
-
         contorlsLayout = new LinearLayout(context);
         contorlsLayout.setOrientation(LinearLayout.VERTICAL);
         allReactions = new RadioCell(context);
@@ -138,7 +135,6 @@ public class ChatReactionsEditActivity extends BaseFragment implements Notificat
         someReactions.setText(LocaleController.getString(R.string.SomeReactions), false, true);
         disableReactions = new RadioCell(context);
         disableReactions.setText(LocaleController.getString(R.string.NoReactions), false, false);
-        contorlsLayout.addView(headerCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         contorlsLayout.addView(allReactions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         contorlsLayout.addView(someReactions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         contorlsLayout.addView(disableReactions, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
@@ -151,7 +147,6 @@ public class ChatReactionsEditActivity extends BaseFragment implements Notificat
         someReactions.setOnClickListener(v -> AndroidUtilities.runOnUIThread(() -> setCheckedEnableReactionCell(SELECT_TYPE_SOME, true)));
         disableReactions.setOnClickListener(v -> AndroidUtilities.runOnUIThread(() -> setCheckedEnableReactionCell(SELECT_TYPE_NONE, true)));
 
-        headerCell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
         allReactions.setBackground(Theme.createSelectorWithBackgroundDrawable(Theme.getColor(Theme.key_windowBackgroundWhite), Theme.getColor(Theme.key_listSelector)));
         someReactions.setBackground(Theme.createSelectorWithBackgroundDrawable(Theme.getColor(Theme.key_windowBackgroundWhite), Theme.getColor(Theme.key_listSelector)));
         disableReactions.setBackground(Theme.createSelectorWithBackgroundDrawable(Theme.getColor(Theme.key_windowBackgroundWhite), Theme.getColor(Theme.key_listSelector)));
@@ -161,7 +156,12 @@ public class ChatReactionsEditActivity extends BaseFragment implements Notificat
 
         listView = new RecyclerListView(context);
         listView.setLayoutManager(new LinearLayoutManager(context));
-        listView.setAdapter(listAdapter = new RecyclerView.Adapter() {
+        listView.setAdapter(listAdapter = new RecyclerListView.SelectionAdapter() {
+            @Override
+            public boolean isEnabled(RecyclerView.ViewHolder holder) {
+                return holder.getItemViewType() == TYPE_REACTION;
+            }
+
             @NonNull
             @Override
             public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -211,12 +211,12 @@ public class ChatReactionsEditActivity extends BaseFragment implements Notificat
                         break;
                     case TYPE_HEADER:
                         HeaderCell headerCell = (HeaderCell) holder.itemView;
-                        headerCell.setText(LocaleController.getString(R.string.OnlyAllowThisReactions));
+                        headerCell.setText(LocaleController.getString(position == 0 ? R.string.AvailableReactions : R.string.OnlyAllowThisReactions));
                         headerCell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
                         break;
                     case TYPE_REACTION:
                         AvailableReactionCell reactionCell = (AvailableReactionCell) holder.itemView;
-                        TLRPC.TL_availableReaction react = availableReactions.get(position - (isChannel ? 2 : 3));
+                        TLRPC.TL_availableReaction react = availableReactions.get(position - (isChannel ? 2 : 4));
                         reactionCell.bind(react, chatReactions.contains(react.reaction), currentAccount);
                         break;
                 }
@@ -227,7 +227,7 @@ public class ChatReactionsEditActivity extends BaseFragment implements Notificat
                 if (isChannel) {
                     return 1 + (!chatReactions.isEmpty() ? 1 + availableReactions.size() : 0);
                 }
-                return 1 + 1 + (!chatReactions.isEmpty() ? 1 + availableReactions.size() : 0);
+                return 1 + 1 + 1 + (!chatReactions.isEmpty() ? 1 + availableReactions.size() : 0);
             }
 
             @Override
@@ -235,17 +235,20 @@ public class ChatReactionsEditActivity extends BaseFragment implements Notificat
                 if (isChannel) {
                     return position == 0 ? TYPE_INFO : position == 1 ? TYPE_HEADER : TYPE_REACTION;
                 }
-                if (position == 0) {
+                if (position == 1) {
                     return TYPE_CONTROLS_CONTAINER;
                 }
-                return position == 1 ? TYPE_INFO : position == 2 ? TYPE_HEADER : TYPE_REACTION;
+                if (position == 2) {
+                    return TYPE_INFO;
+                }
+                return position == 0 || position == 3 ? TYPE_HEADER : TYPE_REACTION;
             }
         });
         listView.setOnItemClickListener((view, position) -> {
-            if (position <= (isChannel ? 1 : 2)) return;
+            if (position <= (isChannel ? 1 : 3)) return;
 
             AvailableReactionCell cell = (AvailableReactionCell) view;
-            TLRPC.TL_availableReaction react = availableReactions.get(position - (isChannel ? 2 : 3));
+            TLRPC.TL_availableReaction react = availableReactions.get(position - (isChannel ? 2 : 4));
             boolean nc = !chatReactions.contains(react.reaction);
             if (nc) {
                 chatReactions.add(react.reaction);
@@ -253,7 +256,7 @@ public class ChatReactionsEditActivity extends BaseFragment implements Notificat
                 chatReactions.remove(react.reaction);
                 if (chatReactions.isEmpty()) {
                     if (listAdapter != null) {
-                        listAdapter.notifyItemRangeRemoved((isChannel ? 1 : 2), 1 + availableReactions.size());
+                        listAdapter.notifyItemRangeRemoved((isChannel ? 1 : 3), 1 + availableReactions.size());
                     }
                     setCheckedEnableReactionCell(SELECT_TYPE_NONE, true);
                 }
@@ -304,18 +307,18 @@ public class ChatReactionsEditActivity extends BaseFragment implements Notificat
                 }
             }
             if (listAdapter != null && animated) {
-                listAdapter.notifyItemRangeInserted((isChannel ? 1 : 2), 1 + availableReactions.size());
+                listAdapter.notifyItemRangeInserted((isChannel ? 1 : 3), 1 + availableReactions.size());
             }
         } else {
             if (!chatReactions.isEmpty()) {
                 chatReactions.clear();
                 if (listAdapter != null && animated) {
-                    listAdapter.notifyItemRangeRemoved((isChannel ? 1 : 2), 1 + availableReactions.size());
+                    listAdapter.notifyItemRangeRemoved((isChannel ? 1 : 3), 1 + availableReactions.size());
                 }
             }
         }
         if (!isChannel && listAdapter != null && animated) {
-            listAdapter.notifyItemChanged(1);
+            listAdapter.notifyItemChanged(2);
         }
         if (listAdapter != null && !animated) {
             listAdapter.notifyDataSetChanged();

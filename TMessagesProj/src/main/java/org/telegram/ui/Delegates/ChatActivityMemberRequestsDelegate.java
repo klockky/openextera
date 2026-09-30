@@ -70,7 +70,7 @@ public class ChatActivityMemberRequestsDelegate {
             root.setOnClickListener((v) -> showBottomSheet());
             requestsDataLayout = new LinearLayout(fragment.getParentActivity());
             requestsDataLayout.setOrientation(LinearLayout.HORIZONTAL);
-            root.addView(requestsDataLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP, 0, 0, 36 + 64, 0));
+            root.addView(requestsDataLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP, 0, 0, 36 + 64, 2));
 
             avatarsView = new AvatarsImageView(fragment.getParentActivity(), false) {
                 @Override
@@ -103,7 +103,7 @@ public class ChatActivityMemberRequestsDelegate {
                 closePendingRequestsCount = pendingRequestsCount;
                 animatePendingRequests(false, true);
             });
-            root.addView(closeView, LayoutHelper.createFrame(36, LayoutHelper.MATCH_PARENT, Gravity.RIGHT | Gravity.TOP, 0, 0, 4, 0));
+            root.addView(closeView, LayoutHelper.createFrame(36, LayoutHelper.MATCH_PARENT, Gravity.RIGHT | Gravity.CENTER_VERTICAL, 0, 0, 4, 1));
             if (chatInfo != null) {
                 setPendingRequests((ChatActivity.DEBUG_TOP_PANELS ? 1 : 0) + chatInfo.requests_pending, chatInfo.recent_requesters, false);
             }
