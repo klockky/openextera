@@ -609,10 +609,13 @@ public class PhotoAttachPhotoCell extends FrameLayout {
                 animator = null;
             }
             if (animated) {
+                ValueAnimator radiusAnimator = ValueAnimator.ofInt(imageView.getRoundRadius()[0], checked ? AndroidUtilities.dp(12) : 0);
+                radiusAnimator.addUpdateListener(animation -> imageView.setRoundRadius((int) animation.getAnimatedValue()));
                 animator = new AnimatorSet();
                 animator.playTogether(
                         ObjectAnimator.ofFloat(container, View.SCALE_X, checked ? 0.787f : 1.0f),
-                        ObjectAnimator.ofFloat(container, View.SCALE_Y, checked ? 0.787f : 1.0f));
+                        ObjectAnimator.ofFloat(container, View.SCALE_Y, checked ? 0.787f : 1.0f),
+                        radiusAnimator);
                 animator.setDuration(200);
                 animator.addListener(new AnimatorListenerAdapter() {
                     @Override
@@ -636,6 +639,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
             } else {
                 container.setScaleX(checked ? 0.787f : 1.0f);
                 container.setScaleY(checked ? 0.787f : 1.0f);
+                imageView.setRoundRadius(checked ? AndroidUtilities.dp(12) : 0);
             }
         }
         setHighQuality(photoEntry != null && photoEntry.isHighQuality() && isChecked());
@@ -695,6 +699,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
 
             container.setScaleX(checkBox.isChecked() ? 0.787f : 1.0f);
             container.setScaleY(checkBox.isChecked() ? 0.787f : 1.0f);
+            imageView.setRoundRadius(checkBox.isChecked() ? AndroidUtilities.dp(12) : 0);
         }
     }
 

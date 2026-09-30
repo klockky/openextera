@@ -268,7 +268,8 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
 
     float pinchStartDistance;
 
-    float pinchScale;
+    private float initialCameraZoom;
+    private boolean zoomWas;
 
     boolean isInPinchToZoomTouchMode;
     boolean maybePinchToZoomTouchMode;
@@ -1278,20 +1279,22 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
 
     private void saveLastCameraBitmap() {
         Bitmap bitmap = textureView.getBitmap();
-        if (bitmap != null && bitmap.getPixel(0, 0) != 0) {
-            lastBitmap = Bitmap.createScaledBitmap(textureView.getBitmap(), 50, 50, true);
-            if (lastBitmap != null) {
-                Utilities.blurBitmap(lastBitmap, 7);
-                try {
-                    File file = new File(ApplicationLoader.getFilesDirFixed(), "icthumb.jpg");
-                    FileOutputStream stream = new FileOutputStream(file);
-                    lastBitmap.compress(Bitmap.CompressFormat.JPEG, 87, stream);
-                    stream.close();
-                } catch (Throwable ignore) {
-
-                }
-            }
+        if (bitmap == null || bitmap.getPixel(0, 0) == 0) {
+            return;
         }
+        final Bitmap scaledBitmap = Bitmap.createScaledBitmap(bitmap, 50, 50, true);
+        lastBitmap = scaledBitmap;
+        Utilities.blurBitmap(scaledBitmap, 7);
+        Utilities.globalQueue.postRunnable(() -> {
+            try {
+                File file = new File(ApplicationLoader.getFilesDirFixed(), "icthumb.jpg");
+                FileOutputStream stream = new FileOutputStream(file);
+                scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 87, stream);
+                stream.close();
+            } catch (Throwable ignore) {
+
+            }
+        });
     }
 
     public void cancel(boolean byGesture) {
@@ -1409,6 +1412,7 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         }
         initCamera();
         cameraReady = false;
+        cameraZoom = useCamera2 && camera2SessionCurrent != null ? camera2SessionCurrent.getZoom() : 0f;
         cameraThread.reinitForNewCamera();
     }
 
@@ -4521,13 +4525,12 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
         if (ev.getActionMasked() == MotionEvent.ACTION_DOWN || ev.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN) {
             if (maybePinchToZoomTouchMode && !isInPinchToZoomTouchMode && ev.getPointerCount() == 2 && finishZoomTransition == null && recording) {
                 pinchStartDistance = (float) Math.hypot(ev.getX(1) - ev.getX(0), ev.getY(1) - ev.getY(0));
-
-                pinchScale = 1f;
-
                 pointerId1 = ev.getPointerId(0);
                 pointerId2 = ev.getPointerId(1);
                 isInPinchToZoomTouchMode = true;
                 zoomSlider.beginPinchZoomGesture();
+                zoomWas = false;
+                initialCameraZoom = cameraZoom;
             }
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 AndroidUtilities.rectTmp.set(cameraContainer.getX(), cameraContainer.getY(), cameraContainer.getX() + cameraContainer.getMeasuredWidth(), cameraContainer.getY() + cameraContainer.getMeasuredHeight());
@@ -4551,24 +4554,32 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
                 finishZoom();
                 return false;
             }
-            pinchScale = (float) Math.hypot(ev.getX(index2) - ev.getX(index1), ev.getY(index2) - ev.getY(index1)) / pinchStartDistance;
+            final float distance = (float) Math.hypot(ev.getX(index2) - ev.getX(index1), ev.getY(index2) - ev.getY(index1));
+            float zoomPerPixel = 0.002f;
+            if (useCamera2 && camera2SessionCurrent != null) {
+                zoomPerPixel *= camera2SessionCurrent.getMaxZoom() - camera2SessionCurrent.getMinZoom();
+            }
+            cameraZoom = initialCameraZoom + (distance - pinchStartDistance) * zoomPerPixel;
             if (useCamera2) {
                 if (camera2SessionCurrent != null) {
-                    float zoom = Utilities.clamp(pinchScale, camera2SessionCurrent.getMaxZoom(), camera2SessionCurrent.getMinZoom());
-                    camera2SessionCurrent.setZoom(zoom);
-                    cameraZoom = zoom;
+                    cameraZoom = Utilities.clamp(cameraZoom, camera2SessionCurrent.getMaxZoom(), camera2SessionCurrent.getMinZoom());
+                    camera2SessionCurrent.setZoom(cameraZoom);
                 }
             } else {
-                float zoom = Math.min(1f, Math.max(0, pinchScale - 1f));
+                cameraZoom = Utilities.clamp(cameraZoom, 1f, 0f);
                 if (cameraSession != null) {
-                    cameraSession.setZoom(zoom);
-                    cameraZoom = zoom;
+                    cameraSession.setZoom(cameraZoom);
                 }
             }
             zoomSlider.syncZoom(cameraZoom);
+            zoomWas = true;
         } else if ((ev.getActionMasked() == MotionEvent.ACTION_UP || (ev.getActionMasked() == MotionEvent.ACTION_POINTER_UP && checkPointerIds(ev)) || ev.getActionMasked() == MotionEvent.ACTION_CANCEL) && isInPinchToZoomTouchMode) {
             isInPinchToZoomTouchMode = false;
-            finishZoom();
+            if (zoomWas) {
+                finishZoom();
+            } else {
+                zoomSlider.endPinchZoomGesture();
+            }
         }
         return true;
     }
@@ -4618,26 +4629,17 @@ public class InstantCameraView extends InstantCameraViewBase implements Notifica
             return;
         }
 
-        float zoom;
-        if (useCamera2) {
-            if (camera2SessionCurrent == null) return;
-            zoom = Utilities.clamp(pinchScale, camera2SessionCurrent.getMaxZoom(), camera2SessionCurrent.getMinZoom());
-        } else {
-            zoom = Math.min(1f, Math.max(0, pinchScale - 1f));
-        }
-
-        if (zoom > 0f) {
-            finishZoomTransition = ValueAnimator.ofFloat(zoom, 0);
+        if (cameraZoom > 0f) {
+            finishZoomTransition = ValueAnimator.ofFloat(cameraZoom, useCamera2 ? 1f : 0f);
             finishZoomTransition.addUpdateListener(valueAnimator -> {
+                cameraZoom = (float) valueAnimator.getAnimatedValue();
                 if (useCamera2) {
                     if (camera2SessionCurrent != null) {
-                        camera2SessionCurrent.setZoom((float) valueAnimator.getAnimatedValue());
-                        cameraZoom = (float) valueAnimator.getAnimatedValue();
+                        camera2SessionCurrent.setZoom(cameraZoom);
                     }
                 } else {
                     if (cameraSession != null) {
-                        cameraSession.setZoom((float) valueAnimator.getAnimatedValue());
-                        cameraZoom = (float) valueAnimator.getAnimatedValue();
+                        cameraSession.setZoom(cameraZoom);
                     }
                 }
                 zoomSlider.syncZoom(cameraZoom);

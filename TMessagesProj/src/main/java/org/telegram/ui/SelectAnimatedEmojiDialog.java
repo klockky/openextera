@@ -15,6 +15,7 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.DialogInterface;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -1241,21 +1242,21 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
     }
 
     private void onRecentLongClick() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(getContext(), null);
-        builder.setTitle(LocaleController.getString(R.string.ClearRecentEmojiStatusesTitle));
-        builder.setMessage(LocaleController.getString(R.string.ClearRecentEmojiStatusesText));
-        builder.setPositiveButton(LocaleController.getString(R.string.Clear), (dialogInterface, i) -> {
-            ConnectionsManager.getInstance(currentAccount).sendRequest(new TL_account.clearRecentEmojiStatuses(), null);
-            MediaDataController.getInstance(currentAccount).clearRecentEmojiStatuses();
-            updateRows(false, true);
-        });
-        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
-        builder.setDimEnabled(false);
-        builder.setOnDismissListener(di -> {
-            setDim(0, true);
-        });
-        builder.show();
-        setDim(1f, true);
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
+                .setTitle(LocaleController.getString(R.string.ClearRecentReactionsAlertTitle))
+                .setMessage(LocaleController.getString(R.string.ClearRecentReactionsAlertMessage))
+                .setPositiveButton(LocaleController.getString(R.string.ClearButton), (dialogInterface, i) -> {
+                    if (onRecentClearedListener != null) {
+                        onRecentClearedListener.onRecentCleared();
+                    }
+                })
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .create();
+        dialog.show();
+        TextView button = (TextView) dialog.getButton(DialogInterface.BUTTON_POSITIVE);
+        if (button != null) {
+            button.setTextColor(Theme.getColor(Theme.key_text_RedBold));
+        }
     }
 
     private boolean isLongPressEnabled = true;

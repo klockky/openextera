@@ -236,7 +236,7 @@ public class SharedLinkCell extends FrameLayout {
         if (link.startsWith("#")) return;
         CharSequence lobj;
         if (!AndroidUtilities.charSequenceContains(link, "://") && link.toString().toLowerCase().indexOf("http") != 0 && link.toString().toLowerCase().indexOf("mailto") != 0) {
-            lobj = "http://" + link;
+            lobj = AndroidUtilities.defaultUrlScheme(link) + link;
         } else {
             lobj = link;
         }

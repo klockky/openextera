@@ -6735,29 +6735,24 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
     }
 
     public static int makeVideoBitrate(int originalHeight, int originalWidth, int originalBitrate, int height, int width) {
-        float compressFactor;
-        float minCompressFactor;
         int maxBitrate;
-        if (Math.min(height, width) >= 1080) {
-            maxBitrate = 6800_000;
-            compressFactor = 1f;
-            minCompressFactor = 1f;
+        if (Math.min(height, width) >= 2160) {
+            maxBitrate = 62_000_000;
+        } else if (Math.min(height, width) >= 1440) {
+            maxBitrate = 24_000_000;
+        } else if (Math.min(height, width) >= 1080) {
+            maxBitrate = 12_000_000;
         } else if (Math.min(height, width) >= 720) {
-            maxBitrate = 2600_000;
-            compressFactor = 1f;
-            minCompressFactor = 1f;
+            maxBitrate = 7_500_000;
         } else if (Math.min(height, width) >= 480) {
-            maxBitrate = 1000_000;
-            compressFactor = 0.75f;
-            minCompressFactor = 0.9f;
+            maxBitrate = 4_000_000;
+        } else if (Math.min(height, width) >= 360) {
+            maxBitrate = 1_500_000;
         } else {
-            maxBitrate = 750_000;
-            compressFactor = 0.6f;
-            minCompressFactor = 0.7f;
+            maxBitrate = 1_000_000;
         }
         int remeasuredBitrate = (int) (originalBitrate / (Math.min(originalHeight / (float) (height), originalWidth / (float) (width))));
-        remeasuredBitrate *= compressFactor;
-        int minBitrate = (int) (getVideoBitrateWithFactor(minCompressFactor) / (1280f * 720f / (width * height)));
+        int minBitrate = (int) (getVideoBitrateWithFactor(1f) / (1280f * 720f / (width * height)));
         if (originalBitrate < minBitrate) {
             return remeasuredBitrate;
         }

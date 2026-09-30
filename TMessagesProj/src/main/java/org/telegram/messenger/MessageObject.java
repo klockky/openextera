@@ -5658,7 +5658,7 @@ public class MessageObject {
                         int start = text.indexOf("%1$s");
                         SpannableString str = new SpannableString(String.format(text, domain));
                         if (start >= 0 && !TextUtils.isEmpty(domain)) {
-                            str.setSpan(new URLSpanNoUnderlineBold("http://" + domain), start, start + domain.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                            str.setSpan(new URLSpanNoUnderlineBold(AndroidUtilities.defaultUrlScheme(domain) + domain), start, start + domain.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                         }
                         messageText = str;
                     }
@@ -9579,6 +9579,9 @@ public class MessageObject {
         if (type == TYPE_JOINED_CHANNEL) {
             return false;
         }
+        if (isSponsored()) {
+            return searchType == 4;
+        }
         if (isRepostPreview) {
             return true;
         }
@@ -9606,6 +9609,9 @@ public class MessageObject {
     }
 
     private boolean needDrawAvatarInternal() {
+        if (isSponsored()) {
+            return searchType == 4;
+        }
         if (isRepostPreview) {
             return true;
         }

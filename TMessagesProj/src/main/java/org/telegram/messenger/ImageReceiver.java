@@ -2423,6 +2423,10 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
         sideClip = value;
     }
 
+    public float getSideClip() {
+        return sideClip;
+    }
+
     public float getCenterX() {
         return imageX + imageW / 2.0f;
     }

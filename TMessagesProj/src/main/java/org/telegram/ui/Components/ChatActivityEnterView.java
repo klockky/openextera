@@ -4934,10 +4934,14 @@ public class ChatActivityEnterView extends FrameLayout implements
             }
             FrameLayout hint = new FrameLayout(getContext());
             TextView hintText = new TextView(getContext());
+            // don't let the hint define the menu width: wrap it at 260dp like exteraGram does
+            hintText.setTag(R.id.fit_width_tag, 1);
+            hintText.setTypeface(AndroidUtilities.regular());
+            hintText.setMaxWidth(dp(260));
             hintText.setText(getString(R.string.TapToAddApiKey));
             hintText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             hintText.setTextColor(getThemedColor(Theme.key_actionBarDefaultSubmenuItem));
-            hintText.setPadding(dp(16), dp(10), dp(44), dp(10));
+            hintText.setPadding(dp(16), dp(10), dp(16), dp(10));
             hintText.setOnClickListener(v -> {
                 if (messageSendPreview != null) {
                     messageSendPreview.dismiss(false);
@@ -4945,17 +4949,19 @@ public class ChatActivityEnterView extends FrameLayout implements
                 }
                 parentFragment.presentFragment(new EditServiceActivity());
             });
-            hint.addView(hintText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            hint.addView(hintText, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 0, 0, 44, 0));
             ImageView close = new ImageView(getContext());
             close.setImageResource(R.drawable.miniplayer_close);
             close.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_actionBarDefaultSubmenuItemIcon), PorterDuff.Mode.MULTIPLY));
+            close.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_dialogButtonSelector), Theme.RIPPLE_MASK_CIRCLE_20DP, dp(14)));
             close.setScaleType(ImageView.ScaleType.CENTER);
             close.setOnClickListener(v -> {
                 AiConfig.getEditor().putBoolean("ai_hint_hidden", true).apply();
                 hint.setVisibility(View.GONE);
             });
-            hint.addView(close, LayoutHelper.createFrame(36, 36, Gravity.RIGHT | Gravity.CENTER_VERTICAL));
-            options.addView(hint);
+            hint.addView(close, LayoutHelper.createFrame(36, 36, Gravity.RIGHT | Gravity.CENTER_VERTICAL, 0, 0, 2, 0));
+            options.addView(hint, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            options.addGap();
             return;
         }
 
@@ -4997,6 +5003,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                 AiController.clearHistory(parentFragment, resourcesProvider, true);
             })
         )), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 56));
+        options.addGap();
     }
 
     private void translateBeforeSend() {

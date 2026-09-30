@@ -3003,7 +3003,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
             animators.add(ObjectAnimator.ofFloat(shadow[1], View.ALPHA, show ? 1.0f : 0.0f));
         }
         if (pickerBottomLayout != null) {
-            animators.add(ObjectAnimator.ofFloat(pickerBottomLayout, View.TRANSLATION_Y, darkTheme ? (show ? dp(timestampLayout != null ? 5 : 16) : 0.0f) : 0));
+            animators.add(ObjectAnimator.ofFloat(pickerBottomLayout, View.TRANSLATION_Y, 0));
         }
 
         animatorSet.playTogether(animators);

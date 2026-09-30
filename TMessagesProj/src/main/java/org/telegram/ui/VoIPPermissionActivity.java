@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Build;
 
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.voip.VoIPPreNotificationService;
@@ -31,6 +32,9 @@ public class VoIPPermissionActivity extends Activity {
 		}
 		if (isVideoCall && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
 			permissions.add(Manifest.permission.CAMERA);
+		}
+		if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED && !shouldShowRequestPermissionRationale(Manifest.permission.BLUETOOTH_CONNECT)) {
+			permissions.add(Manifest.permission.BLUETOOTH_CONNECT);
 		}
 		if (!permissions.isEmpty()) {
 			try {

@@ -118,7 +118,7 @@ public class CheckBoxBase {
         checkPaint.setStrokeCap(Paint.Cap.ROUND);
         checkPaint.setStyle(Paint.Style.STROKE);
         checkPaint.setStrokeJoin(Paint.Join.ROUND);
-        checkPaint.setStrokeWidth(dp(1.9f));
+        checkPaint.setStrokeWidth(dp(2));
 
         backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         backgroundPaint.setStyle(Paint.Style.STROKE);

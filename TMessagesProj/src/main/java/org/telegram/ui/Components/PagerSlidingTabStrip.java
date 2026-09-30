@@ -293,7 +293,7 @@ public class PagerSlidingTabStrip extends HorizontalScrollView {
             }
 
             if (indicatorHeight != 0) {
-                rectPaint.setColor(indicatorColor);
+                rectPaint.setColor(getGlassIconColor(0.065f));
                 AndroidUtilities.rectTmp.set(lineLeft - AndroidUtilities.dp(11), getPaddingTop(), lineRight  + AndroidUtilities.dp(11), height - getPaddingBottom());
                 AndroidUtilities.rectTmp.offset(getPaddingLeft(), 0);
                 canvas.drawRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.rectTmp.height() / 2f, AndroidUtilities.rectTmp.height() / 2f, rectPaint);
@@ -460,11 +460,11 @@ public class PagerSlidingTabStrip extends HorizontalScrollView {
                 Theme.setSelectorDrawableColor(background, getGlassIconColor(selected ? 0.1f : 0.05f), true);
             }
 
-            setTextColor(getGlassIconColor(selected ? 0.8f : 0.6f));
+            setTextColor(getGlassIconColor(selected ? 0.8f : 0.4f));
         }
 
         public void setSelectedProgress(float progress) {
-            setTextColor(getGlassIconColor(AndroidUtilities.lerp(0.6f, 0.8f, progress)));
+            setTextColor(getGlassIconColor(AndroidUtilities.lerp(0.4f, 0.8f, progress)));
         }
     }
 }

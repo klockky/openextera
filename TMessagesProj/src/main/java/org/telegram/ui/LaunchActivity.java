@@ -1289,7 +1289,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 }
                 rightActionBarLayout.getView().setVisibility(View.GONE);
             }
-            layersActionBarLayout.getView().setVisibility(View.GONE);
         }
         if (removeAll) {
             actionBarLayout.removeAllFragments();
@@ -7051,7 +7050,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         Bulletin.removeDelegate(frameLayout);
         VideoAds.dropCache();
 
-        clearFragments();
+        if (instance == this) {
+            clearFragments();
+            instance = null;
+        }
         super.onDestroy();
         onFinish();
         if (flagSecureReason != null) {
@@ -7807,6 +7809,17 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                             BulletinFactory.of(container, null).createErrorBulletinSubtitle((String) args[1], (String) args[2], null).show();
                         }
                         break;
+                    case 10:
+                    case 11:
+                    case 12: {
+                        final BulletinFactory.FileType fileType = type == 10 ? BulletinFactory.FileType.STICKER : type == 11 ? BulletinFactory.FileType.EMOJI : BulletinFactory.FileType.GIF_TO_GALLERY;
+                        if (fragment != null) {
+                            BulletinFactory.of(fragment).createDownloadBulletin(fileType).show();
+                        } else {
+                            BulletinFactory.of(container, null).createDownloadBulletin(fileType).show();
+                        }
+                        break;
+                    }
                     case Bulletin.TYPE_APP_ICON: {
                         LauncherIconController.LauncherIcon icon = (LauncherIconController.LauncherIcon) args[1];
                         AppIconBulletinLayout layout = new AppIconBulletinLayout(this, icon, null);

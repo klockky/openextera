@@ -333,8 +333,8 @@ public class Track {
     public void prepare() {
         duration = 0;
 
-        ArrayList<SamplePresentationTime> original = new ArrayList<>(samplePresentationTimes);
-        Collections.sort(samplePresentationTimes, (o1, o2) -> {
+        ArrayList<SamplePresentationTime> sorted = new ArrayList<>(samplePresentationTimes);
+        Collections.sort(sorted, (o1, o2) -> {
             if (o1.presentationTime > o2.presentationTime) {
                 return 1;
             } else if (o1.presentationTime < o2.presentationTime) {
@@ -342,12 +342,39 @@ public class Track {
             }
             return 0;
         });
-        long lastPresentationTimeUs = 0;
         sampleDurations = new long[samplePresentationTimes.size()];
-        long minDelta = Long.MAX_VALUE;
         boolean outOfOrder = false;
-        for (int a = 0; a < samplePresentationTimes.size(); a++) {
-            SamplePresentationTime presentationTime = samplePresentationTimes.get(a);
+        for (int a = 0; a < sorted.size(); a++) {
+            if (sorted.get(a).index != a) {
+                outOfOrder = true;
+                break;
+            }
+        }
+        if (!outOfOrder) {
+            long minDelta = Long.MAX_VALUE;
+            for (int a = 0; a + 1 < sorted.size(); a++) {
+                long delta = sorted.get(a + 1).presentationTime - sorted.get(a).presentationTime;
+                sampleDurations[a] = delta;
+                if (delta > 0 && delta < Integer.MAX_VALUE) {
+                    minDelta = Math.min(minDelta, delta);
+                }
+            }
+            if (sampleDurations.length > 0) {
+                if (minDelta == Long.MAX_VALUE) {
+                    minDelta = Math.max(1, timeScale / 30);
+                }
+                sampleDurations[sampleDurations.length - 1] = minDelta;
+            }
+            for (int a = 0; a < sampleDurations.length; a++) {
+                duration += sampleDurations[a];
+            }
+            return;
+        }
+
+        long lastPresentationTimeUs = 0;
+        long minDelta = Long.MAX_VALUE;
+        for (int a = 0; a < sorted.size(); a++) {
+            SamplePresentationTime presentationTime = sorted.get(a);
             long delta = presentationTime.presentationTime - lastPresentationTimeUs;
             lastPresentationTimeUs = presentationTime.presentationTime;
             sampleDurations[presentationTime.index] = delta;
@@ -357,28 +384,19 @@ public class Track {
             if (delta > 0 && delta < Integer.MAX_VALUE) {
                 minDelta = Math.min(minDelta, delta);
             }
-            if (presentationTime.index != a) {
-                outOfOrder = true;
-            }
         }
         if (sampleDurations.length > 0) {
             sampleDurations[0] = minDelta;
             duration += minDelta;
         }
-        for (int a = 1; a < original.size(); a++) {
-            original.get(a).dt = sampleDurations[a] + original.get(a - 1).dt;
+        for (int a = 1; a < samplePresentationTimes.size(); a++) {
+            samplePresentationTimes.get(a).dt = sampleDurations[a] + samplePresentationTimes.get(a - 1).dt;
         }
-        if (outOfOrder) {
-            sampleCompositions = new int[samplePresentationTimes.size()];
-            for (int a = 0; a < samplePresentationTimes.size(); a++) {
-                SamplePresentationTime presentationTime = samplePresentationTimes.get(a);
-                sampleCompositions[presentationTime.index] = (int) (presentationTime.presentationTime - presentationTime.dt);
-            }
+        sampleCompositions = new int[sorted.size()];
+        for (int a = 0; a < sorted.size(); a++) {
+            SamplePresentationTime presentationTime = sorted.get(a);
+            sampleCompositions[presentationTime.index] = (int) (presentationTime.presentationTime - presentationTime.dt);
         }
-        //if (!first) {
-        //    sampleDurations.add(sampleDurations.size() - 1, delta);
-        //    duration += delta;
-        //}
     }
 
     public ArrayList<Sample> getSamples() {

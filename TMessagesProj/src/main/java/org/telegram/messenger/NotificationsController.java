@@ -4599,8 +4599,10 @@ public class NotificationsController extends BaseController implements Notificat
                     .setGroup(notificationGroup)
                     .setGroupSummary(true)
                     .setShowWhen(true)
-                    .setWhen(((long) lastMessageObject.messageOwner.date) * 1000)
-                    .setColor(AppUtils.getNotificationColor());
+                    .setWhen(((long) lastMessageObject.messageOwner.date) * 1000);
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                mBuilder.setColor(AppUtils.getNotificationColor());
+            }
 
             long[] vibrationPattern = null;
             Uri sound = null;
@@ -5598,7 +5600,6 @@ public class NotificationsController extends BaseController implements Notificat
                     .setContentText(text.toString())
                     .setAutoCancel(true)
                     .setNumber(dialogKey.story ? storyPushMessages.size() : messageObjects.size())
-                    .setColor(AppUtils.getNotificationColor())
                     .setGroupSummary(false)
                     .setWhen(date)
                     .setShowWhen(true)
@@ -5607,6 +5608,9 @@ public class NotificationsController extends BaseController implements Notificat
                     .extend(wearableExtender)
                     .setSortKey(String.valueOf(Long.MAX_VALUE - date))
                     .setCategory(NotificationCompat.CATEGORY_MESSAGE);
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                builder.setColor(AppUtils.getNotificationColor());
+            }
 
             try {
                 Intent dismissIntent = new Intent(ApplicationLoader.applicationContext, NotificationDismissReceiver.class);
